@@ -9,10 +9,10 @@ description = "AxonFlow Python SDK - Enterprise AI Governance in 3 Lines of Code
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "AxonFlow", email = "engineering@getaxonflow.com"}
+    {name = "AxonFlow", email = "dev@getaxonflow.com"}
 ]
 maintainers = [
-    {name = "AxonFlow", email = "engineering@getaxonflow.com"}
+    {name = "AxonFlow", email = "dev@getaxonflow.com"}
 ]
 keywords = [
     "ai", "governance", "llm", "openai", "anthropic", "bedrock",
