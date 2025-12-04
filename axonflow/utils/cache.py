@@ -35,7 +35,8 @@ class CacheManager(Generic[T]):
         Returns:
             Cached value or None if not found
         """
-        return self._cache.get(key)
+        result: T | None = self._cache.get(key)
+        return result
 
     def set(self, key: str, value: T) -> None:
         """Set a value in cache.

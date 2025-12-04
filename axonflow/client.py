@@ -335,7 +335,8 @@ class AxonFlow:
             if cache_key in self._cache:
                 if self._config.debug:
                     self._logger.debug("Cache hit", query=query[:50])
-                return self._cache[cache_key]
+                cached_result: ClientResponse = self._cache[cache_key]
+                return cached_result
         else:
             cache_key = ""
 

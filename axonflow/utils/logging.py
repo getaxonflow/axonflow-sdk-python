@@ -60,7 +60,8 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     Returns:
         Configured structured logger
     """
-    return structlog.get_logger(name)
+    logger: structlog.stdlib.BoundLogger = structlog.get_logger(name)
+    return logger
 
 
 class LogContext:
@@ -79,10 +80,10 @@ class LogContext:
 
     def __enter__(self) -> structlog.stdlib.BoundLogger:
         """Enter context and bind values."""
-        self._original_context = dict(self._logger._context)  # type: ignore[attr-defined]
+        self._original_context = dict(getattr(self._logger, "_context", {}))
         return self._logger.bind(**self._context)
 
     def __exit__(self, *args: Any) -> None:
         """Exit context and restore original values."""
         # Restore original context
-        self._logger._context = self._original_context  # type: ignore[attr-defined]
+        setattr(self._logger, "_context", self._original_context)

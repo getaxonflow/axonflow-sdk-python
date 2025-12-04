@@ -49,6 +49,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "pytest-httpx>=0.22.0",
     "mypy>=1.5.0",
+    "types-cachetools>=5.0.0",
     "ruff>=0.1.0",
     "black>=23.0.0",
     "isort>=5.12.0",
