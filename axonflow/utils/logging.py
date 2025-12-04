@@ -86,4 +86,4 @@ class LogContext:
     def __exit__(self, *args: Any) -> None:
         """Exit context and restore original values."""
         # Restore original context
-        setattr(self._logger, "_context", self._original_context)
+        self._logger._context = self._original_context  # noqa: B010, SLF001
