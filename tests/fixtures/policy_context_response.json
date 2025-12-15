@@ -1,0 +1,31 @@
+{
+  "context_id": "ctx_gateway_789xyz",
+  "approved": true,
+  "approved_data": {
+    "patients": [
+      {
+        "id": "P001",
+        "name": "[REDACTED]",
+        "department": "cardiology"
+      },
+      {
+        "id": "P002",
+        "name": "[REDACTED]",
+        "department": "cardiology"
+      }
+    ],
+    "lab_results_count": 15
+  },
+  "policies": [
+    "hipaa-compliance",
+    "gdpr-data-minimization",
+    "healthcare-pii-redaction"
+  ],
+  "rate_limit": {
+    "limit": 100,
+    "remaining": 97,
+    "reset_at": "2025-12-15T18:00:00.000000000Z"
+  },
+  "expires_at": "2025-12-15T17:50:00.123456789Z",
+  "block_reason": null
+}

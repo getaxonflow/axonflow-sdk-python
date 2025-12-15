@@ -1,0 +1,23 @@
+{
+  "success": false,
+  "data": null,
+  "result": null,
+  "plan_id": null,
+  "metadata": {
+    "request_id": "req_xyz789blocked"
+  },
+  "error": "Request blocked by policy",
+  "blocked": true,
+  "block_reason": "PII detected: SSN pattern (XXX-XX-XXXX) found in query. Credit card number pattern also detected.",
+  "policy_info": {
+    "policies_evaluated": [
+      "pii-ssn-detection",
+      "pii-credit-card-detection"
+    ],
+    "static_checks": [
+      "pii-detection"
+    ],
+    "processing_time": "1.8ms",
+    "tenant_id": "tenant_demo123"
+  }
+}

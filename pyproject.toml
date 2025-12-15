@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axonflow"
-version = "0.1.0"
+version = "0.2.0"
 description = "AxonFlow Python SDK - Enterprise AI Governance in 3 Lines of Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -142,6 +142,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004", "ARG", "PLC0415", "PT011", "PT012", "TC002", "UP035", "F401", "F841", "EM101", "TRY301"]
 "examples/**/*.py" = ["T201", "ANN", "S106", "ERA001", "BLE001", "PLC0415", "F541"]
+"scripts/**/*.py" = ["T201", "ANN", "S106", "BLE001", "UP045", "DTZ005", "PTH123"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["axonflow"]
