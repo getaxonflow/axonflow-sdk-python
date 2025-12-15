@@ -12,7 +12,6 @@ from typing import Any, AsyncGenerator
 
 import pytest
 import pytest_asyncio
-from pytest_httpx import HTTPXMock
 
 from axonflow import AxonFlow
 
@@ -190,7 +189,7 @@ def fixture_policy_context() -> dict[str, Any]:
 def fixture_connector_list() -> list[dict[str, Any]]:
     """Load connector list response from fixture file."""
     if fixture_exists("connector_list_response"):
-        return load_json_fixture("connector_list_response")
+        return load_json_fixture("connector_list_response")  # type: ignore[return-value]
     # Fallback
     return [
         {

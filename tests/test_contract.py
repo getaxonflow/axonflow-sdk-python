@@ -14,14 +14,13 @@ Run: pytest tests/test_contract.py -v
 
 from __future__ import annotations
 
-import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from axonflow.types import (
+    AuditResult,
     ClientResponse,
     ConnectorMetadata,
     PlanStep,
@@ -30,17 +29,14 @@ from axonflow.types import (
     RateLimitInfo,
 )
 
-# Path to fixtures directory
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
+from .conftest import fixture_exists, load_json_fixture
 
 
 def load_fixture(name: str) -> dict[str, Any] | list[Any]:
-    """Load a JSON fixture file."""
-    filepath = FIXTURES_DIR / f"{name}.json"
-    if not filepath.exists():
-        pytest.skip(f"Fixture not found: {filepath}")
-    with filepath.open() as f:
-        return json.load(f)
+    """Load a JSON fixture file, skipping test if not found."""
+    if not fixture_exists(name):
+        pytest.skip(f"Fixture not found: {name}")
+    return load_json_fixture(name)
 
 
 class TestHealthResponseContract:
@@ -139,8 +135,8 @@ class TestClientResponseContract:
 class TestPolicyApprovalContract:
     """Test PolicyApprovalResult (Gateway Mode) against real API responses."""
 
-    def test_policy_context_response_parses(self) -> None:
-        """Verify Gateway Mode pre-check response can be parsed."""
+    def test_policy_context_approved_parses(self) -> None:
+        """Verify Gateway Mode pre-check approved response can be parsed."""
         from axonflow.client import _parse_datetime
 
         data = load_fixture("policy_context_response")
@@ -168,6 +164,35 @@ class TestPolicyApprovalContract:
         assert result.approved is True
         assert len(result.policies) > 0
         assert result.expires_at is not None
+        assert result.block_reason is None
+
+    def test_policy_context_blocked_parses(self) -> None:
+        """Verify Gateway Mode pre-check blocked response can be parsed."""
+        from axonflow.client import _parse_datetime
+
+        data = load_fixture("policy_context_blocked_response")
+
+        rate_limit = None
+        if data.get("rate_limit"):
+            rate_limit = RateLimitInfo(
+                limit=data["rate_limit"]["limit"],
+                remaining=data["rate_limit"]["remaining"],
+                reset_at=_parse_datetime(data["rate_limit"]["reset_at"]),
+            )
+
+        result = PolicyApprovalResult(
+            context_id=data["context_id"],
+            approved=data["approved"],
+            approved_data=data.get("approved_data", {}),
+            policies=data.get("policies", []),
+            rate_limit_info=rate_limit,
+            expires_at=_parse_datetime(data["expires_at"]),
+            block_reason=data.get("block_reason"),
+        )
+
+        assert result.context_id
+        assert result.approved is False
+        assert result.block_reason is not None
 
     def test_datetime_with_nanoseconds_parses(self) -> None:
         """Verify datetime with nanosecond precision is handled.
@@ -217,6 +242,20 @@ class TestPolicyApprovalContract:
         # Verify PII redaction is in place
         for patient in approved_data["patients"]:
             assert patient.get("name") == "[REDACTED]"
+
+
+class TestAuditContract:
+    """Test AuditResult against real API responses."""
+
+    def test_audit_response_parses(self) -> None:
+        """Verify audit response can be parsed by SDK."""
+        data = load_fixture("audit_response")
+
+        result = AuditResult.model_validate(data)
+
+        assert result.success is True
+        assert result.audit_id
+        assert len(result.audit_id) > 0
 
 
 class TestConnectorContract:
