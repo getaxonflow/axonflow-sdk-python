@@ -250,9 +250,7 @@ class TestConnectorContract:
         connectors = [ConnectorMetadata.model_validate(c) for c in data]
 
         # Find a connector with capabilities
-        connector_with_caps = next(
-            (c for c in connectors if c.capabilities), None
-        )
+        connector_with_caps = next((c for c in connectors if c.capabilities), None)
         assert connector_with_caps is not None
         assert isinstance(connector_with_caps.capabilities, list)
 

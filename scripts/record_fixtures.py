@@ -137,9 +137,9 @@ def save_fixture(name: str, data: Optional[Any]) -> None:
 
 async def main() -> None:
     """Record all fixtures from staging."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Recording API Fixtures from Staging")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Agent URL: {AGENT_URL}")
     print(f"Client ID: {CLIENT_ID}")
     print(f"Timestamp: {datetime.now().isoformat()}")
@@ -184,10 +184,10 @@ async def main() -> None:
         connectors = await record_connector_list(client)
         save_fixture("connector_list_response", connectors)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Fixture recording complete!")
     print(f"Fixtures saved to: {FIXTURES_DIR}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 if __name__ == "__main__":
