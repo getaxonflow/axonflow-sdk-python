@@ -35,8 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Datetime parsing with nanoseconds** - `_parse_datetime()` now correctly handles 9-digit fractional seconds from API (was failing with `fromisoformat()`)
+- **`generate_plan()` authentication** - Added missing `Authorization` header to plan generation requests (was returning 401)
+- **`PolicyViolationError.policy_name`** - Now correctly extracts policy name from `policy_info` in response (was returning `None`)
 - Ensured all edge cases for datetime parsing are covered in contract tests
-- Validated handling of nanosecond timestamps from API
 
 ## [0.1.0] - 2025-12-04
 
