@@ -1,0 +1,30 @@
+{
+  "success": true,
+  "data": {
+    "response": "Paris is the capital of France. It is also the largest city in France and serves as the country's political, economic, and cultural center.",
+    "model": "gpt-4",
+    "provider": "openai"
+  },
+  "result": null,
+  "plan_id": null,
+  "metadata": {
+    "request_id": "req_abc123def456",
+    "latency_ms": 245,
+    "model_used": "gpt-4"
+  },
+  "error": null,
+  "blocked": false,
+  "block_reason": null,
+  "policy_info": {
+    "policies_evaluated": [
+      "default-allow",
+      "rate-limit-100rpm"
+    ],
+    "static_checks": [
+      "pii-detection",
+      "prompt-injection"
+    ],
+    "processing_time": "3.2ms",
+    "tenant_id": "tenant_demo123"
+  }
+}

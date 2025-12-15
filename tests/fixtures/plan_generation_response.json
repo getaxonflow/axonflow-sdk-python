@@ -1,0 +1,64 @@
+{
+  "success": true,
+  "data": {
+    "steps": [
+      {
+        "id": "step-001",
+        "name": "Search Flights",
+        "type": "search",
+        "description": "Search for available flights from NYC to LA",
+        "depends_on": [],
+        "agent": "flight-search-agent",
+        "parameters": {
+          "origin": "NYC",
+          "destination": "LA",
+          "date_range": "flexible"
+        }
+      },
+      {
+        "id": "step-002",
+        "name": "Search Hotels",
+        "type": "search",
+        "description": "Search for hotels in Los Angeles",
+        "depends_on": [],
+        "agent": "hotel-search-agent",
+        "parameters": {
+          "location": "Los Angeles",
+          "check_in": "dynamic"
+        }
+      },
+      {
+        "id": "step-003",
+        "name": "Combine Results",
+        "type": "aggregate",
+        "description": "Combine flight and hotel options into travel packages",
+        "depends_on": ["step-001", "step-002"],
+        "agent": "aggregation-agent",
+        "parameters": {
+          "optimize_for": "price"
+        }
+      }
+    ],
+    "domain": "travel",
+    "complexity": 3,
+    "parallel": true
+  },
+  "result": null,
+  "plan_id": "plan_travel_abc123",
+  "metadata": {
+    "request_id": "req_plan_456",
+    "planning_time_ms": 125
+  },
+  "error": null,
+  "blocked": false,
+  "block_reason": null,
+  "policy_info": {
+    "policies_evaluated": [
+      "multi-agent-allowed",
+      "travel-domain-policy"
+    ],
+    "static_checks": [],
+    "processing_time": "2.1ms",
+    "tenant_id": "tenant_demo123"
+  }
+}

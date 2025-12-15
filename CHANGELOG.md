@@ -5,6 +5,39 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-12-15
+
+### Added
+
+- **Contract Testing Suite** - Validates SDK models against real API responses
+  - 19 contract tests covering all response types
+  - JSON fixtures for health, query, blocked, plan, and policy responses
+  - Prevents API/SDK mismatches before release
+
+- **Integration Test Workflow** - GitHub Actions CI for live testing
+  - Contract tests run on every PR
+  - Integration tests against staging (on merge to main)
+  - Demo script validation
+  - Community stack E2E tests (manual trigger)
+
+- **Fixture-Based Test Infrastructure**
+  - `tests/fixtures/` directory with recorded API responses
+  - `load_json_fixture()` helper in conftest.py
+  - Fallback to mock data for backwards compatibility
+
+- **Fixture Recording Script**
+  - `scripts/record_fixtures.py` for capturing live API responses
+
+### Changed
+
+- Refactored `tests/conftest.py` with fixture loading utilities
+- Added `fixture_*` prefixed fixtures that load from JSON files
+
+### Fixed
+
+- Ensured all edge cases for datetime parsing are covered in contract tests
+- Validated handling of nanosecond timestamps from API
+
 ## [0.1.0] - 2025-12-04
 
 ### Added

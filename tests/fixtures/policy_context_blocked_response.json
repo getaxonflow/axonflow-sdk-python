@@ -1,0 +1,16 @@
+{
+  "context_id": "ctx_blocked_abc123",
+  "approved": false,
+  "approved_data": {},
+  "policies": [
+    "data-access-restriction",
+    "department-boundary"
+  ],
+  "rate_limit": {
+    "limit": 100,
+    "remaining": 100,
+    "reset_at": "2025-12-15T18:00:00.000000000Z"
+  },
+  "expires_at": "2025-12-15T17:50:00.123456789Z",
+  "block_reason": "Access denied: User does not have permission to access oncology department data. Request requires role: oncology_viewer"
+}

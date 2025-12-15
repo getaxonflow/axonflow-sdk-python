@@ -1,0 +1,11 @@
+{
+  "service": "axonflow-agent",
+  "status": "healthy",
+  "timestamp": "2025-12-15T17:44:04.0312813Z",
+  "version": "1.0.0",
+  "components": {
+    "database": "connected",
+    "orchestrator": "reachable",
+    "policy_engine": "ready"
+  }
+}

@@ -1,0 +1,63 @@
+[
+  {
+    "id": "postgres",
+    "name": "PostgreSQL",
+    "type": "database",
+    "version": "1.2.0",
+    "description": "PostgreSQL database connector for structured data access",
+    "category": "database",
+    "icon": "postgres-icon",
+    "tags": ["sql", "relational", "transactional"],
+    "capabilities": ["read", "write", "query"],
+    "config_schema": {
+      "type": "object",
+      "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer"},
+        "database": {"type": "string"}
+      }
+    },
+    "installed": true,
+    "healthy": true
+  },
+  {
+    "id": "salesforce",
+    "name": "Salesforce CRM",
+    "type": "crm",
+    "version": "1.0.0",
+    "description": "Salesforce CRM connector for customer data",
+    "category": "crm",
+    "icon": "salesforce-icon",
+    "tags": ["crm", "sales", "customers"],
+    "capabilities": ["read", "query"],
+    "config_schema": {
+      "type": "object",
+      "properties": {
+        "instance_url": {"type": "string"},
+        "api_version": {"type": "string"}
+      }
+    },
+    "installed": false,
+    "healthy": false
+  },
+  {
+    "id": "slack",
+    "name": "Slack",
+    "type": "communication",
+    "version": "1.1.0",
+    "description": "Slack workspace connector for messaging",
+    "category": "communication",
+    "icon": "slack-icon",
+    "tags": ["messaging", "notifications", "collaboration"],
+    "capabilities": ["read", "write", "notify"],
+    "config_schema": {
+      "type": "object",
+      "properties": {
+        "workspace": {"type": "string"},
+        "bot_token": {"type": "string"}
+      }
+    },
+    "installed": true,
+    "healthy": true
+  }
+]
