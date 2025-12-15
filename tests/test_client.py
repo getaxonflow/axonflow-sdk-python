@@ -490,3 +490,72 @@ class TestContextManager:
         client = AxonFlow(**config_dict)
         await client.close()
         # No exception should be raised
+
+
+class TestParseDatetime:
+    """Test _parse_datetime helper function."""
+
+    def test_parse_utc_z_suffix(self) -> None:
+        """Test parsing datetime with Z suffix."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00Z")
+        assert result.year == 2024
+        assert result.month == 12
+        assert result.day == 15
+        assert result.hour == 10
+        assert result.minute == 30
+        assert result.second == 0
+
+    def test_parse_with_offset(self) -> None:
+        """Test parsing datetime with timezone offset."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00+00:00")
+        assert result.year == 2024
+        assert result.hour == 10
+
+    def test_parse_microseconds(self) -> None:
+        """Test parsing datetime with microseconds (6 digits)."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00.123456Z")
+        assert result.microsecond == 123456
+
+    def test_parse_nanoseconds_truncated(self) -> None:
+        """Test that nanoseconds (9 digits) are truncated to microseconds."""
+        from axonflow.client import _parse_datetime
+
+        # This would fail without the fix - 9 fractional digits
+        result = _parse_datetime("2024-12-15T10:30:00.123456789Z")
+        # Should be truncated to 123456 (first 6 digits)
+        assert result.microsecond == 123456
+
+    def test_parse_nanoseconds_with_offset(self) -> None:
+        """Test nanoseconds with timezone offset."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00.123456789+00:00")
+        assert result.microsecond == 123456
+
+    def test_parse_milliseconds(self) -> None:
+        """Test parsing datetime with milliseconds (3 digits)."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00.123Z")
+        assert result.microsecond == 123000
+
+    def test_parse_7_fractional_digits(self) -> None:
+        """Test parsing datetime with 7 fractional digits."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00.1234567Z")
+        # Should truncate to 6 digits
+        assert result.microsecond == 123456
+
+    def test_parse_no_fractional_seconds(self) -> None:
+        """Test parsing datetime without fractional seconds."""
+        from axonflow.client import _parse_datetime
+
+        result = _parse_datetime("2024-12-15T10:30:00Z")
+        assert result.microsecond == 0

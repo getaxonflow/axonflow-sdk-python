@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -70,9 +71,17 @@ def _parse_datetime(value: str) -> datetime:
 
     Python 3.9's fromisoformat() doesn't handle 'Z' suffix for UTC.
     This helper replaces 'Z' with '+00:00' for compatibility.
+
+    Also handles nanosecond precision (9 digits) by truncating to microseconds (6 digits)
+    since Python's fromisoformat() only supports up to 6 fractional digits.
     """
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
+
+    # Python's fromisoformat only supports up to 6 fractional digits (microseconds)
+    # Truncate nanoseconds (9 digits) to microseconds (6 digits) if needed
+    value = re.sub(r"(\.\d{6})\d+", r"\1", value)
+
     return datetime.fromisoformat(value)
 
 
@@ -441,12 +450,14 @@ class AxonFlow:
         self,
         query: str,
         domain: str | None = None,
+        user_token: str | None = None,
     ) -> PlanResponse:
         """Generate a multi-agent execution plan.
 
         Args:
             query: Natural language query describing the task
             domain: Optional domain hint (travel, healthcare, etc.)
+            user_token: Optional user token for authentication (defaults to client_id)
 
         Returns:
             PlanResponse with generated plan
@@ -454,7 +465,7 @@ class AxonFlow:
         context = {"domain": domain} if domain else {}
 
         response = await self.execute_query(
-            user_token="",
+            user_token=user_token or self._config.client_id,
             query=query,
             request_type="multi-agent-plan",
             context=context,
@@ -485,17 +496,22 @@ class AxonFlow:
             metadata=response.metadata,
         )
 
-    async def execute_plan(self, plan_id: str) -> PlanExecutionResponse:
+    async def execute_plan(
+        self,
+        plan_id: str,
+        user_token: str | None = None,
+    ) -> PlanExecutionResponse:
         """Execute a previously generated plan.
 
         Args:
             plan_id: ID of the plan to execute
+            user_token: Optional user token for authentication (defaults to client_id)
 
         Returns:
             PlanExecutionResponse with results
         """
         response = await self.execute_query(
-            user_token="",
+            user_token=user_token or self._config.client_id,
             query="",
             request_type="execute-plan",
             context={"plan_id": plan_id},
@@ -775,13 +791,22 @@ class SyncAxonFlow:
         self,
         query: str,
         domain: str | None = None,
+        user_token: str | None = None,
     ) -> PlanResponse:
         """Generate a multi-agent execution plan."""
-        return self._get_loop().run_until_complete(self._async_client.generate_plan(query, domain))
+        return self._get_loop().run_until_complete(
+            self._async_client.generate_plan(query, domain, user_token)
+        )
 
-    def execute_plan(self, plan_id: str) -> PlanExecutionResponse:
+    def execute_plan(
+        self,
+        plan_id: str,
+        user_token: str | None = None,
+    ) -> PlanExecutionResponse:
         """Execute a previously generated plan."""
-        return self._get_loop().run_until_complete(self._async_client.execute_plan(plan_id))
+        return self._get_loop().run_until_complete(
+            self._async_client.execute_plan(plan_id, user_token)
+        )
 
     def get_plan_status(self, plan_id: str) -> PlanExecutionResponse:
         """Get status of a running or completed plan."""
