@@ -272,9 +272,15 @@ class AxonFlow:
                 raise AuthenticationError(msg) from e
             if e.response.status_code == 403:  # noqa: PLR2004
                 body = e.response.json()
+                # Extract policy from policy_info if available
+                policy = body.get("policy")
+                if not policy:
+                    policy_info = body.get("policy_info")
+                    if policy_info and policy_info.get("policies_evaluated"):
+                        policy = policy_info["policies_evaluated"][0]
                 raise PolicyViolationError(
-                    body.get("message", "Request blocked by policy"),
-                    policy=body.get("policy"),
+                    body.get("block_reason") or body.get("message", "Request blocked by policy"),
+                    policy=policy,
                     block_reason=body.get("block_reason"),
                 ) from e
             msg = f"HTTP {e.response.status_code}: {e.response.text}"
@@ -374,8 +380,13 @@ class AxonFlow:
 
         # Check for policy violation
         if response.blocked:
+            # Extract policy name from policy_info if available
+            policy = None
+            if response.policy_info and response.policy_info.policies_evaluated:
+                policy = response.policy_info.policies_evaluated[0]
             raise PolicyViolationError(
                 response.block_reason or "Request blocked by policy",
+                policy=policy,
                 block_reason=response.block_reason,
             )
 
