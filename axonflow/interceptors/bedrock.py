@@ -71,7 +71,7 @@ class BedrockInterceptor(BaseInterceptor):
         """Get the provider name."""
         return "bedrock"
 
-    def extract_prompt(self, *args: Any, **kwargs: Any) -> str:
+    def extract_prompt(self, *_args: Any, **kwargs: Any) -> str:
         """Extract prompt from invoke_model arguments."""
         body = kwargs.get("body", "")
         if isinstance(body, (bytes, bytearray)):
@@ -117,7 +117,7 @@ def wrap_bedrock_client(
         Wrapped Bedrock client with automatic governance
     """
 
-    def _extract_prompt(body: Any, model_id: str) -> str:
+    def _extract_prompt(body: Any, _model_id: str) -> str:
         """Extract prompt from request body."""
         if isinstance(body, (bytes, bytearray)):
             body = body.decode("utf-8")
@@ -150,7 +150,7 @@ def wrap_bedrock_client(
             return loop
 
     # Wrap invoke_model
-    if hasattr(bedrock_client, 'invoke_model'):
+    if hasattr(bedrock_client, "invoke_model"):
         original_invoke = bedrock_client.invoke_model
 
         @wraps(original_invoke)
@@ -180,7 +180,7 @@ def wrap_bedrock_client(
         bedrock_client.invoke_model = sync_wrapped_invoke
 
     # Wrap invoke_model_with_response_stream
-    if hasattr(bedrock_client, 'invoke_model_with_response_stream'):
+    if hasattr(bedrock_client, "invoke_model_with_response_stream"):
         original_stream = bedrock_client.invoke_model_with_response_stream
 
         @wraps(original_stream)

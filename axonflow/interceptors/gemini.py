@@ -41,7 +41,7 @@ class GeminiInterceptor(BaseInterceptor):
         """Get the provider name."""
         return "gemini"
 
-    def extract_prompt(self, *args: Any, **kwargs: Any) -> str:
+    def extract_prompt(self, *args: Any, **_kwargs: Any) -> str:
         """Extract prompt from generate_content arguments."""
         # First positional argument is usually the prompt or contents
         if args:
@@ -54,9 +54,9 @@ class GeminiInterceptor(BaseInterceptor):
                 for item in content:
                     if isinstance(item, str):
                         texts.append(item)
-                    elif hasattr(item, 'parts'):
+                    elif hasattr(item, "parts"):
                         for part in item.parts:
-                            if hasattr(part, 'text'):
+                            if hasattr(part, "text"):
                                 texts.append(part.text)
                 return " ".join(texts)
         return ""
@@ -85,7 +85,7 @@ def wrap_gemini_model(
         Wrapped Gemini model with automatic governance
     """
     original_generate = gemini_model.generate_content
-    original_generate_async = getattr(gemini_model, 'generate_content_async', None)
+    original_generate_async = getattr(gemini_model, "generate_content_async", None)
 
     def _extract_prompt(args: tuple, kwargs: dict[str, Any]) -> str:
         """Extract prompt from arguments."""
@@ -98,13 +98,13 @@ def wrap_gemini_model(
                 for item in content:
                     if isinstance(item, str):
                         texts.append(item)
-                    elif hasattr(item, 'parts'):
+                    elif hasattr(item, "parts"):
                         for part in item.parts:
-                            if hasattr(part, 'text'):
+                            if hasattr(part, "text"):
                                 texts.append(part.text)
                 return " ".join(texts)
         # Check kwargs for 'contents' or 'prompt'
-        contents = kwargs.get('contents', kwargs.get('prompt', ''))
+        contents = kwargs.get("contents", kwargs.get("prompt", ""))
         if isinstance(contents, str):
             return contents
         return ""
