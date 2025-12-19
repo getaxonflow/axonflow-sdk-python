@@ -170,7 +170,7 @@ def wrap_gemini_model(
         gemini_model.generate_content_async = async_wrapped_generate
 
     # Wrap start_chat to return a wrapped ChatSession
-    if hasattr(gemini_model, 'start_chat'):
+    if hasattr(gemini_model, "start_chat"):
         original_start_chat = gemini_model.start_chat
 
         @wraps(original_start_chat)
@@ -190,11 +190,11 @@ def _wrap_chat_session(
     model_name: str,
 ) -> Any:
     """Wrap a Gemini ChatSession with governance."""
-    if not hasattr(chat_session, 'send_message'):
+    if not hasattr(chat_session, "send_message"):
         return chat_session
 
     original_send = chat_session.send_message
-    original_send_async = getattr(chat_session, 'send_message_async', None)
+    original_send_async = getattr(chat_session, "send_message_async", None)
 
     def _get_loop() -> asyncio.AbstractEventLoop:
         try:

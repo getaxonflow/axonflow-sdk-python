@@ -46,7 +46,7 @@ class OllamaInterceptor(BaseInterceptor):
         """Get the provider name."""
         return "ollama"
 
-    def extract_prompt(self, *args: Any, **kwargs: Any) -> str:
+    def extract_prompt(self, *_args: Any, **kwargs: Any) -> str:
         """Extract prompt from chat or generate arguments."""
         # For chat, extract from messages
         messages = kwargs.get("messages", [])
@@ -95,7 +95,7 @@ def wrap_ollama_client(
             return loop
 
     # Wrap chat method
-    if hasattr(ollama_client, 'chat'):
+    if hasattr(ollama_client, "chat"):
         original_chat = ollama_client.chat
 
         @wraps(original_chat)
@@ -124,7 +124,7 @@ def wrap_ollama_client(
         ollama_client.chat = sync_wrapped_chat
 
     # Wrap generate method
-    if hasattr(ollama_client, 'generate'):
+    if hasattr(ollama_client, "generate"):
         original_generate = ollama_client.generate
 
         @wraps(original_generate)
@@ -179,7 +179,7 @@ async def wrap_ollama_client_async(
         return " ".join(m.get("content", "") for m in messages if isinstance(m, dict))
 
     # Wrap async chat method
-    if hasattr(ollama_client, 'chat'):
+    if hasattr(ollama_client, "chat"):
         original_chat = ollama_client.chat
 
         @wraps(original_chat)
@@ -205,7 +205,7 @@ async def wrap_ollama_client_async(
         ollama_client.chat = async_wrapped_chat
 
     # Wrap async generate method
-    if hasattr(ollama_client, 'generate'):
+    if hasattr(ollama_client, "generate"):
         original_generate = ollama_client.generate
 
         @wraps(original_generate)
