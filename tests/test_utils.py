@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from axonflow.types import RetryConfig
 from axonflow.utils.cache import CacheManager
+from axonflow.utils.logging import LogContext, configure_logging, get_logger
 from axonflow.utils.retry import RetryHandler, create_retry_decorator, with_retry
 
 
@@ -189,3 +192,51 @@ class TestCreateRetryDecorator:
         decorated = decorator(my_func)
         result = decorated()
         assert result == "ok"
+
+
+class TestLogging:
+    """Test logging utilities."""
+
+    def test_configure_logging_default(self) -> None:
+        """Test configuring logging with defaults."""
+        configure_logging()
+        # Should not raise
+
+    def test_configure_logging_with_level(self) -> None:
+        """Test configuring logging with custom level."""
+        configure_logging(level=logging.DEBUG)
+        # Should not raise
+
+    def test_configure_logging_json_format(self) -> None:
+        """Test configuring logging with JSON format."""
+        configure_logging(json_format=True)
+        # Should not raise
+
+    def test_configure_logging_console_format(self) -> None:
+        """Test configuring logging with console format (default)."""
+        configure_logging(json_format=False)
+        # Should not raise
+
+    def test_get_logger(self) -> None:
+        """Test getting a logger."""
+        logger = get_logger("test-logger")
+        assert logger is not None
+
+    def test_get_logger_with_name(self) -> None:
+        """Test getting a logger with specific name."""
+        logger = get_logger("axonflow.test")
+        assert logger is not None
+
+    def test_log_context_init(self) -> None:
+        """Test LogContext initialization."""
+        logger = get_logger("context-test")
+        context = LogContext(logger, request_id="123", user="test-user")
+        assert context._logger is logger
+        assert context._context == {"request_id": "123", "user": "test-user"}
+
+    def test_log_context_enter(self) -> None:
+        """Test LogContext __enter__ returns bound logger."""
+        logger = get_logger("enter-test")
+        context = LogContext(logger, operation="query")
+        bound = context.__enter__()
+        assert bound is not None
