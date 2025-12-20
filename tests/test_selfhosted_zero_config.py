@@ -4,12 +4,14 @@ Tests for the zero-configuration self-hosted mode where users can run
 AxonFlow without any API keys, license keys, or credentials.
 
 This tests the scenario where a first-time user:
-1. Starts the agent with SELF_HOSTED_MODE=true and SELF_HOSTED_MODE_ACKNOWLEDGED=I_UNDERSTAND_NO_AUTH
+1. Starts the agent with SELF_HOSTED_MODE=true
+   and SELF_HOSTED_MODE_ACKNOWLEDGED=I_UNDERSTAND_NO_AUTH
 2. Connects the SDK with no credentials
 3. Makes requests that should succeed without authentication
 
 Run with:
-    AXONFLOW_AGENT_URL=http://localhost:8080 RUN_INTEGRATION_TESTS=1 pytest tests/test_selfhosted_zero_config.py -v
+    AXONFLOW_AGENT_URL=http://localhost:8080 \\
+    RUN_INTEGRATION_TESTS=1 pytest tests/test_selfhosted_zero_config.py -v
 """
 
 import os
