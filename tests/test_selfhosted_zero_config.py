@@ -259,3 +259,7 @@ class TestFirstTimeUserZeroConfig:
         print("   - Client creation: OK")
         print("   - Health check: OK")
         print("   - Pre-check: OK")
+
+
+# Note: Section 7 (Auth Headers) tests are in test_auth_headers.py
+# They are separated because they use mocking and don't require a running agent
