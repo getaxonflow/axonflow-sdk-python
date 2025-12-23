@@ -5,6 +5,24 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **MAP Timeout Configuration** - New `map_timeout` parameter (default: 120s) for Multi-Agent Planning operations
+  - MAP operations involve multiple LLM calls and can take 30-60+ seconds
+  - Separate `_map_http_client` with longer timeout
+  - `generate_plan()` and `execute_plan()` now use the longer MAP timeout
+
+## [0.3.0] - 2025-12-19
+
+### Added
+
+- **Gemini Interceptor** - Support for Google Generative AI models (#8)
+  - `wrap_gemini_model()` function for intercepting Gemini API calls
+  - Policy enforcement and audit logging for Gemini
+- Full feature parity with other SDKs for LLM interceptors
+
 ## [0.2.0] - 2025-12-15
 
 ### Added

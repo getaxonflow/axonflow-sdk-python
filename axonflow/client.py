@@ -95,7 +95,7 @@ class AxonFlow:
         config: Client configuration
     """
 
-    __slots__ = ("_config", "_http_client", "_cache", "_logger")
+    __slots__ = ("_config", "_http_client", "_map_http_client", "_cache", "_logger")
 
     def __init__(
         self,
@@ -107,6 +107,7 @@ class AxonFlow:
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
         timeout: float = 60.0,
+        map_timeout: float = 120.0,
         insecure_skip_verify: bool = False,
         retry_config: RetryConfig | None = None,
         cache_enabled: bool = True,
@@ -123,6 +124,8 @@ class AxonFlow:
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
             timeout: Request timeout in seconds
+            map_timeout: Timeout for MAP operations in seconds (default: 120s)
+                        MAP operations involve multiple LLM calls and need longer timeouts
             insecure_skip_verify: Skip TLS verification (dev only)
             retry_config: Retry configuration
             cache_enabled: Enable response caching
@@ -140,6 +143,7 @@ class AxonFlow:
             mode=mode,
             debug=debug,
             timeout=timeout,
+            map_timeout=map_timeout,
             insecure_skip_verify=insecure_skip_verify,
             retry=retry_config or RetryConfig(),
             cache=CacheConfig(enabled=cache_enabled, ttl=cache_ttl, max_size=cache_max_size),
@@ -159,6 +163,13 @@ class AxonFlow:
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout),
+            verify=verify_ssl,
+            headers=headers,
+        )
+
+        # Initialize MAP HTTP client with longer timeout
+        self._map_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(map_timeout),
             verify=verify_ssl,
             headers=headers,
         )
@@ -199,8 +210,9 @@ class AxonFlow:
         await self.close()
 
     async def close(self) -> None:
-        """Close the HTTP client."""
+        """Close the HTTP clients."""
         await self._http_client.aclose()
+        await self._map_http_client.aclose()
 
     @classmethod
     def sync(
@@ -308,6 +320,57 @@ class AxonFlow:
             return await self._http_client.request(method, url, json=json_data)
 
         return await _do_request()
+
+    async def _map_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Make HTTP request to Agent using MAP timeout.
+
+        This uses the longer map_timeout for MAP operations that involve
+        multiple LLM calls and can take 30-60+ seconds.
+        """
+        url = f"{self._config.agent_url}{path}"
+
+        try:
+            if self._config.debug:
+                self._logger.debug(
+                    "MAP request",
+                    url=url,
+                    timeout=self._config.map_timeout,
+                )
+
+            response = await self._map_http_client.request(method, url, json=json_data)
+            response.raise_for_status()
+            return response.json()  # type: ignore[no-any-return]
+
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to AxonFlow Agent: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"MAP request timed out after {self._config.map_timeout}s: {e}"
+            raise TimeoutError(msg) from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:  # noqa: PLR2004
+                msg = "Invalid credentials"
+                raise AuthenticationError(msg) from e
+            if e.response.status_code == 403:  # noqa: PLR2004
+                body = e.response.json()
+                policy = body.get("policy")
+                if not policy:
+                    policy_info = body.get("policy_info")
+                    if policy_info and policy_info.get("policies_evaluated"):
+                        policy = policy_info["policies_evaluated"][0]
+                raise PolicyViolationError(
+                    body.get("block_reason") or body.get("message", "Request blocked by policy"),
+                    policy=policy,
+                    block_reason=body.get("block_reason"),
+                ) from e
+            msg = f"HTTP {e.response.status_code}: {e.response.text}"
+            raise AxonFlowError(msg) from e
 
     async def health_check(self) -> bool:
         """Check if AxonFlow Agent is healthy.
@@ -472,15 +535,37 @@ class AxonFlow:
 
         Returns:
             PlanResponse with generated plan
+
+        Note:
+            This uses map_timeout (default 120s) as MAP operations involve
+            multiple LLM calls and can take 30-60+ seconds.
         """
         context = {"domain": domain} if domain else {}
 
-        response = await self.execute_query(
-            user_token=user_token or self._config.client_id,
+        request = ClientRequest(
             query=query,
+            user_token=user_token or self._config.client_id,
+            client_id=self._config.client_id,
             request_type="multi-agent-plan",
             context=context,
         )
+
+        if self._config.debug:
+            self._logger.debug(
+                "Generating plan",
+                query=query[:50] if query else "",
+                domain=domain,
+                timeout=self._config.map_timeout,
+            )
+
+        # Use MAP request with longer timeout
+        response_data = await self._map_request(
+            "POST",
+            "/api/request",
+            json_data=request.model_dump(),
+        )
+
+        response = ClientResponse.model_validate(response_data)
 
         if not response.success:
             msg = f"Plan generation failed: {response.error}"
@@ -491,9 +576,15 @@ class AxonFlow:
         if response.data and isinstance(response.data, dict):
             steps_data = response.data.get("steps", [])
             steps = [PlanStep.model_validate(s) for s in steps_data]
+            # Also check for plan_id in data
+            if not response.plan_id and response.data.get("plan_id"):
+                response = ClientResponse.model_validate({
+                    **response_data,
+                    "plan_id": response.data.get("plan_id"),
+                })
 
         return PlanResponse(
-            plan_id=response.plan_id or "",
+            plan_id=response.plan_id or (response.data.get("plan_id", "") if isinstance(response.data, dict) else ""),
             steps=steps,
             domain=response.data.get("domain", domain or "generic")
             if response.data and isinstance(response.data, dict)
@@ -520,13 +611,34 @@ class AxonFlow:
 
         Returns:
             PlanExecutionResponse with results
+
+        Note:
+            This uses map_timeout (default 120s) as plan execution involves
+            multiple LLM calls and can take 30-60+ seconds.
         """
-        response = await self.execute_query(
-            user_token=user_token or self._config.client_id,
+        request = ClientRequest(
             query="",
+            user_token=user_token or self._config.client_id,
+            client_id=self._config.client_id,
             request_type="execute-plan",
             context={"plan_id": plan_id},
         )
+
+        if self._config.debug:
+            self._logger.debug(
+                "Executing plan",
+                plan_id=plan_id,
+                timeout=self._config.map_timeout,
+            )
+
+        # Use MAP request with longer timeout
+        response_data = await self._map_request(
+            "POST",
+            "/api/request",
+            json_data=request.model_dump(),
+        )
+
+        response = ClientResponse.model_validate(response_data)
 
         return PlanExecutionResponse(
             plan_id=plan_id,
