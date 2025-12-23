@@ -82,8 +82,7 @@ class BedrockInterceptor(BaseInterceptor):
                 # Claude format
                 if "messages" in parsed:
                     return " ".join(
-                        m.get("content", "") for m in parsed["messages"]
-                        if isinstance(m, dict)
+                        m.get("content", "") for m in parsed["messages"] if isinstance(m, dict)
                     )
                 # Titan format
                 if "inputText" in parsed:
@@ -127,8 +126,7 @@ def wrap_bedrock_client(
                 # Claude format
                 if "messages" in parsed:
                     return " ".join(
-                        m.get("content", "") for m in parsed["messages"]
-                        if isinstance(m, dict)
+                        m.get("content", "") for m in parsed["messages"] if isinstance(m, dict)
                     )
                 # Titan format
                 if "inputText" in parsed:

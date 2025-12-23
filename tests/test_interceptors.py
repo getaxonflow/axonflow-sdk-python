@@ -345,11 +345,13 @@ class TestBedrockInterceptor:
         axonflow = MagicMock()
         interceptor = BedrockInterceptor(axonflow)
 
-        body = json.dumps({
-            "messages": [
-                {"role": "user", "content": "Hello Claude on Bedrock"},
-            ]
-        })
+        body = json.dumps(
+            {
+                "messages": [
+                    {"role": "user", "content": "Hello Claude on Bedrock"},
+                ]
+            }
+        )
 
         prompt = interceptor.extract_prompt(body=body)
         assert "Hello Claude on Bedrock" in prompt
@@ -361,9 +363,11 @@ class TestBedrockInterceptor:
         axonflow = MagicMock()
         interceptor = BedrockInterceptor(axonflow)
 
-        body = json.dumps({
-            "inputText": "Hello Titan",
-        })
+        body = json.dumps(
+            {
+                "inputText": "Hello Titan",
+            }
+        )
 
         prompt = interceptor.extract_prompt(body=body)
         assert "Hello Titan" in prompt
