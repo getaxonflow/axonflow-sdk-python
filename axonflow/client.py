@@ -583,8 +583,11 @@ class AxonFlow:
                     "plan_id": response.data.get("plan_id"),
                 })
 
+        plan_id = response.plan_id or (
+            response.data.get("plan_id", "") if isinstance(response.data, dict) else ""
+        )
         return PlanResponse(
-            plan_id=response.plan_id or (response.data.get("plan_id", "") if isinstance(response.data, dict) else ""),
+            plan_id=plan_id,
             steps=steps,
             domain=response.data.get("domain", domain or "generic")
             if response.data and isinstance(response.data, dict)
