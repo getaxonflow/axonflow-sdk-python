@@ -87,7 +87,7 @@ def wrap_gemini_model(
     original_generate = gemini_model.generate_content
     original_generate_async = getattr(gemini_model, "generate_content_async", None)
 
-    def _extract_prompt(args: tuple, kwargs: dict[str, Any]) -> str:
+    def _extract_prompt(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
         """Extract prompt from arguments."""
         if args:
             content = args[0]

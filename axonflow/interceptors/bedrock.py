@@ -86,10 +86,10 @@ class BedrockInterceptor(BaseInterceptor):
                     )
                 # Titan format
                 if "inputText" in parsed:
-                    return parsed["inputText"]
+                    return str(parsed["inputText"])
                 # Generic prompt
                 if "prompt" in parsed:
-                    return parsed["prompt"]
+                    return str(parsed["prompt"])
             except json.JSONDecodeError:
                 pass
         return ""
@@ -130,10 +130,10 @@ def wrap_bedrock_client(
                     )
                 # Titan format
                 if "inputText" in parsed:
-                    return parsed["inputText"]
+                    return str(parsed["inputText"])
                 # Generic
                 if "prompt" in parsed:
-                    return parsed["prompt"]
+                    return str(parsed["prompt"])
             except json.JSONDecodeError:
                 pass
         return ""
