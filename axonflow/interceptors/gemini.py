@@ -87,7 +87,7 @@ def wrap_gemini_model(
     original_generate = gemini_model.generate_content
     original_generate_async = getattr(gemini_model, "generate_content_async", None)
 
-    def _extract_prompt(args: tuple, kwargs: dict[str, Any]) -> str:
+    def _extract_prompt(args: tuple[Any, ...], kwargs: dict[str, Any]) -> str:
         """Extract prompt from arguments."""
         if args:
             content = args[0]
@@ -146,6 +146,7 @@ def wrap_gemini_model(
 
     # Also wrap async version if available
     if original_generate_async:
+
         @wraps(original_generate_async)
         async def async_wrapped_generate(*args: Any, **kwargs: Any) -> Any:
             prompt = _extract_prompt(args, kwargs)
@@ -230,6 +231,7 @@ def _wrap_chat_session(
     chat_session.send_message = sync_wrapped_send
 
     if original_send_async:
+
         @wraps(original_send_async)
         async def async_wrapped_send(content: Any, **kwargs: Any) -> Any:
             prompt = content if isinstance(content, str) else str(content)

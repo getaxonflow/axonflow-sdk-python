@@ -55,7 +55,7 @@ class OllamaInterceptor(BaseInterceptor):
         # For generate, extract from prompt
         prompt = kwargs.get("prompt", "")
         if prompt:
-            return prompt
+            return str(prompt)
         return ""
 
     def wrap(self, client: Any) -> Any:
