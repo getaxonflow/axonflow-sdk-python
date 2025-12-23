@@ -67,6 +67,7 @@ class AxonFlowConfig(BaseModel):
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
     timeout: float = Field(default=60.0, gt=0, description="Request timeout (seconds)")
+    map_timeout: float = Field(default=120.0, gt=0, description="MAP operations timeout (seconds)")
     insecure_skip_verify: bool = Field(default=False, description="Skip TLS verify")
     retry: RetryConfig = Field(default_factory=RetryConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
