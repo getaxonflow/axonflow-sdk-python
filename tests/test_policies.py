@@ -32,7 +32,6 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 
-
 # Sample test data
 SAMPLE_STATIC_POLICY = {
     "id": "pol_123",

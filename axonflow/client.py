@@ -289,7 +289,7 @@ class AxonFlow:
 
             response.raise_for_status()
             # Handle 204 No Content (e.g., DELETE responses)
-            if response.status_code == 204:
+            if response.status_code == 204:  # noqa: PLR2004
                 return None  # type: ignore[return-value]
             return response.json()  # type: ignore[no-any-return]
 
