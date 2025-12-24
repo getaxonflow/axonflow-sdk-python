@@ -23,6 +23,7 @@ from axonflow.policies import (
     PolicyAction,
     PolicyCategory,
     PolicyOverride,
+    PolicySeverity,
     PolicyTier,
     PolicyVersion,
     StaticPolicy,
@@ -40,7 +41,7 @@ SAMPLE_STATIC_POLICY = {
     "category": "security-sqli",
     "tier": "system",
     "pattern": "(?i)(union\\s+select|drop\\s+table)",
-    "severity": 9,
+    "severity": "critical",
     "enabled": True,
     "action": "block",
     "createdAt": "2025-01-01T00:00:00Z",
@@ -147,7 +148,7 @@ class TestStaticPolicies:
             name="Block SQL Injection",
             category=PolicyCategory.SECURITY_SQLI,
             pattern="(?i)(union\\s+select|drop\\s+table)",
-            severity=9,
+            severity=PolicySeverity.CRITICAL,
         )
         policy = await client.create_static_policy(request)
 
@@ -161,13 +162,13 @@ class TestStaticPolicies:
         self, client: AxonFlow, httpx_mock: HTTPXMock
     ) -> None:
         """Test updating an existing static policy."""
-        updated = {**SAMPLE_STATIC_POLICY, "severity": 10}
+        updated = {**SAMPLE_STATIC_POLICY, "severity": "high"}
         httpx_mock.add_response(json=updated)
 
-        request = UpdateStaticPolicyRequest(severity=10)
+        request = UpdateStaticPolicyRequest(severity=PolicySeverity.HIGH)
         policy = await client.update_static_policy("pol_123", request)
 
-        assert policy.severity == 10
+        assert policy.severity == PolicySeverity.HIGH
         http_request = httpx_mock.get_request()
         assert http_request.method == "PUT"
 
