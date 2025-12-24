@@ -88,9 +88,7 @@ class TestStaticPolicies:
     """Tests for static policy methods."""
 
     @pytest.mark.asyncio
-    async def test_list_static_policies(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_list_static_policies(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test listing static policies."""
         httpx_mock.add_response(json=[SAMPLE_STATIC_POLICY])
 
@@ -123,9 +121,7 @@ class TestStaticPolicies:
         assert "tier=system" in str(request.url)
 
     @pytest.mark.asyncio
-    async def test_get_static_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_get_static_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test getting a specific static policy."""
         httpx_mock.add_response(json=SAMPLE_STATIC_POLICY)
 
@@ -137,9 +133,7 @@ class TestStaticPolicies:
         assert "/api/v1/static-policies/pol_123" in str(request.url)
 
     @pytest.mark.asyncio
-    async def test_create_static_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_create_static_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test creating a new static policy."""
         httpx_mock.add_response(json=SAMPLE_STATIC_POLICY)
 
@@ -157,9 +151,7 @@ class TestStaticPolicies:
         assert "/api/v1/static-policies" in str(http_request.url)
 
     @pytest.mark.asyncio
-    async def test_update_static_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_update_static_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test updating an existing static policy."""
         updated = {**SAMPLE_STATIC_POLICY, "severity": "high"}
         httpx_mock.add_response(json=updated)
@@ -172,9 +164,7 @@ class TestStaticPolicies:
         assert http_request.method == "PUT"
 
     @pytest.mark.asyncio
-    async def test_delete_static_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_delete_static_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test deleting a static policy."""
         httpx_mock.add_response(status_code=204)
 
@@ -185,9 +175,7 @@ class TestStaticPolicies:
         assert "/api/v1/static-policies/pol_123" in str(http_request.url)
 
     @pytest.mark.asyncio
-    async def test_toggle_static_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_toggle_static_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test toggling a static policy's enabled status."""
         toggled = {**SAMPLE_STATIC_POLICY, "enabled": False}
         httpx_mock.add_response(json=toggled)
@@ -212,9 +200,7 @@ class TestStaticPolicies:
         assert "/api/v1/static-policies/effective" in str(request.url)
 
     @pytest.mark.asyncio
-    async def test_test_pattern(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_test_pattern(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test pattern testing."""
         httpx_mock.add_response(
             json={
@@ -226,9 +212,7 @@ class TestStaticPolicies:
             }
         )
 
-        result = await client.test_pattern(
-            "(?i)select", ["SELECT * FROM users", "Hello world"]
-        )
+        result = await client.test_pattern("(?i)select", ["SELECT * FROM users", "Hello world"])
 
         assert result.valid is True
         assert len(result.matches) == 2
@@ -267,9 +251,7 @@ class TestPolicyOverrides:
     """Tests for policy override methods."""
 
     @pytest.mark.asyncio
-    async def test_create_policy_override(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_create_policy_override(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test creating a policy override."""
         httpx_mock.add_response(json=SAMPLE_OVERRIDE)
 
@@ -286,9 +268,7 @@ class TestPolicyOverrides:
         assert "/api/v1/static-policies/pol_123/override" in str(http_request.url)
 
     @pytest.mark.asyncio
-    async def test_delete_policy_override(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_delete_policy_override(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test deleting a policy override."""
         httpx_mock.add_response(status_code=204)
 
@@ -303,9 +283,7 @@ class TestDynamicPolicies:
     """Tests for dynamic policy methods."""
 
     @pytest.mark.asyncio
-    async def test_list_dynamic_policies(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_list_dynamic_policies(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test listing dynamic policies."""
         httpx_mock.add_response(json=[SAMPLE_DYNAMIC_POLICY])
 
@@ -333,9 +311,7 @@ class TestDynamicPolicies:
         assert "enabled=true" in str(request.url)
 
     @pytest.mark.asyncio
-    async def test_get_dynamic_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_get_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test getting a specific dynamic policy."""
         httpx_mock.add_response(json=SAMPLE_DYNAMIC_POLICY)
 
@@ -345,9 +321,7 @@ class TestDynamicPolicies:
         assert policy.config.type == "rate-limit"
 
     @pytest.mark.asyncio
-    async def test_create_dynamic_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_create_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test creating a new dynamic policy."""
         httpx_mock.add_response(json=SAMPLE_DYNAMIC_POLICY)
 
@@ -367,9 +341,7 @@ class TestDynamicPolicies:
         assert http_request.method == "POST"
 
     @pytest.mark.asyncio
-    async def test_update_dynamic_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_update_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test updating a dynamic policy."""
         httpx_mock.add_response(json=SAMPLE_DYNAMIC_POLICY)
 
@@ -387,9 +359,7 @@ class TestDynamicPolicies:
         assert http_request.method == "PUT"
 
     @pytest.mark.asyncio
-    async def test_delete_dynamic_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_delete_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test deleting a dynamic policy."""
         httpx_mock.add_response(status_code=204)
 
@@ -400,9 +370,7 @@ class TestDynamicPolicies:
         assert "/api/v1/policies/dpol_456" in str(http_request.url)
 
     @pytest.mark.asyncio
-    async def test_toggle_dynamic_policy(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
+    async def test_toggle_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test toggling a dynamic policy's enabled status."""
         toggled = {**SAMPLE_DYNAMIC_POLICY, "enabled": False}
         httpx_mock.add_response(json=toggled)

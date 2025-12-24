@@ -1467,24 +1467,18 @@ class SyncAxonFlow:
         options: ListStaticPoliciesOptions | None = None,
     ) -> list[StaticPolicy]:
         """List all static policies with optional filtering."""
-        return self._get_loop().run_until_complete(
-            self._async_client.list_static_policies(options)
-        )
+        return self._get_loop().run_until_complete(self._async_client.list_static_policies(options))
 
     def get_static_policy(self, policy_id: str) -> StaticPolicy:
         """Get a specific static policy by ID."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_static_policy(policy_id)
-        )
+        return self._get_loop().run_until_complete(self._async_client.get_static_policy(policy_id))
 
     def create_static_policy(
         self,
         request: CreateStaticPolicyRequest,
     ) -> StaticPolicy:
         """Create a new static policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.create_static_policy(request)
-        )
+        return self._get_loop().run_until_complete(self._async_client.create_static_policy(request))
 
     def update_static_policy(
         self,
@@ -1571,9 +1565,7 @@ class SyncAxonFlow:
 
     def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
         """Get a specific dynamic policy by ID."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_dynamic_policy(policy_id)
-        )
+        return self._get_loop().run_until_complete(self._async_client.get_dynamic_policy(policy_id))
 
     def create_dynamic_policy(
         self,
