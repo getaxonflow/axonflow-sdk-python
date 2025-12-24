@@ -37,6 +37,29 @@ from axonflow.exceptions import (
     RateLimitError,
     TimeoutError,
 )
+from axonflow.policies import (
+    CreateDynamicPolicyRequest,
+    CreatePolicyOverrideRequest,
+    CreateStaticPolicyRequest,
+    DynamicPolicy,
+    DynamicPolicyCondition,
+    DynamicPolicyConfig,
+    EffectivePoliciesOptions,
+    ListDynamicPoliciesOptions,
+    ListStaticPoliciesOptions,
+    OverrideAction,
+    PolicyAction,
+    PolicyCategory,
+    PolicyOverride,
+    PolicySeverity,
+    PolicyTier,
+    PolicyVersion,
+    StaticPolicy,
+    TestPatternMatch,
+    TestPatternResult,
+    UpdateDynamicPolicyRequest,
+    UpdateStaticPolicyRequest,
+)
 from axonflow.types import (
     AuditResult,
     CacheConfig,
@@ -56,7 +79,7 @@ from axonflow.types import (
     TokenUsage,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.2"
 __all__ = [
     # Main client
     "AxonFlow",
@@ -82,6 +105,28 @@ __all__ = [
     "PolicyApprovalResult",
     "TokenUsage",
     "AuditResult",
+    # Policy CRUD types
+    "PolicyCategory",
+    "PolicyTier",
+    "PolicyAction",
+    "PolicySeverity",
+    "OverrideAction",
+    "StaticPolicy",
+    "DynamicPolicy",
+    "PolicyOverride",
+    "PolicyVersion",
+    "DynamicPolicyConfig",
+    "DynamicPolicyCondition",
+    "TestPatternResult",
+    "TestPatternMatch",
+    "ListStaticPoliciesOptions",
+    "ListDynamicPoliciesOptions",
+    "EffectivePoliciesOptions",
+    "CreateStaticPolicyRequest",
+    "UpdateStaticPolicyRequest",
+    "CreateDynamicPolicyRequest",
+    "UpdateDynamicPolicyRequest",
+    "CreatePolicyOverrideRequest",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",
