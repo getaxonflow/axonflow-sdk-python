@@ -61,6 +61,15 @@ class PolicyAction(str, Enum):
     ALLOW = "allow"
 
 
+class PolicySeverity(str, Enum):
+    """Policy severity levels."""
+
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
 # ============================================================================
 # Static Policy Types
 # ============================================================================
@@ -91,7 +100,7 @@ class StaticPolicy(BaseModel):
     category: PolicyCategory
     tier: PolicyTier
     pattern: str
-    severity: int = Field(ge=1, le=10)
+    severity: PolicySeverity = PolicySeverity.MEDIUM
     enabled: bool = True
     action: PolicyAction = PolicyAction.BLOCK
     organization_id: str | None = Field(default=None, alias="organizationId")
@@ -122,8 +131,9 @@ class CreateStaticPolicyRequest(BaseModel):
     name: str = Field(..., min_length=1)
     description: str | None = None
     category: PolicyCategory
+    tier: PolicyTier = PolicyTier.TENANT  # Default to tenant tier for custom policies
     pattern: str = Field(..., min_length=1)
-    severity: int = Field(default=5, ge=1, le=10)
+    severity: PolicySeverity = PolicySeverity.MEDIUM
     enabled: bool = True
     action: PolicyAction = PolicyAction.BLOCK
 
@@ -135,7 +145,7 @@ class UpdateStaticPolicyRequest(BaseModel):
     description: str | None = None
     category: PolicyCategory | None = None
     pattern: str | None = None
-    severity: int | None = Field(default=None, ge=1, le=10)
+    severity: PolicySeverity | None = None
     enabled: bool | None = None
     action: PolicyAction | None = None
 
@@ -235,8 +245,7 @@ class TestPatternMatch(BaseModel):
 
     input: str
     matched: bool
-    matched_text: str | None = Field(default=None, alias="matchedText")
-    position: int | None = None
+    groups: list[str] | None = None
 
 
 class TestPatternResult(BaseModel):
@@ -244,7 +253,9 @@ class TestPatternResult(BaseModel):
 
     valid: bool
     error: str | None = None
-    results: list[TestPatternMatch] = Field(default_factory=list)
+    pattern: str = ""
+    inputs: list[str] = Field(default_factory=list)
+    matches: list[TestPatternMatch] = Field(default_factory=list)
 
 
 # ============================================================================

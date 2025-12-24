@@ -173,6 +173,7 @@ class AxonFlow:
         headers: dict[str, str] = {
             "Content-Type": "application/json",
             "X-Client-Secret": client_secret,
+            "X-Tenant-ID": client_id,  # client_id is used as tenant ID for policy APIs
         }
         if license_key:
             headers["X-License-Key"] = license_key
@@ -904,7 +905,9 @@ class AxonFlow:
             self._logger.debug("Listing static policies", path=path)
 
         response = await self._request("GET", path)
-        return [StaticPolicy.model_validate(p) for p in response]
+        # Backend returns { policies: [], pagination: {} }, extract the policies array
+        policies = response.get("policies", []) if isinstance(response, dict) else response
+        return [StaticPolicy.model_validate(p) for p in policies]
 
     async def get_static_policy(self, policy_id: str) -> StaticPolicy:
         """Get a specific static policy by ID.
@@ -1041,7 +1044,9 @@ class AxonFlow:
             self._logger.debug("Getting effective static policies", path=path)
 
         response = await self._request("GET", path)
-        return [StaticPolicy.model_validate(p) for p in response]
+        # Backend returns { static: [], dynamic: [], ... }, extract the static array
+        policies = response.get("static", []) if isinstance(response, dict) else response
+        return [StaticPolicy.model_validate(p) for p in policies]
 
     async def test_pattern(
         self,
@@ -1073,7 +1078,7 @@ class AxonFlow:
         response = await self._request(
             "POST",
             "/api/v1/static-policies/test",
-            json_data={"pattern": pattern, "test_inputs": test_inputs},
+            json_data={"pattern": pattern, "inputs": test_inputs},
         )
         return TestPatternResult.model_validate(response)
 
