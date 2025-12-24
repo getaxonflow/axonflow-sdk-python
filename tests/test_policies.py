@@ -220,7 +220,7 @@ class TestStaticPolicies:
         httpx_mock.add_response(
             json={
                 "valid": True,
-                "results": [
+                "matches": [
                     {"input": "SELECT * FROM users", "matched": True},
                     {"input": "Hello world", "matched": False},
                 ],
@@ -232,9 +232,9 @@ class TestStaticPolicies:
         )
 
         assert result.valid is True
-        assert len(result.results) == 2
-        assert result.results[0].matched is True
-        assert result.results[1].matched is False
+        assert len(result.matches) == 2
+        assert result.matches[0].matched is True
+        assert result.matches[1].matched is False
 
     @pytest.mark.asyncio
     async def test_get_static_policy_versions(
@@ -457,7 +457,7 @@ class TestPolicyTypes:
             name="Test Policy",
             category=PolicyCategory.PII_GLOBAL,
             pattern=r"\b\d{3}-\d{2}-\d{4}\b",
-            severity=7,
+            severity=PolicySeverity.MEDIUM,
         )
         assert request.name == "Test Policy"
         assert request.category == PolicyCategory.PII_GLOBAL
