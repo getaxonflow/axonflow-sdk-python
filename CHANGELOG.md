@@ -5,6 +5,24 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-25
+
+### Added
+
+- **Policy CRUD Methods**: Full policy management support for Unified Policy Architecture v2.0.0
+  - `list_static_policies()` - List policies with filtering
+  - `get_static_policy()` - Get single policy by ID
+  - `create_static_policy()` - Create custom policy
+  - `update_static_policy()` - Update existing policy
+  - `delete_static_policy()` - Delete policy
+  - `toggle_static_policy()` - Enable/disable policy
+  - `get_effective_static_policies()` - Get merged hierarchy
+  - `test_pattern()` - Test regex pattern
+
+- **Policy Override Methods** (Enterprise)
+- **Dynamic Policy Methods**
+- **New Types**: `StaticPolicy`, `DynamicPolicy`, `PolicyOverride`
+
 ## [0.3.1] - 2025-12-23
 
 ### Added
