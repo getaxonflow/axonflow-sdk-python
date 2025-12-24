@@ -287,6 +287,9 @@ class AxonFlow:
                 response = await self._http_client.request(method, url, json=json_data)
 
             response.raise_for_status()
+            # Handle 204 No Content (e.g., DELETE responses)
+            if response.status_code == 204:
+                return None  # type: ignore[return-value]
             return response.json()  # type: ignore[no-any-return]
 
         except httpx.ConnectError as e:
@@ -874,29 +877,33 @@ class AxonFlow:
             ...     ListStaticPoliciesOptions(category=PolicyCategory.SECURITY_SQLI)
             ... )
         """
-        params: dict[str, Any] = {}
+        params: list[str] = []
         if options:
             if options.category:
-                params["category"] = options.category.value
+                params.append(f"category={options.category.value}")
             if options.tier:
-                params["tier"] = options.tier.value
+                params.append(f"tier={options.tier.value}")
             if options.enabled is not None:
-                params["enabled"] = str(options.enabled).lower()
+                params.append(f"enabled={str(options.enabled).lower()}")
             if options.limit:
-                params["limit"] = options.limit
+                params.append(f"limit={options.limit}")
             if options.offset:
-                params["offset"] = options.offset
+                params.append(f"offset={options.offset}")
             if options.sort_by:
-                params["sort_by"] = options.sort_by
+                params.append(f"sort_by={options.sort_by}")
             if options.sort_order:
-                params["sort_order"] = options.sort_order
+                params.append(f"sort_order={options.sort_order}")
             if options.search:
-                params["search"] = options.search
+                params.append(f"search={options.search}")
+
+        path = "/api/v1/static-policies"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
 
         if self._config.debug:
-            self._logger.debug("Listing static policies", params=params)
+            self._logger.debug("Listing static policies", path=path)
 
-        response = await self._request("GET", "/api/v1/static-policies", params=params)
+        response = await self._request("GET", path)
         return [StaticPolicy.model_validate(p) for p in response]
 
     async def get_static_policy(self, policy_id: str) -> StaticPolicy:
@@ -1017,23 +1024,23 @@ class AxonFlow:
         Returns:
             List of effective policies
         """
-        params: dict[str, Any] = {}
+        query_params: list[str] = []
         if options:
             if options.category:
-                params["category"] = options.category.value
+                query_params.append(f"category={options.category.value}")
             if options.include_disabled:
-                params["include_disabled"] = "true"
+                query_params.append("include_disabled=true")
             if options.include_overridden:
-                params["include_overridden"] = "true"
+                query_params.append("include_overridden=true")
+
+        path = "/api/v1/static-policies/effective"
+        if query_params:
+            path = f"{path}?{'&'.join(query_params)}"
 
         if self._config.debug:
-            self._logger.debug("Getting effective static policies", params=params)
+            self._logger.debug("Getting effective static policies", path=path)
 
-        response = await self._request(
-            "GET",
-            "/api/v1/static-policies/effective",
-            params=params,
-        )
+        response = await self._request("GET", path)
         return [StaticPolicy.model_validate(p) for p in response]
 
     async def test_pattern(
@@ -1143,31 +1150,6 @@ class AxonFlow:
 
         await self._request("DELETE", f"/api/v1/static-policies/{policy_id}/override")
 
-    async def get_policy_override(
-        self,
-        policy_id: str,
-    ) -> PolicyOverride | None:
-        """Get the override for a specific policy.
-
-        Args:
-            policy_id: ID of the policy
-
-        Returns:
-            The override if one exists, None otherwise
-        """
-        if self._config.debug:
-            self._logger.debug("Getting policy override", policy_id=policy_id)
-
-        try:
-            response = await self._request(
-                "GET",
-                f"/api/v1/static-policies/{policy_id}/override",
-            )
-            return PolicyOverride.model_validate(response)
-        except AxonFlowError:
-            # No override exists
-            return None
-
     # =========================================================================
     # Dynamic Policy Methods
     # =========================================================================
@@ -1184,29 +1166,33 @@ class AxonFlow:
         Returns:
             List of dynamic policies
         """
-        params: dict[str, Any] = {}
+        params: list[str] = []
         if options:
             if options.category:
-                params["category"] = options.category.value
+                params.append(f"category={options.category.value}")
             if options.tier:
-                params["tier"] = options.tier.value
+                params.append(f"tier={options.tier.value}")
             if options.enabled is not None:
-                params["enabled"] = str(options.enabled).lower()
+                params.append(f"enabled={str(options.enabled).lower()}")
             if options.limit:
-                params["limit"] = options.limit
+                params.append(f"limit={options.limit}")
             if options.offset:
-                params["offset"] = options.offset
+                params.append(f"offset={options.offset}")
             if options.sort_by:
-                params["sort_by"] = options.sort_by
+                params.append(f"sort_by={options.sort_by}")
             if options.sort_order:
-                params["sort_order"] = options.sort_order
+                params.append(f"sort_order={options.sort_order}")
             if options.search:
-                params["search"] = options.search
+                params.append(f"search={options.search}")
+
+        path = "/api/v1/policies"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
 
         if self._config.debug:
-            self._logger.debug("Listing dynamic policies", params=params)
+            self._logger.debug("Listing dynamic policies", path=path)
 
-        response = await self._request("GET", "/api/v1/dynamic-policies", params=params)
+        response = await self._request("GET", path)
         return [DynamicPolicy.model_validate(p) for p in response]
 
     async def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
@@ -1221,7 +1207,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting dynamic policy", policy_id=policy_id)
 
-        response = await self._request("GET", f"/api/v1/dynamic-policies/{policy_id}")
+        response = await self._request("GET", f"/api/v1/policies/{policy_id}")
         return DynamicPolicy.model_validate(response)
 
     async def create_dynamic_policy(
@@ -1241,7 +1227,7 @@ class AxonFlow:
 
         response = await self._request(
             "POST",
-            "/api/v1/dynamic-policies",
+            "/api/v1/policies",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return DynamicPolicy.model_validate(response)
@@ -1265,7 +1251,7 @@ class AxonFlow:
 
         response = await self._request(
             "PUT",
-            f"/api/v1/dynamic-policies/{policy_id}",
+            f"/api/v1/policies/{policy_id}",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return DynamicPolicy.model_validate(response)
@@ -1279,7 +1265,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Deleting dynamic policy", policy_id=policy_id)
 
-        await self._request("DELETE", f"/api/v1/dynamic-policies/{policy_id}")
+        await self._request("DELETE", f"/api/v1/policies/{policy_id}")
 
     async def toggle_dynamic_policy(
         self,
@@ -1300,7 +1286,7 @@ class AxonFlow:
 
         response = await self._request(
             "PATCH",
-            f"/api/v1/dynamic-policies/{policy_id}",
+            f"/api/v1/policies/{policy_id}",
             json_data={"enabled": enabled},
         )
         return DynamicPolicy.model_validate(response)
@@ -1317,21 +1303,21 @@ class AxonFlow:
         Returns:
             List of effective dynamic policies
         """
-        params: dict[str, Any] = {}
+        query_params: list[str] = []
         if options:
             if options.category:
-                params["category"] = options.category.value
+                query_params.append(f"category={options.category.value}")
             if options.include_disabled:
-                params["include_disabled"] = "true"
+                query_params.append("include_disabled=true")
+
+        path = "/api/v1/policies/effective"
+        if query_params:
+            path = f"{path}?{'&'.join(query_params)}"
 
         if self._config.debug:
-            self._logger.debug("Getting effective dynamic policies", params=params)
+            self._logger.debug("Getting effective dynamic policies", path=path)
 
-        response = await self._request(
-            "GET",
-            "/api/v1/dynamic-policies/effective",
-            params=params,
-        )
+        response = await self._request("GET", path)
         return [DynamicPolicy.model_validate(p) for p in response]
 
 
@@ -1565,15 +1551,6 @@ class SyncAxonFlow:
         """Delete an override for a static policy."""
         return self._get_loop().run_until_complete(
             self._async_client.delete_policy_override(policy_id)
-        )
-
-    def get_policy_override(
-        self,
-        policy_id: str,
-    ) -> PolicyOverride | None:
-        """Get the override for a specific policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_policy_override(policy_id)
         )
 
     # Dynamic policy sync wrappers

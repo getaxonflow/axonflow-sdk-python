@@ -298,29 +298,6 @@ class TestPolicyOverrides:
         assert http_request.method == "DELETE"
         assert "/api/v1/static-policies/pol_123/override" in str(http_request.url)
 
-    @pytest.mark.asyncio
-    async def test_get_policy_override(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
-        """Test getting a policy override."""
-        httpx_mock.add_response(json=SAMPLE_OVERRIDE)
-
-        override = await client.get_policy_override("pol_123")
-
-        assert override is not None
-        assert override.action == OverrideAction.WARN
-
-    @pytest.mark.asyncio
-    async def test_get_policy_override_not_found(
-        self, client: AxonFlow, httpx_mock: HTTPXMock
-    ) -> None:
-        """Test getting a non-existent override returns None."""
-        httpx_mock.add_response(status_code=404, json={"error": "Not found"})
-
-        override = await client.get_policy_override("pol_123")
-
-        assert override is None
-
 
 class TestDynamicPolicies:
     """Tests for dynamic policy methods."""
@@ -420,7 +397,7 @@ class TestDynamicPolicies:
 
         http_request = httpx_mock.get_request()
         assert http_request.method == "DELETE"
-        assert "/api/v1/dynamic-policies/dpol_456" in str(http_request.url)
+        assert "/api/v1/policies/dpol_456" in str(http_request.url)
 
     @pytest.mark.asyncio
     async def test_toggle_dynamic_policy(
@@ -445,7 +422,7 @@ class TestDynamicPolicies:
 
         assert len(policies) == 1
         request = httpx_mock.get_request()
-        assert "/api/v1/dynamic-policies/effective" in str(request.url)
+        assert "/api/v1/policies/effective" in str(request.url)
 
 
 class TestPolicyTypes:
