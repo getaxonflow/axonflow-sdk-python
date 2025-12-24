@@ -55,8 +55,30 @@ from axonflow.types import (
     RetryConfig,
     TokenUsage,
 )
+from axonflow.policies import (
+    CreateDynamicPolicyRequest,
+    CreatePolicyOverrideRequest,
+    CreateStaticPolicyRequest,
+    DynamicPolicy,
+    DynamicPolicyCondition,
+    DynamicPolicyConfig,
+    EffectivePoliciesOptions,
+    ListDynamicPoliciesOptions,
+    ListStaticPoliciesOptions,
+    OverrideAction,
+    PolicyAction,
+    PolicyCategory,
+    PolicyOverride,
+    PolicyTier,
+    PolicyVersion,
+    StaticPolicy,
+    TestPatternMatch,
+    TestPatternResult,
+    UpdateDynamicPolicyRequest,
+    UpdateStaticPolicyRequest,
+)
 
-__version__ = "0.2.0"
+__version__ = "0.3.2"
 __all__ = [
     # Main client
     "AxonFlow",
@@ -82,6 +104,27 @@ __all__ = [
     "PolicyApprovalResult",
     "TokenUsage",
     "AuditResult",
+    # Policy CRUD types
+    "PolicyCategory",
+    "PolicyTier",
+    "PolicyAction",
+    "OverrideAction",
+    "StaticPolicy",
+    "DynamicPolicy",
+    "PolicyOverride",
+    "PolicyVersion",
+    "DynamicPolicyConfig",
+    "DynamicPolicyCondition",
+    "TestPatternResult",
+    "TestPatternMatch",
+    "ListStaticPoliciesOptions",
+    "ListDynamicPoliciesOptions",
+    "EffectivePoliciesOptions",
+    "CreateStaticPolicyRequest",
+    "UpdateStaticPolicyRequest",
+    "CreateDynamicPolicyRequest",
+    "UpdateDynamicPolicyRequest",
+    "CreatePolicyOverrideRequest",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",

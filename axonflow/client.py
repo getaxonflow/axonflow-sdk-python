@@ -59,6 +59,23 @@ from axonflow.types import (
     RetryConfig,
     TokenUsage,
 )
+from axonflow.policies import (
+    CreateDynamicPolicyRequest,
+    CreatePolicyOverrideRequest,
+    CreateStaticPolicyRequest,
+    DynamicPolicy,
+    EffectivePoliciesOptions,
+    ListDynamicPoliciesOptions,
+    ListStaticPoliciesOptions,
+    PolicyCategory,
+    PolicyOverride,
+    PolicyTier,
+    PolicyVersion,
+    StaticPolicy,
+    TestPatternResult,
+    UpdateDynamicPolicyRequest,
+    UpdateStaticPolicyRequest,
+)
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -836,6 +853,487 @@ class AxonFlow:
             audit_id=response["audit_id"],
         )
 
+    # =========================================================================
+    # Policy CRUD Methods - Static Policies
+    # =========================================================================
+
+    async def list_static_policies(
+        self,
+        options: ListStaticPoliciesOptions | None = None,
+    ) -> list[StaticPolicy]:
+        """List all static policies with optional filtering.
+
+        Args:
+            options: Filtering and pagination options
+
+        Returns:
+            List of static policies
+
+        Example:
+            >>> policies = await client.list_static_policies(
+            ...     ListStaticPoliciesOptions(category=PolicyCategory.SECURITY_SQLI)
+            ... )
+        """
+        params: dict[str, Any] = {}
+        if options:
+            if options.category:
+                params["category"] = options.category.value
+            if options.tier:
+                params["tier"] = options.tier.value
+            if options.enabled is not None:
+                params["enabled"] = str(options.enabled).lower()
+            if options.limit:
+                params["limit"] = options.limit
+            if options.offset:
+                params["offset"] = options.offset
+            if options.sort_by:
+                params["sort_by"] = options.sort_by
+            if options.sort_order:
+                params["sort_order"] = options.sort_order
+            if options.search:
+                params["search"] = options.search
+
+        if self._config.debug:
+            self._logger.debug("Listing static policies", params=params)
+
+        response = await self._request("GET", "/api/v1/static-policies", params=params)
+        return [StaticPolicy.model_validate(p) for p in response]
+
+    async def get_static_policy(self, policy_id: str) -> StaticPolicy:
+        """Get a specific static policy by ID.
+
+        Args:
+            policy_id: Policy ID
+
+        Returns:
+            The static policy
+        """
+        if self._config.debug:
+            self._logger.debug("Getting static policy", policy_id=policy_id)
+
+        response = await self._request("GET", f"/api/v1/static-policies/{policy_id}")
+        return StaticPolicy.model_validate(response)
+
+    async def create_static_policy(
+        self,
+        request: CreateStaticPolicyRequest,
+    ) -> StaticPolicy:
+        """Create a new static policy.
+
+        Args:
+            request: Policy creation request
+
+        Returns:
+            The created policy
+
+        Example:
+            >>> policy = await client.create_static_policy(
+            ...     CreateStaticPolicyRequest(
+            ...         name="Block Credit Cards",
+            ...         category=PolicyCategory.PII_GLOBAL,
+            ...         pattern=r"\\b(?:\\d{4}[- ]?){3}\\d{4}\\b",
+            ...         severity=8
+            ...     )
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug("Creating static policy", name=request.name)
+
+        response = await self._request(
+            "POST",
+            "/api/v1/static-policies",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return StaticPolicy.model_validate(response)
+
+    async def update_static_policy(
+        self,
+        policy_id: str,
+        request: UpdateStaticPolicyRequest,
+    ) -> StaticPolicy:
+        """Update an existing static policy.
+
+        Args:
+            policy_id: Policy ID
+            request: Fields to update
+
+        Returns:
+            The updated policy
+        """
+        if self._config.debug:
+            self._logger.debug("Updating static policy", policy_id=policy_id)
+
+        response = await self._request(
+            "PUT",
+            f"/api/v1/static-policies/{policy_id}",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return StaticPolicy.model_validate(response)
+
+    async def delete_static_policy(self, policy_id: str) -> None:
+        """Delete a static policy.
+
+        Args:
+            policy_id: Policy ID
+        """
+        if self._config.debug:
+            self._logger.debug("Deleting static policy", policy_id=policy_id)
+
+        await self._request("DELETE", f"/api/v1/static-policies/{policy_id}")
+
+    async def toggle_static_policy(
+        self,
+        policy_id: str,
+        enabled: bool,
+    ) -> StaticPolicy:
+        """Toggle a static policy's enabled status.
+
+        Args:
+            policy_id: Policy ID
+            enabled: Whether the policy should be enabled
+
+        Returns:
+            The updated policy
+        """
+        if self._config.debug:
+            self._logger.debug("Toggling static policy", policy_id=policy_id, enabled=enabled)
+
+        response = await self._request(
+            "PATCH",
+            f"/api/v1/static-policies/{policy_id}",
+            json_data={"enabled": enabled},
+        )
+        return StaticPolicy.model_validate(response)
+
+    async def get_effective_static_policies(
+        self,
+        options: EffectivePoliciesOptions | None = None,
+    ) -> list[StaticPolicy]:
+        """Get effective static policies with tier inheritance applied.
+
+        Args:
+            options: Filtering options
+
+        Returns:
+            List of effective policies
+        """
+        params: dict[str, Any] = {}
+        if options:
+            if options.category:
+                params["category"] = options.category.value
+            if options.include_disabled:
+                params["include_disabled"] = "true"
+            if options.include_overridden:
+                params["include_overridden"] = "true"
+
+        if self._config.debug:
+            self._logger.debug("Getting effective static policies", params=params)
+
+        response = await self._request(
+            "GET",
+            "/api/v1/static-policies/effective",
+            params=params,
+        )
+        return [StaticPolicy.model_validate(p) for p in response]
+
+    async def test_pattern(
+        self,
+        pattern: str,
+        test_inputs: list[str],
+    ) -> TestPatternResult:
+        """Test a regex pattern against sample inputs.
+
+        Args:
+            pattern: Regex pattern to test
+            test_inputs: Array of strings to test against
+
+        Returns:
+            Test results showing matches
+
+        Example:
+            >>> result = await client.test_pattern(
+            ...     r"\\b\\d{3}-\\d{2}-\\d{4}\\b",
+            ...     ["SSN: 123-45-6789", "No SSN here"]
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Testing pattern",
+                pattern=pattern,
+                input_count=len(test_inputs),
+            )
+
+        response = await self._request(
+            "POST",
+            "/api/v1/static-policies/test",
+            json_data={"pattern": pattern, "test_inputs": test_inputs},
+        )
+        return TestPatternResult.model_validate(response)
+
+    async def get_static_policy_versions(
+        self,
+        policy_id: str,
+    ) -> list[PolicyVersion]:
+        """Get version history for a static policy.
+
+        Args:
+            policy_id: Policy ID
+
+        Returns:
+            Array of version history entries
+        """
+        if self._config.debug:
+            self._logger.debug("Getting static policy versions", policy_id=policy_id)
+
+        response = await self._request(
+            "GET",
+            f"/api/v1/static-policies/{policy_id}/versions",
+        )
+        return [PolicyVersion.model_validate(v) for v in response]
+
+    # =========================================================================
+    # Policy Override Methods (Enterprise)
+    # =========================================================================
+
+    async def create_policy_override(
+        self,
+        policy_id: str,
+        request: CreatePolicyOverrideRequest,
+    ) -> PolicyOverride:
+        """Create an override for a static policy.
+
+        Args:
+            policy_id: ID of the policy to override
+            request: Override configuration
+
+        Returns:
+            The created override
+
+        Example:
+            >>> override = await client.create_policy_override(
+            ...     "pol_123",
+            ...     CreatePolicyOverrideRequest(
+            ...         action=OverrideAction.WARN,
+            ...         reason="Temporarily relaxing for migration"
+            ...     )
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Creating policy override",
+                policy_id=policy_id,
+                action=request.action.value,
+            )
+
+        response = await self._request(
+            "POST",
+            f"/api/v1/static-policies/{policy_id}/override",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return PolicyOverride.model_validate(response)
+
+    async def delete_policy_override(self, policy_id: str) -> None:
+        """Delete an override for a static policy.
+
+        Args:
+            policy_id: ID of the policy whose override to delete
+        """
+        if self._config.debug:
+            self._logger.debug("Deleting policy override", policy_id=policy_id)
+
+        await self._request("DELETE", f"/api/v1/static-policies/{policy_id}/override")
+
+    async def get_policy_override(
+        self,
+        policy_id: str,
+    ) -> PolicyOverride | None:
+        """Get the override for a specific policy.
+
+        Args:
+            policy_id: ID of the policy
+
+        Returns:
+            The override if one exists, None otherwise
+        """
+        if self._config.debug:
+            self._logger.debug("Getting policy override", policy_id=policy_id)
+
+        try:
+            response = await self._request(
+                "GET",
+                f"/api/v1/static-policies/{policy_id}/override",
+            )
+            return PolicyOverride.model_validate(response)
+        except AxonFlowError:
+            # No override exists
+            return None
+
+    # =========================================================================
+    # Dynamic Policy Methods
+    # =========================================================================
+
+    async def list_dynamic_policies(
+        self,
+        options: ListDynamicPoliciesOptions | None = None,
+    ) -> list[DynamicPolicy]:
+        """List all dynamic policies with optional filtering.
+
+        Args:
+            options: Filtering and pagination options
+
+        Returns:
+            List of dynamic policies
+        """
+        params: dict[str, Any] = {}
+        if options:
+            if options.category:
+                params["category"] = options.category.value
+            if options.tier:
+                params["tier"] = options.tier.value
+            if options.enabled is not None:
+                params["enabled"] = str(options.enabled).lower()
+            if options.limit:
+                params["limit"] = options.limit
+            if options.offset:
+                params["offset"] = options.offset
+            if options.sort_by:
+                params["sort_by"] = options.sort_by
+            if options.sort_order:
+                params["sort_order"] = options.sort_order
+            if options.search:
+                params["search"] = options.search
+
+        if self._config.debug:
+            self._logger.debug("Listing dynamic policies", params=params)
+
+        response = await self._request("GET", "/api/v1/dynamic-policies", params=params)
+        return [DynamicPolicy.model_validate(p) for p in response]
+
+    async def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
+        """Get a specific dynamic policy by ID.
+
+        Args:
+            policy_id: Policy ID
+
+        Returns:
+            The dynamic policy
+        """
+        if self._config.debug:
+            self._logger.debug("Getting dynamic policy", policy_id=policy_id)
+
+        response = await self._request("GET", f"/api/v1/dynamic-policies/{policy_id}")
+        return DynamicPolicy.model_validate(response)
+
+    async def create_dynamic_policy(
+        self,
+        request: CreateDynamicPolicyRequest,
+    ) -> DynamicPolicy:
+        """Create a new dynamic policy.
+
+        Args:
+            request: Policy creation request
+
+        Returns:
+            The created policy
+        """
+        if self._config.debug:
+            self._logger.debug("Creating dynamic policy", name=request.name)
+
+        response = await self._request(
+            "POST",
+            "/api/v1/dynamic-policies",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return DynamicPolicy.model_validate(response)
+
+    async def update_dynamic_policy(
+        self,
+        policy_id: str,
+        request: UpdateDynamicPolicyRequest,
+    ) -> DynamicPolicy:
+        """Update an existing dynamic policy.
+
+        Args:
+            policy_id: Policy ID
+            request: Fields to update
+
+        Returns:
+            The updated policy
+        """
+        if self._config.debug:
+            self._logger.debug("Updating dynamic policy", policy_id=policy_id)
+
+        response = await self._request(
+            "PUT",
+            f"/api/v1/dynamic-policies/{policy_id}",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return DynamicPolicy.model_validate(response)
+
+    async def delete_dynamic_policy(self, policy_id: str) -> None:
+        """Delete a dynamic policy.
+
+        Args:
+            policy_id: Policy ID
+        """
+        if self._config.debug:
+            self._logger.debug("Deleting dynamic policy", policy_id=policy_id)
+
+        await self._request("DELETE", f"/api/v1/dynamic-policies/{policy_id}")
+
+    async def toggle_dynamic_policy(
+        self,
+        policy_id: str,
+        enabled: bool,
+    ) -> DynamicPolicy:
+        """Toggle a dynamic policy's enabled status.
+
+        Args:
+            policy_id: Policy ID
+            enabled: Whether the policy should be enabled
+
+        Returns:
+            The updated policy
+        """
+        if self._config.debug:
+            self._logger.debug("Toggling dynamic policy", policy_id=policy_id, enabled=enabled)
+
+        response = await self._request(
+            "PATCH",
+            f"/api/v1/dynamic-policies/{policy_id}",
+            json_data={"enabled": enabled},
+        )
+        return DynamicPolicy.model_validate(response)
+
+    async def get_effective_dynamic_policies(
+        self,
+        options: EffectivePoliciesOptions | None = None,
+    ) -> list[DynamicPolicy]:
+        """Get effective dynamic policies with tier inheritance applied.
+
+        Args:
+            options: Filtering options
+
+        Returns:
+            List of effective dynamic policies
+        """
+        params: dict[str, Any] = {}
+        if options:
+            if options.category:
+                params["category"] = options.category.value
+            if options.include_disabled:
+                params["include_disabled"] = "true"
+
+        if self._config.debug:
+            self._logger.debug("Getting effective dynamic policies", params=params)
+
+        response = await self._request(
+            "GET",
+            "/api/v1/dynamic-policies/effective",
+            params=params,
+        )
+        return [DynamicPolicy.model_validate(p) for p in response]
+
 
 class SyncAxonFlow:
     """Synchronous wrapper for AxonFlow client.
@@ -969,4 +1467,172 @@ class SyncAxonFlow:
             self._async_client.audit_llm_call(
                 context_id, response_summary, provider, model, token_usage, latency_ms, metadata
             )
+        )
+
+    # Policy CRUD sync wrappers
+
+    def list_static_policies(
+        self,
+        options: ListStaticPoliciesOptions | None = None,
+    ) -> list[StaticPolicy]:
+        """List all static policies with optional filtering."""
+        return self._get_loop().run_until_complete(
+            self._async_client.list_static_policies(options)
+        )
+
+    def get_static_policy(self, policy_id: str) -> StaticPolicy:
+        """Get a specific static policy by ID."""
+        return self._get_loop().run_until_complete(
+            self._async_client.get_static_policy(policy_id)
+        )
+
+    def create_static_policy(
+        self,
+        request: CreateStaticPolicyRequest,
+    ) -> StaticPolicy:
+        """Create a new static policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.create_static_policy(request)
+        )
+
+    def update_static_policy(
+        self,
+        policy_id: str,
+        request: UpdateStaticPolicyRequest,
+    ) -> StaticPolicy:
+        """Update an existing static policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.update_static_policy(policy_id, request)
+        )
+
+    def delete_static_policy(self, policy_id: str) -> None:
+        """Delete a static policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.delete_static_policy(policy_id)
+        )
+
+    def toggle_static_policy(
+        self,
+        policy_id: str,
+        enabled: bool,
+    ) -> StaticPolicy:
+        """Toggle a static policy's enabled status."""
+        return self._get_loop().run_until_complete(
+            self._async_client.toggle_static_policy(policy_id, enabled)
+        )
+
+    def get_effective_static_policies(
+        self,
+        options: EffectivePoliciesOptions | None = None,
+    ) -> list[StaticPolicy]:
+        """Get effective static policies with tier inheritance applied."""
+        return self._get_loop().run_until_complete(
+            self._async_client.get_effective_static_policies(options)
+        )
+
+    def test_pattern(
+        self,
+        pattern: str,
+        test_inputs: list[str],
+    ) -> TestPatternResult:
+        """Test a regex pattern against sample inputs."""
+        return self._get_loop().run_until_complete(
+            self._async_client.test_pattern(pattern, test_inputs)
+        )
+
+    def get_static_policy_versions(
+        self,
+        policy_id: str,
+    ) -> list[PolicyVersion]:
+        """Get version history for a static policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.get_static_policy_versions(policy_id)
+        )
+
+    # Policy override sync wrappers
+
+    def create_policy_override(
+        self,
+        policy_id: str,
+        request: CreatePolicyOverrideRequest,
+    ) -> PolicyOverride:
+        """Create an override for a static policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.create_policy_override(policy_id, request)
+        )
+
+    def delete_policy_override(self, policy_id: str) -> None:
+        """Delete an override for a static policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.delete_policy_override(policy_id)
+        )
+
+    def get_policy_override(
+        self,
+        policy_id: str,
+    ) -> PolicyOverride | None:
+        """Get the override for a specific policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.get_policy_override(policy_id)
+        )
+
+    # Dynamic policy sync wrappers
+
+    def list_dynamic_policies(
+        self,
+        options: ListDynamicPoliciesOptions | None = None,
+    ) -> list[DynamicPolicy]:
+        """List all dynamic policies with optional filtering."""
+        return self._get_loop().run_until_complete(
+            self._async_client.list_dynamic_policies(options)
+        )
+
+    def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
+        """Get a specific dynamic policy by ID."""
+        return self._get_loop().run_until_complete(
+            self._async_client.get_dynamic_policy(policy_id)
+        )
+
+    def create_dynamic_policy(
+        self,
+        request: CreateDynamicPolicyRequest,
+    ) -> DynamicPolicy:
+        """Create a new dynamic policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.create_dynamic_policy(request)
+        )
+
+    def update_dynamic_policy(
+        self,
+        policy_id: str,
+        request: UpdateDynamicPolicyRequest,
+    ) -> DynamicPolicy:
+        """Update an existing dynamic policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.update_dynamic_policy(policy_id, request)
+        )
+
+    def delete_dynamic_policy(self, policy_id: str) -> None:
+        """Delete a dynamic policy."""
+        return self._get_loop().run_until_complete(
+            self._async_client.delete_dynamic_policy(policy_id)
+        )
+
+    def toggle_dynamic_policy(
+        self,
+        policy_id: str,
+        enabled: bool,
+    ) -> DynamicPolicy:
+        """Toggle a dynamic policy's enabled status."""
+        return self._get_loop().run_until_complete(
+            self._async_client.toggle_dynamic_policy(policy_id, enabled)
+        )
+
+    def get_effective_dynamic_policies(
+        self,
+        options: EffectivePoliciesOptions | None = None,
+    ) -> list[DynamicPolicy]:
+        """Get effective dynamic policies with tier inheritance applied."""
+        return self._get_loop().run_until_complete(
+            self._async_client.get_effective_dynamic_policies(options)
         )
