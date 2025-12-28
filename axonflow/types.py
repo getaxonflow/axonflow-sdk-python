@@ -83,6 +83,23 @@ class ClientRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict, description="Additional context")
 
 
+class CodeArtifact(BaseModel):
+    """Code artifact metadata detected in LLM responses.
+
+    When an LLM generates code, AxonFlow automatically detects and analyzes it.
+    This metadata is included in policy_info for audit and compliance.
+    """
+
+    is_code_output: bool = Field(default=False, description="Whether response contains code")
+    language: str = Field(default="", description="Detected programming language")
+    code_type: str = Field(default="", description="Code category (function, class, script, etc.)")
+    size_bytes: int = Field(default=0, ge=0, description="Size of detected code in bytes")
+    line_count: int = Field(default=0, ge=0, description="Number of lines of code")
+    secrets_detected: int = Field(default=0, ge=0, description="Count of potential secrets found")
+    unsafe_patterns: int = Field(default=0, ge=0, description="Count of unsafe code patterns")
+    policies_checked: list[str] = Field(default_factory=list, description="Policies evaluated")
+
+
 class PolicyEvaluationInfo(BaseModel):
     """Policy evaluation metadata."""
 
@@ -90,6 +107,7 @@ class PolicyEvaluationInfo(BaseModel):
     static_checks: list[str] = Field(default_factory=list)
     processing_time: str = Field(default="0ms")
     tenant_id: str = Field(default="")
+    code_artifact: CodeArtifact | None = Field(default=None, description="Code metadata")
 
 
 class ClientResponse(BaseModel):
