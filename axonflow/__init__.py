@@ -65,6 +65,7 @@ from axonflow.types import (
     CacheConfig,
     ClientRequest,
     ClientResponse,
+    CodeArtifact,
     ConnectorInstallRequest,
     ConnectorMetadata,
     ConnectorResponse,
@@ -79,7 +80,7 @@ from axonflow.types import (
     TokenUsage,
 )
 
-__version__ = "0.3.2"
+__version__ = "0.4.1"
 __all__ = [
     # Main client
     "AxonFlow",
@@ -92,6 +93,7 @@ __all__ = [
     "ClientRequest",
     "ClientResponse",
     "PolicyEvaluationInfo",
+    "CodeArtifact",
     # Connector types
     "ConnectorMetadata",
     "ConnectorInstallRequest",
