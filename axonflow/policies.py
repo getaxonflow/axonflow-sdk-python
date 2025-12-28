@@ -42,21 +42,38 @@ class PolicyTier(str, Enum):
 
 
 class OverrideAction(str, Enum):
-    """Override action for policy overrides."""
+    """Override action for policy overrides.
+
+    - BLOCK: Immediately block the request
+    - REQUIRE_APPROVAL: Pause for human approval (HITL)
+    - REDACT: Mask sensitive content
+    - WARN: Log warning, allow request
+    - LOG: Audit only
+    """
 
     BLOCK = "block"
+    REQUIRE_APPROVAL = "require_approval"
+    REDACT = "redact"
     WARN = "warn"
     LOG = "log"
-    REDACT = "redact"
 
 
 class PolicyAction(str, Enum):
-    """Action to take when policy matches."""
+    """Action to take when policy matches.
+
+    - BLOCK: Immediately block the request
+    - REQUIRE_APPROVAL: Pause for human approval (HITL)
+    - REDACT: Mask sensitive content
+    - WARN: Log warning, allow request
+    - LOG: Audit only
+    - ALLOW: Explicitly allow (for overrides)
+    """
 
     BLOCK = "block"
+    REQUIRE_APPROVAL = "require_approval"
+    REDACT = "redact"
     WARN = "warn"
     LOG = "log"
-    REDACT = "redact"
     ALLOW = "allow"
 
 
