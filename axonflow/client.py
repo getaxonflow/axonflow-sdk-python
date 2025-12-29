@@ -1568,7 +1568,7 @@ class AxonFlow:
     # Code Governance Metrics and Export
     # =========================================================================
 
-    async def get_metrics(self) -> CodeGovernanceMetrics:
+    async def get_code_governance_metrics(self) -> CodeGovernanceMetrics:
         """Get aggregated code governance metrics.
 
         Returns PR counts, file totals, and security findings for
@@ -1578,7 +1578,7 @@ class AxonFlow:
             CodeGovernanceMetrics: Aggregated metrics
 
         Example:
-            >>> metrics = await client.get_metrics()
+            >>> metrics = await client.get_code_governance_metrics()
             >>> print(f"Total PRs: {metrics.total_prs}")
             >>> print(f"Secrets found: {metrics.total_secrets_detected}")
         """
@@ -1588,7 +1588,7 @@ class AxonFlow:
         response = await self._request("GET", "/api/v1/code-governance/metrics")
         return CodeGovernanceMetrics.model_validate(response)
 
-    async def export_data(
+    async def export_code_governance_data(
         self,
         options: ExportOptions | None = None,
     ) -> ExportResponse:
@@ -1604,31 +1604,33 @@ class AxonFlow:
 
         Example:
             >>> # Export all data
-            >>> result = await client.export_data()
+            >>> result = await client.export_code_governance_data()
             >>> print(f"Exported {result.count} records")
             >>>
             >>> # Export with filters
             >>> from datetime import datetime
             >>> from axonflow import ExportOptions
-            >>> result = await client.export_data(ExportOptions(
+            >>> result = await client.export_code_governance_data(ExportOptions(
             ...     start_date=datetime(2024, 1, 1),
             ...     state="merged"
             ... ))
         """
-        params: dict[str, str] = {"format": "json"}
+        query_params: list[str] = ["format=json"]
 
         if options:
             if options.start_date:
-                params["start_date"] = options.start_date.isoformat()
+                query_params.append(f"start_date={options.start_date.isoformat()}")
             if options.end_date:
-                params["end_date"] = options.end_date.isoformat()
+                query_params.append(f"end_date={options.end_date.isoformat()}")
             if options.state:
-                params["state"] = options.state
+                query_params.append(f"state={options.state}")
+
+        path = f"/api/v1/code-governance/export?{'&'.join(query_params)}"
 
         if self._config.debug:
-            self._logger.debug("Exporting code governance data", params=params)
+            self._logger.debug("Exporting code governance data", path=path)
 
-        response = await self._request("GET", "/api/v1/code-governance/export", params=params)
+        response = await self._request("GET", path)
         return ExportResponse.model_validate(response)
 
 
@@ -1966,10 +1968,17 @@ class SyncAxonFlow:
         """Sync PR status with the Git provider."""
         return self._get_loop().run_until_complete(self._async_client.sync_pr_status(pr_id))
 
-    def get_metrics(self) -> CodeGovernanceMetrics:
+    def get_code_governance_metrics(self) -> CodeGovernanceMetrics:
         """Get aggregated code governance metrics."""
-        return self._get_loop().run_until_complete(self._async_client.get_metrics())
+        return self._get_loop().run_until_complete(
+            self._async_client.get_code_governance_metrics()
+        )
 
-    def export_data(self, options: ExportOptions | None = None) -> ExportResponse:
+    def export_code_governance_data(
+        self,
+        options: ExportOptions | None = None,
+    ) -> ExportResponse:
         """Export code governance data for compliance reporting."""
-        return self._get_loop().run_until_complete(self._async_client.export_data(options))
+        return self._get_loop().run_until_complete(
+            self._async_client.export_code_governance_data(options)
+        )
