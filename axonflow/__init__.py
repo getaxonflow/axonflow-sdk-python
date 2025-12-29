@@ -26,6 +26,22 @@ Example:
 """
 
 from axonflow.client import AxonFlow, SyncAxonFlow
+from axonflow.code_governance import (
+    CodeFile,
+    ConfigureGitProviderRequest,
+    ConfigureGitProviderResponse,
+    CreatePRRequest,
+    CreatePRResponse,
+    FileAction,
+    GitProviderInfo,
+    GitProviderType,
+    ListGitProvidersResponse,
+    ListPRsOptions,
+    ListPRsResponse,
+    PRRecord,
+    ValidateGitProviderRequest,
+    ValidateGitProviderResponse,
+)
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
@@ -80,7 +96,7 @@ from axonflow.types import (
     TokenUsage,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 __all__ = [
     # Main client
     "AxonFlow",
@@ -129,6 +145,21 @@ __all__ = [
     "CreateDynamicPolicyRequest",
     "UpdateDynamicPolicyRequest",
     "CreatePolicyOverrideRequest",
+    # Code Governance types (Enterprise)
+    "GitProviderType",
+    "FileAction",
+    "CodeFile",
+    "ConfigureGitProviderRequest",
+    "ConfigureGitProviderResponse",
+    "ValidateGitProviderRequest",
+    "ValidateGitProviderResponse",
+    "GitProviderInfo",
+    "ListGitProvidersResponse",
+    "CreatePRRequest",
+    "CreatePRResponse",
+    "PRRecord",
+    "ListPRsOptions",
+    "ListPRsResponse",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",

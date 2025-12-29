@@ -5,6 +5,29 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-12-29
+
+### Added
+
+- **Code Governance Git Provider APIs** (Enterprise): Create PRs from LLM-generated code
+  - `validate_git_provider()` - Validate credentials before saving
+  - `configure_git_provider()` - Configure GitHub, GitLab, or Bitbucket
+  - `list_git_providers()` - List configured providers
+  - `delete_git_provider()` - Remove a provider
+  - `create_pr()` - Create PR from generated code with audit trail
+  - `list_prs()` - List PRs with filtering
+  - `get_pr()` - Get PR details
+  - `sync_pr_status()` - Sync status from Git provider
+
+- **New Types**: `GitProviderType`, `FileAction`, `CodeFile`, `CreatePRRequest`, `CreatePRResponse`, `PRRecord`, `ListPRsOptions`, `ListPRsResponse`
+
+- **Supported Git Providers**:
+  - GitHub (Cloud and Enterprise Server)
+  - GitLab (Cloud and Self-Managed)
+  - Bitbucket (Cloud and Server/Data Center)
+
+---
+
 ## [0.5.0] - 2025-12-28
 
 ### Added
