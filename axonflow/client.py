@@ -1119,7 +1119,8 @@ class AxonFlow:
             "GET",
             f"/api/v1/static-policies/{policy_id}/versions",
         )
-        return [PolicyVersion.model_validate(v) for v in response]
+        versions = response.get("versions", [])
+        return [PolicyVersion.model_validate(v) for v in versions]
 
     # =========================================================================
     # Policy Override Methods (Enterprise)
@@ -1152,13 +1153,13 @@ class AxonFlow:
             self._logger.debug(
                 "Creating policy override",
                 policy_id=policy_id,
-                action=request.action.value,
+                action=request.action_override.value,
             )
 
         response = await self._request(
             "POST",
             f"/api/v1/static-policies/{policy_id}/override",
-            json_data=request.model_dump(exclude_none=True, by_alias=True),
+            json_data=request.model_dump(mode="json", exclude_none=True, by_alias=True),
         )
         return PolicyOverride.model_validate(response)
 
@@ -1182,13 +1183,13 @@ class AxonFlow:
         Example:
             >>> overrides = await client.list_policy_overrides()
             >>> for override in overrides:
-            ...     print(f"{override.policy_id}: {override.action}")
+            ...     print(f"{override.policy_id}: {override.action_override}")
         """
         if self._config.debug:
             self._logger.debug("Listing policy overrides")
 
-        response = await self._request("GET", "/api/v1/policies/overrides")
-        # Backend returns { overrides: [] }
+        response = await self._request("GET", "/api/v1/static-policies/overrides")
+        # Backend returns wrapped response: {"overrides": [...], "count": N}
         overrides = response.get("overrides", [])
         return [PolicyOverride.model_validate(item) for item in overrides]
 

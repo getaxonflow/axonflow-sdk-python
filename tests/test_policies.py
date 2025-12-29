@@ -66,10 +66,10 @@ SAMPLE_DYNAMIC_POLICY = {
 }
 
 SAMPLE_OVERRIDE = {
-    "policyId": "pol_123",
-    "action": "warn",
-    "reason": "Testing override",
-    "createdAt": "2025-01-01T00:00:00Z",
+    "policy_id": "pol_123",
+    "action_override": "warn",
+    "override_reason": "Testing override",
+    "created_at": "2025-01-01T00:00:00Z",
     "active": True,
 }
 
@@ -243,18 +243,22 @@ class TestStaticPolicies:
     ) -> None:
         """Test getting policy version history."""
         httpx_mock.add_response(
-            json=[
-                {
-                    "version": 2,
-                    "changedAt": "2025-01-02T00:00:00Z",
-                    "changeType": "updated",
-                },
-                {
-                    "version": 1,
-                    "changedAt": "2025-01-01T00:00:00Z",
-                    "changeType": "created",
-                },
-            ]
+            json={
+                "policy_id": "pol_123",
+                "versions": [
+                    {
+                        "version": 2,
+                        "changedAt": "2025-01-02T00:00:00Z",
+                        "changeType": "updated",
+                    },
+                    {
+                        "version": 1,
+                        "changedAt": "2025-01-01T00:00:00Z",
+                        "changeType": "created",
+                    },
+                ],
+                "count": 2,
+            }
         )
 
         versions = await client.get_static_policy_versions("pol_123")
@@ -277,10 +281,10 @@ class TestPolicyOverrides:
 
         assert len(overrides) == 1
         assert overrides[0].policy_id == "pol_123"
-        assert overrides[0].action == OverrideAction.WARN
+        assert overrides[0].action_override == OverrideAction.WARN
         http_request = httpx_mock.get_request()
         assert http_request.method == "GET"
-        assert "/api/v1/policies/overrides" in str(http_request.url)
+        assert "/api/v1/static-policies/overrides" in str(http_request.url)
 
     @pytest.mark.asyncio
     async def test_list_policy_overrides_empty(
@@ -299,13 +303,13 @@ class TestPolicyOverrides:
         httpx_mock.add_response(json=SAMPLE_OVERRIDE)
 
         request = CreatePolicyOverrideRequest(
-            action=OverrideAction.WARN,
-            reason="Testing override",
+            action_override=OverrideAction.WARN,
+            override_reason="Testing override",
         )
         override = await client.create_policy_override("pol_123", request)
 
-        assert override.action == OverrideAction.WARN
-        assert override.reason == "Testing override"
+        assert override.action_override == OverrideAction.WARN
+        assert override.override_reason == "Testing override"
         http_request = httpx_mock.get_request()
         assert http_request.method == "POST"
         assert "/api/v1/static-policies/pol_123/override" in str(http_request.url)
@@ -458,7 +462,7 @@ class TestPolicyTypes:
         """Test policy override model validation."""
         override = PolicyOverride.model_validate(SAMPLE_OVERRIDE)
         assert override.policy_id == "pol_123"
-        assert override.action == OverrideAction.WARN
+        assert override.action_override == OverrideAction.WARN
         assert override.active is True
 
     def test_create_static_policy_request(self) -> None:
