@@ -1153,7 +1153,7 @@ class AxonFlow:
             self._logger.debug(
                 "Creating policy override",
                 policy_id=policy_id,
-                action=request.action.value,
+                action=request.action_override.value,
             )
 
         response = await self._request(
@@ -1183,16 +1183,13 @@ class AxonFlow:
         Example:
             >>> overrides = await client.list_policy_overrides()
             >>> for override in overrides:
-            ...     print(f"{override.policy_id}: {override.action}")
+            ...     print(f"{override.policy_id}: {override.action_override}")
         """
         if self._config.debug:
             self._logger.debug("Listing policy overrides")
 
         response = await self._request("GET", "/api/v1/static-policies/overrides")
         # Backend returns wrapped response: {"overrides": [...], "count": N}
-        # Handle both formats for compatibility
-        if isinstance(response, list):
-            return [PolicyOverride.model_validate(item) for item in response]
         overrides = response.get("overrides", [])
         return [PolicyOverride.model_validate(item) for item in overrides]
 
