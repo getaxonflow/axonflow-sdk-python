@@ -94,14 +94,12 @@ class PolicySeverity(str, Enum):
 class PolicyOverride(BaseModel):
     """Policy override configuration."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    policy_id: str = Field(..., alias="policyId")
-    action: OverrideAction
-    reason: str
-    created_by: str | None = Field(default=None, alias="createdBy")
-    created_at: datetime = Field(..., alias="createdAt")
-    expires_at: datetime | None = Field(default=None, alias="expiresAt")
+    policy_id: str
+    action_override: OverrideAction
+    override_reason: str
+    created_by: str | None = None
+    created_at: datetime
+    expires_at: datetime | None = None
     active: bool = True
 
 
@@ -180,9 +178,9 @@ class UpdateStaticPolicyRequest(BaseModel):
 class CreatePolicyOverrideRequest(BaseModel):
     """Request to create a policy override."""
 
-    action: OverrideAction
-    reason: str = Field(..., min_length=1)
-    expires_at: datetime | None = Field(default=None, alias="expiresAt")
+    action_override: OverrideAction
+    override_reason: str = Field(..., min_length=1)
+    expires_at: datetime | None = None
 
 
 # ============================================================================

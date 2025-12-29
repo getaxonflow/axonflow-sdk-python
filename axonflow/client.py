@@ -1119,7 +1119,8 @@ class AxonFlow:
             "GET",
             f"/api/v1/static-policies/{policy_id}/versions",
         )
-        return [PolicyVersion.model_validate(v) for v in response]
+        versions = response.get("versions", [])
+        return [PolicyVersion.model_validate(v) for v in versions]
 
     # =========================================================================
     # Policy Override Methods (Enterprise)
