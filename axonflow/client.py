@@ -1159,7 +1159,7 @@ class AxonFlow:
         response = await self._request(
             "POST",
             f"/api/v1/static-policies/{policy_id}/override",
-            json_data=request.model_dump(exclude_none=True, by_alias=True),
+            json_data=request.model_dump(mode="json", exclude_none=True, by_alias=True),
         )
         return PolicyOverride.model_validate(response)
 
@@ -1188,8 +1188,11 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Listing policy overrides")
 
-        response = await self._request("GET", "/api/v1/policies/overrides")
-        # Backend returns { overrides: [] }
+        response = await self._request("GET", "/api/v1/static-policies/overrides")
+        # Backend returns array directly
+        if isinstance(response, list):
+            return [PolicyOverride.model_validate(item) for item in response]
+        # Fallback for wrapped response
         overrides = response.get("overrides", [])
         return [PolicyOverride.model_validate(item) for item in overrides]
 
