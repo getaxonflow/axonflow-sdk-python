@@ -121,6 +121,24 @@ class TestStaticPolicies:
         assert "tier=system" in str(request.url)
 
     @pytest.mark.asyncio
+    async def test_list_static_policies_with_organization_id(
+        self, client: AxonFlow, httpx_mock: HTTPXMock
+    ) -> None:
+        """Test listing static policies filtered by organization ID."""
+        httpx_mock.add_response(json=[SAMPLE_STATIC_POLICY])
+
+        options = ListStaticPoliciesOptions(
+            tier=PolicyTier.ORGANIZATION,
+            organization_id="org_12345",
+        )
+        policies = await client.list_static_policies(options)
+
+        assert len(policies) == 1
+        request = httpx_mock.get_request()
+        assert "organization_id=org_12345" in str(request.url)
+        assert "tier=organization" in str(request.url)
+
+    @pytest.mark.asyncio
     async def test_get_static_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
         """Test getting a specific static policy."""
         httpx_mock.add_response(json=SAMPLE_STATIC_POLICY)
@@ -249,6 +267,31 @@ class TestStaticPolicies:
 
 class TestPolicyOverrides:
     """Tests for policy override methods."""
+
+    @pytest.mark.asyncio
+    async def test_list_policy_overrides(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
+        """Test listing all policy overrides."""
+        httpx_mock.add_response(json={"overrides": [SAMPLE_OVERRIDE]})
+
+        overrides = await client.list_policy_overrides()
+
+        assert len(overrides) == 1
+        assert overrides[0].policy_id == "pol_123"
+        assert overrides[0].action == OverrideAction.WARN
+        http_request = httpx_mock.get_request()
+        assert http_request.method == "GET"
+        assert "/api/v1/policies/overrides" in str(http_request.url)
+
+    @pytest.mark.asyncio
+    async def test_list_policy_overrides_empty(
+        self, client: AxonFlow, httpx_mock: HTTPXMock
+    ) -> None:
+        """Test listing policy overrides when none exist."""
+        httpx_mock.add_response(json={"overrides": []})
+
+        overrides = await client.list_policy_overrides()
+
+        assert len(overrides) == 0
 
     @pytest.mark.asyncio
     async def test_create_policy_override(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
@@ -429,6 +472,20 @@ class TestPolicyTypes:
         assert request.name == "Test Policy"
         assert request.category == PolicyCategory.PII_GLOBAL
         assert request.enabled is True  # default
+
+    def test_create_static_policy_request_with_organization(self) -> None:
+        """Test create static policy request with organization ID (Enterprise)."""
+        request = CreateStaticPolicyRequest(
+            name="Org Policy",
+            category=PolicyCategory.CUSTOM,
+            tier=PolicyTier.ORGANIZATION,
+            organization_id="org_12345",
+            pattern=r"\bconfidential\b",
+            severity=PolicySeverity.HIGH,
+        )
+        assert request.name == "Org Policy"
+        assert request.tier == PolicyTier.ORGANIZATION
+        assert request.organization_id == "org_12345"
 
     def test_create_dynamic_policy_request(self) -> None:
         """Test create dynamic policy request model."""
