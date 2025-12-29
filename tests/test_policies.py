@@ -284,7 +284,7 @@ class TestPolicyOverrides:
         assert overrides[0].action_override == OverrideAction.WARN
         http_request = httpx_mock.get_request()
         assert http_request.method == "GET"
-        assert "/api/v1/policies/overrides" in str(http_request.url)
+        assert "/api/v1/static-policies/overrides" in str(http_request.url)
 
     @pytest.mark.asyncio
     async def test_list_policy_overrides_empty(
