@@ -900,6 +900,8 @@ class AxonFlow:
                 params.append(f"category={options.category.value}")
             if options.tier:
                 params.append(f"tier={options.tier.value}")
+            if options.organization_id:
+                params.append(f"organization_id={options.organization_id}")
             if options.enabled is not None:
                 params.append(f"enabled={str(options.enabled).lower()}")
             if options.limit:
@@ -1170,6 +1172,25 @@ class AxonFlow:
             self._logger.debug("Deleting policy override", policy_id=policy_id)
 
         await self._request("DELETE", f"/api/v1/static-policies/{policy_id}/override")
+
+    async def list_policy_overrides(self) -> list[PolicyOverride]:
+        """List all active policy overrides (Enterprise).
+
+        Returns:
+            List of all active policy overrides
+
+        Example:
+            >>> overrides = await client.list_policy_overrides()
+            >>> for override in overrides:
+            ...     print(f"{override.policy_id}: {override.action}")
+        """
+        if self._config.debug:
+            self._logger.debug("Listing policy overrides")
+
+        response = await self._request("GET", "/api/v1/policies/overrides")
+        # Backend returns { overrides: [] }
+        overrides = response.get("overrides", [])
+        return [PolicyOverride.model_validate(item) for item in overrides]
 
     # =========================================================================
     # Dynamic Policy Methods
@@ -1859,6 +1880,10 @@ class SyncAxonFlow:
         return self._get_loop().run_until_complete(
             self._async_client.delete_policy_override(policy_id)
         )
+
+    def list_policy_overrides(self) -> list[PolicyOverride]:
+        """List all active policy overrides (Enterprise)."""
+        return self._get_loop().run_until_complete(self._async_client.list_policy_overrides())
 
     # Dynamic policy sync wrappers
 

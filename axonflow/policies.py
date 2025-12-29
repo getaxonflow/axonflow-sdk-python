@@ -133,6 +133,10 @@ class ListStaticPoliciesOptions(BaseModel):
 
     category: PolicyCategory | None = None
     tier: PolicyTier | None = None
+    organization_id: str | None = Field(
+        default=None,
+        description="Filter by organization ID (Enterprise)",
+    )
     enabled: bool | None = None
     limit: int | None = Field(default=None, ge=1)
     offset: int | None = Field(default=None, ge=0)
@@ -148,10 +152,17 @@ class CreateStaticPolicyRequest(BaseModel):
     description: str | None = None
     category: PolicyCategory
     tier: PolicyTier = PolicyTier.TENANT  # Default to tenant tier for custom policies
+    organization_id: str | None = Field(
+        default=None,
+        alias="organization_id",
+        description="Organization ID for organization-tier policies (Enterprise)",
+    )
     pattern: str = Field(..., min_length=1)
     severity: PolicySeverity = PolicySeverity.MEDIUM
     enabled: bool = True
     action: PolicyAction = PolicyAction.BLOCK
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class UpdateStaticPolicyRequest(BaseModel):
