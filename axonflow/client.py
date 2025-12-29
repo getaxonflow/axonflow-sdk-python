@@ -34,6 +34,19 @@ from tenacity import (
     wait_exponential,
 )
 
+from axonflow.code_governance import (
+    ConfigureGitProviderRequest,
+    ConfigureGitProviderResponse,
+    CreatePRRequest,
+    CreatePRResponse,
+    GitProviderType,
+    ListGitProvidersResponse,
+    ListPRsOptions,
+    ListPRsResponse,
+    PRRecord,
+    ValidateGitProviderRequest,
+    ValidateGitProviderResponse,
+)
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
@@ -1325,6 +1338,229 @@ class AxonFlow:
         response = await self._request("GET", path)
         return [DynamicPolicy.model_validate(p) for p in response]
 
+    # =========================================================================
+    # Code Governance Methods (Enterprise)
+    # =========================================================================
+
+    async def validate_git_provider(
+        self,
+        request: ValidateGitProviderRequest,
+    ) -> ValidateGitProviderResponse:
+        """Validate Git provider credentials before configuration.
+
+        Use this to verify tokens and connectivity before saving.
+
+        Args:
+            request: Validation request with provider type and credentials
+
+        Returns:
+            Validation result indicating if credentials are valid
+
+        Example:
+            >>> result = await client.validate_git_provider(
+            ...     ValidateGitProviderRequest(
+            ...         type=GitProviderType.GITHUB,
+            ...         token="ghp_xxxxxxxxxxxx"
+            ...     )
+            ... )
+            >>> if result.valid:
+            ...     print("Credentials are valid")
+        """
+        if self._config.debug:
+            self._logger.debug("Validating Git provider", provider_type=request.type.value)
+
+        response = await self._request(
+            "POST",
+            "/api/v1/code-governance/git-providers/validate",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return ValidateGitProviderResponse.model_validate(response)
+
+    async def configure_git_provider(
+        self,
+        request: ConfigureGitProviderRequest,
+    ) -> ConfigureGitProviderResponse:
+        """Configure a Git provider for code governance.
+
+        Supports GitHub, GitLab, and Bitbucket (cloud and self-hosted).
+
+        Args:
+            request: Configuration request with provider type and credentials
+
+        Returns:
+            Configuration result
+
+        Example:
+            >>> # Configure GitHub with PAT
+            >>> await client.configure_git_provider(
+            ...     ConfigureGitProviderRequest(
+            ...         type=GitProviderType.GITHUB,
+            ...         token="ghp_xxxxxxxxxxxx"
+            ...     )
+            ... )
+            >>> # Configure GitLab self-hosted
+            >>> await client.configure_git_provider(
+            ...     ConfigureGitProviderRequest(
+            ...         type=GitProviderType.GITLAB,
+            ...         token="glpat-xxxxxxxxxxxx",
+            ...         base_url="https://gitlab.mycompany.com"
+            ...     )
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug("Configuring Git provider", provider_type=request.type.value)
+
+        response = await self._request(
+            "POST",
+            "/api/v1/code-governance/git-providers",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return ConfigureGitProviderResponse.model_validate(response)
+
+    async def list_git_providers(self) -> ListGitProvidersResponse:
+        """List all configured Git providers for the tenant.
+
+        Returns:
+            List of configured providers
+
+        Example:
+            >>> result = await client.list_git_providers()
+            >>> for provider in result.providers:
+            ...     print(f"  - {provider.type.value}")
+        """
+        if self._config.debug:
+            self._logger.debug("Listing Git providers")
+
+        response = await self._request("GET", "/api/v1/code-governance/git-providers")
+        return ListGitProvidersResponse.model_validate(response)
+
+    async def delete_git_provider(self, provider_type: GitProviderType) -> None:
+        """Delete a configured Git provider.
+
+        Args:
+            provider_type: Provider type to delete
+        """
+        if self._config.debug:
+            self._logger.debug("Deleting Git provider", provider_type=provider_type.value)
+
+        path = f"/api/v1/code-governance/git-providers/{provider_type.value}"
+        await self._request("DELETE", path)
+
+    async def create_pr(self, request: CreatePRRequest) -> CreatePRResponse:
+        """Create a Pull Request from LLM-generated code.
+
+        This creates a PR with full audit trail linking back to the AI request.
+
+        Args:
+            request: PR creation request with repository info and files
+
+        Returns:
+            Created PR details including URL and number
+
+        Example:
+            >>> pr = await client.create_pr(
+            ...     CreatePRRequest(
+            ...         owner="myorg",
+            ...         repo="myrepo",
+            ...         title="feat: add user validation utilities",
+            ...         files=[
+            ...             CodeFile(
+            ...                 path="src/utils/validation.py",
+            ...                 content=generated_code,
+            ...                 language="python",
+            ...                 action=FileAction.CREATE
+            ...             )
+            ...         ],
+            ...         agent_request_id="req_123",
+            ...         model="gpt-4"
+            ...     )
+            ... )
+            >>> print(f"PR created: {pr.pr_url}")
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Creating PR",
+                owner=request.owner,
+                repo=request.repo,
+                title=request.title,
+            )
+
+        response = await self._request(
+            "POST",
+            "/api/v1/code-governance/prs",
+            json_data=request.model_dump(exclude_none=True, by_alias=True),
+        )
+        return CreatePRResponse.model_validate(response)
+
+    async def list_prs(
+        self,
+        options: ListPRsOptions | None = None,
+    ) -> ListPRsResponse:
+        """List Pull Requests created through code governance.
+
+        Args:
+            options: Filtering and pagination options
+
+        Returns:
+            List of PR records
+
+        Example:
+            >>> result = await client.list_prs(ListPRsOptions(state="open", limit=10))
+            >>> for pr in result.prs:
+            ...     print(f"#{pr.pr_number}: {pr.title}")
+        """
+        params: list[str] = []
+        if options:
+            if options.limit:
+                params.append(f"limit={options.limit}")
+            if options.offset:
+                params.append(f"offset={options.offset}")
+            if options.state:
+                params.append(f"state={options.state}")
+
+        path = "/api/v1/code-governance/prs"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        if self._config.debug:
+            self._logger.debug("Listing PRs", path=path)
+
+        response = await self._request("GET", path)
+        return ListPRsResponse.model_validate(response)
+
+    async def get_pr(self, pr_id: str) -> PRRecord:
+        """Get a specific PR record by ID.
+
+        Args:
+            pr_id: PR record ID (internal ID, not GitHub PR number)
+
+        Returns:
+            PR record details
+        """
+        if self._config.debug:
+            self._logger.debug("Getting PR", pr_id=pr_id)
+
+        response = await self._request("GET", f"/api/v1/code-governance/prs/{pr_id}")
+        return PRRecord.model_validate(response)
+
+    async def sync_pr_status(self, pr_id: str) -> PRRecord:
+        """Sync PR status with the Git provider.
+
+        This updates the local record with the current state from
+        GitHub/GitLab/Bitbucket.
+
+        Args:
+            pr_id: PR record ID
+
+        Returns:
+            Updated PR record
+        """
+        if self._config.debug:
+            self._logger.debug("Syncing PR status", pr_id=pr_id)
+
+        response = await self._request("POST", f"/api/v1/code-governance/prs/{pr_id}/sync")
+        return PRRecord.model_validate(response)
+
 
 class SyncAxonFlow:
     """Synchronous wrapper for AxonFlow client.
@@ -1610,3 +1846,52 @@ class SyncAxonFlow:
         return self._get_loop().run_until_complete(
             self._async_client.get_effective_dynamic_policies(options)
         )
+
+    # Code Governance sync wrappers
+
+    def validate_git_provider(
+        self,
+        request: ValidateGitProviderRequest,
+    ) -> ValidateGitProviderResponse:
+        """Validate Git provider credentials before configuration."""
+        return self._get_loop().run_until_complete(
+            self._async_client.validate_git_provider(request)
+        )
+
+    def configure_git_provider(
+        self,
+        request: ConfigureGitProviderRequest,
+    ) -> ConfigureGitProviderResponse:
+        """Configure a Git provider for code governance."""
+        return self._get_loop().run_until_complete(
+            self._async_client.configure_git_provider(request)
+        )
+
+    def list_git_providers(self) -> ListGitProvidersResponse:
+        """List all configured Git providers for the tenant."""
+        return self._get_loop().run_until_complete(self._async_client.list_git_providers())
+
+    def delete_git_provider(self, provider_type: GitProviderType) -> None:
+        """Delete a configured Git provider."""
+        return self._get_loop().run_until_complete(
+            self._async_client.delete_git_provider(provider_type)
+        )
+
+    def create_pr(self, request: CreatePRRequest) -> CreatePRResponse:
+        """Create a Pull Request from LLM-generated code."""
+        return self._get_loop().run_until_complete(self._async_client.create_pr(request))
+
+    def list_prs(
+        self,
+        options: ListPRsOptions | None = None,
+    ) -> ListPRsResponse:
+        """List Pull Requests created through code governance."""
+        return self._get_loop().run_until_complete(self._async_client.list_prs(options))
+
+    def get_pr(self, pr_id: str) -> PRRecord:
+        """Get a specific PR record by ID."""
+        return self._get_loop().run_until_complete(self._async_client.get_pr(pr_id))
+
+    def sync_pr_status(self, pr_id: str) -> PRRecord:
+        """Sync PR status with the Git provider."""
+        return self._get_loop().run_until_complete(self._async_client.sync_pr_status(pr_id))
