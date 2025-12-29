@@ -1970,9 +1970,7 @@ class SyncAxonFlow:
 
     def get_code_governance_metrics(self) -> CodeGovernanceMetrics:
         """Get aggregated code governance metrics."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_code_governance_metrics()
-        )
+        return self._get_loop().run_until_complete(self._async_client.get_code_governance_metrics())
 
     def export_code_governance_data(
         self,
