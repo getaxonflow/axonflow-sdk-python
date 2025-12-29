@@ -35,10 +35,13 @@ from tenacity import (
 )
 
 from axonflow.code_governance import (
+    CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
     ConfigureGitProviderResponse,
     CreatePRRequest,
     CreatePRResponse,
+    ExportOptions,
+    ExportResponse,
     GitProviderType,
     ListGitProvidersResponse,
     ListPRsOptions,
@@ -1561,6 +1564,73 @@ class AxonFlow:
         response = await self._request("POST", f"/api/v1/code-governance/prs/{pr_id}/sync")
         return PRRecord.model_validate(response)
 
+    # =========================================================================
+    # Code Governance Metrics and Export
+    # =========================================================================
+
+    async def get_metrics(self) -> CodeGovernanceMetrics:
+        """Get aggregated code governance metrics.
+
+        Returns PR counts, file totals, and security findings for
+        the tenant.
+
+        Returns:
+            CodeGovernanceMetrics: Aggregated metrics
+
+        Example:
+            >>> metrics = await client.get_metrics()
+            >>> print(f"Total PRs: {metrics.total_prs}")
+            >>> print(f"Secrets found: {metrics.total_secrets_detected}")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting code governance metrics")
+
+        response = await self._request("GET", "/api/v1/code-governance/metrics")
+        return CodeGovernanceMetrics.model_validate(response)
+
+    async def export_data(
+        self,
+        options: ExportOptions | None = None,
+    ) -> ExportResponse:
+        """Export code governance data for compliance reporting.
+
+        Supports JSON format with optional date filtering.
+
+        Args:
+            options: Export options (date filters, state filter)
+
+        Returns:
+            ExportResponse: Exported PR records
+
+        Example:
+            >>> # Export all data
+            >>> result = await client.export_data()
+            >>> print(f"Exported {result.count} records")
+            >>>
+            >>> # Export with filters
+            >>> from datetime import datetime
+            >>> from axonflow import ExportOptions
+            >>> result = await client.export_data(ExportOptions(
+            ...     start_date=datetime(2024, 1, 1),
+            ...     state="merged"
+            ... ))
+        """
+        params: dict[str, str] = {"format": "json"}
+
+        if options:
+            if options.start_date:
+                params["start_date"] = options.start_date.isoformat()
+            if options.end_date:
+                params["end_date"] = options.end_date.isoformat()
+            if options.state:
+                params["state"] = options.state
+
+        if self._config.debug:
+            self._logger.debug("Exporting code governance data", params=params)
+
+        response = await self._request("GET", "/api/v1/code-governance/export", params=params)
+        return ExportResponse.model_validate(response)
+
 
 class SyncAxonFlow:
     """Synchronous wrapper for AxonFlow client.
@@ -1895,3 +1965,11 @@ class SyncAxonFlow:
     def sync_pr_status(self, pr_id: str) -> PRRecord:
         """Sync PR status with the Git provider."""
         return self._get_loop().run_until_complete(self._async_client.sync_pr_status(pr_id))
+
+    def get_metrics(self) -> CodeGovernanceMetrics:
+        """Get aggregated code governance metrics."""
+        return self._get_loop().run_until_complete(self._async_client.get_metrics())
+
+    def export_data(self, options: ExportOptions | None = None) -> ExportResponse:
+        """Export code governance data for compliance reporting."""
+        return self._get_loop().run_until_complete(self._async_client.export_data(options))

@@ -162,3 +162,40 @@ class ListPRsResponse(BaseModel):
 
     prs: list[PRRecord] = Field(default_factory=list, description="PR records")
     count: int = Field(default=0, description="Total count")
+
+
+# ============================================================================
+# Metrics and Export Types
+# ============================================================================
+
+
+class CodeGovernanceMetrics(BaseModel):
+    """Aggregated code governance metrics."""
+
+    tenant_id: str = Field(..., description="Tenant identifier")
+    total_prs: int = Field(..., description="Total PRs created")
+    open_prs: int = Field(..., description="Open PRs")
+    merged_prs: int = Field(..., description="Merged PRs")
+    closed_prs: int = Field(..., description="Closed (not merged) PRs")
+    total_files: int = Field(..., description="Total files modified")
+    total_secrets_detected: int = Field(..., description="Total secrets detected")
+    total_unsafe_patterns: int = Field(..., description="Total unsafe patterns")
+    first_pr_at: datetime | None = Field(default=None, description="First PR timestamp")
+    last_pr_at: datetime | None = Field(default=None, description="Last PR timestamp")
+
+
+class ExportOptions(BaseModel):
+    """Options for exporting code governance data."""
+
+    format: str | None = Field(default="json", description="Export format: json or csv")
+    start_date: datetime | None = Field(default=None, description="Filter by start date")
+    end_date: datetime | None = Field(default=None, description="Filter by end date")
+    state: str | None = Field(default=None, description="Filter by PR state")
+
+
+class ExportResponse(BaseModel):
+    """Response from data export."""
+
+    records: list[PRRecord] = Field(default_factory=list, description="PR records")
+    count: int = Field(default=0, description="Number of records")
+    exported_at: str = Field(..., description="Export timestamp")

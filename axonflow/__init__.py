@@ -28,10 +28,13 @@ Example:
 from axonflow.client import AxonFlow, SyncAxonFlow
 from axonflow.code_governance import (
     CodeFile,
+    CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
     ConfigureGitProviderResponse,
     CreatePRRequest,
     CreatePRResponse,
+    ExportOptions,
+    ExportResponse,
     FileAction,
     GitProviderInfo,
     GitProviderType,
@@ -160,6 +163,9 @@ __all__ = [
     "PRRecord",
     "ListPRsOptions",
     "ListPRsResponse",
+    "CodeGovernanceMetrics",
+    "ExportOptions",
+    "ExportResponse",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",
