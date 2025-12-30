@@ -65,8 +65,8 @@ class AxonFlowConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     agent_url: str = Field(..., min_length=1, description="AxonFlow Agent URL")
-    client_id: str | None = Field(default=None, description="Client ID (optional for community mode)")
-    client_secret: str | None = Field(default=None, description="Client secret (optional for community mode)")
+    client_id: str | None = Field(default=None, description="Client ID (optional)")
+    client_secret: str | None = Field(default=None, description="Client secret (optional)")
     license_key: str | None = Field(default=None, description="License key")
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
@@ -82,7 +82,7 @@ class ClientRequest(BaseModel):
 
     query: str = Field(..., description="Query or prompt")
     user_token: str = Field(..., description="User token for auth")
-    client_id: str | None = Field(default=None, description="Client ID (optional for community mode)")
+    client_id: str | None = Field(default=None, description="Client ID (optional)")
     request_type: str = Field(..., description="Request type")
     context: dict[str, Any] = Field(default_factory=dict, description="Additional context")
 

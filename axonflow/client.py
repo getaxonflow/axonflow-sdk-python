@@ -156,8 +156,8 @@ class AxonFlow:
 
         Args:
             agent_url: AxonFlow Agent URL
-            client_id: Client ID for authentication (optional for community/self-hosted mode)
-            client_secret: Client secret for authentication (optional for community/self-hosted mode)
+            client_id: Client ID (optional for community/self-hosted mode)
+            client_secret: Client secret (optional for community/self-hosted mode)
             license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
