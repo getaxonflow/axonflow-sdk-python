@@ -6,8 +6,13 @@ Supports both async and sync usage patterns.
 Example:
     >>> from axonflow import AxonFlow
     >>>
-    >>> # Async usage
+    >>> # Async usage (enterprise with authentication)
     >>> async with AxonFlow(agent_url="...", client_id="...", client_secret="...") as client:
+    ...     result = await client.execute_query("user-token", "What is AI?", "chat")
+    ...     print(result.data)
+    >>>
+    >>> # Async usage (community/self-hosted - no auth required)
+    >>> async with AxonFlow(agent_url="http://localhost:8080") as client:
     ...     result = await client.execute_query("user-token", "What is AI?", "chat")
     ...     print(result.data)
     >>>
@@ -133,8 +138,8 @@ class AxonFlow:
     def __init__(
         self,
         agent_url: str,
-        client_id: str,
-        client_secret: str,
+        client_id: str | None = None,
+        client_secret: str | None = None,
         *,
         license_key: str | None = None,
         mode: Mode | str = Mode.PRODUCTION,
@@ -151,8 +156,8 @@ class AxonFlow:
 
         Args:
             agent_url: AxonFlow Agent URL
-            client_id: Client ID for authentication
-            client_secret: Client secret for authentication
+            client_id: Client ID (optional for community/self-hosted mode)
+            client_secret: Client secret (optional for community/self-hosted mode)
             license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
@@ -164,6 +169,10 @@ class AxonFlow:
             cache_enabled: Enable response caching
             cache_ttl: Cache TTL in seconds
             cache_max_size: Maximum cache entries
+
+        Note:
+            For community/self-hosted deployments, client_id and client_secret can be omitted.
+            The SDK will work without authentication headers in this mode.
         """
         if isinstance(mode, str):
             mode = Mode(mode)
@@ -188,9 +197,13 @@ class AxonFlow:
         # Build headers
         headers: dict[str, str] = {
             "Content-Type": "application/json",
-            "X-Client-Secret": client_secret,
-            "X-Tenant-ID": client_id,  # client_id is used as tenant ID for policy APIs
         }
+        # Add authentication headers only when credentials are provided
+        # For community/self-hosted mode, these can be omitted
+        if client_secret:
+            headers["X-Client-Secret"] = client_secret
+        if client_id:
+            headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
         if license_key:
             headers["X-License-Key"] = license_key
 
@@ -215,7 +228,7 @@ class AxonFlow:
 
         # Initialize logger
         self._logger = structlog.get_logger(__name__).bind(
-            client_id=client_id,
+            client_id=client_id or "community",
             mode=mode.value,
         )
 
@@ -252,14 +265,19 @@ class AxonFlow:
     def sync(
         cls,
         agent_url: str,
-        client_id: str,
-        client_secret: str,
+        client_id: str | None = None,
+        client_secret: str | None = None,
         **kwargs: Any,
     ) -> SyncAxonFlow:
         """Create a synchronous client wrapper.
 
         Example:
+            >>> # Enterprise mode with authentication
             >>> client = AxonFlow.sync(agent_url="...", client_id="...", client_secret="...")
+            >>> result = client.execute_query("token", "query", "chat")
+            >>>
+            >>> # Community/self-hosted mode (no auth required)
+            >>> client = AxonFlow.sync(agent_url="http://localhost:8080")
             >>> result = client.execute_query("token", "query", "chat")
         """
         return SyncAxonFlow(cls(agent_url, client_id, client_secret, **kwargs))
@@ -581,7 +599,7 @@ class AxonFlow:
 
         request = ClientRequest(
             query=query,
-            user_token=user_token or self._config.client_id,
+            user_token=user_token or self._config.client_id or "",
             client_id=self._config.client_id,
             request_type="multi-agent-plan",
             context=context,
@@ -660,7 +678,7 @@ class AxonFlow:
         """
         request = ClientRequest(
             query="",
-            user_token=user_token or self._config.client_id,
+            user_token=user_token or self._config.client_id or "",
             client_id=self._config.client_id,
             request_type="execute-plan",
             context={"plan_id": plan_id},
@@ -1189,7 +1207,11 @@ class AxonFlow:
             self._logger.debug("Listing policy overrides")
 
         response = await self._request("GET", "/api/v1/static-policies/overrides")
-        # Backend returns wrapped response: {"overrides": [...], "count": N}
+        # Handle both array and wrapped response formats
+        # API may return list directly despite _request return type annotation
+        if isinstance(response, list):  # type: ignore[unreachable]
+            return [PolicyOverride.model_validate(item) for item in response]  # type: ignore[unreachable]
+        # Fallback for wrapped response: {"overrides": [...], "count": N}
         overrides = response.get("overrides", [])
         return [PolicyOverride.model_validate(item) for item in overrides]
 
