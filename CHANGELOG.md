@@ -5,11 +5,24 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.1] - 2025-12-30
+## [0.10.0] - 2025-12-30
+
+### Changed
+
+- **Community Mode**: Credentials are now optional for self-hosted/community deployments
+  - SDK can be initialized without `api_key` or `license_key` for community features
+  - `execute_query()` and `health_check()` work without credentials
+  - Auth headers are only sent when credentials are configured
+
+### Added
+
+- `_has_credentials()` method to check if credentials are configured
+- `_require_credentials()` helper for enterprise feature validation
+- Enterprise features (`get_policy_approved_context`, `audit_llm_call`) now validate credentials at call time
 
 ### Fixed
 
-- Make `client_id` and `client_secret` optional for community/self-hosted deployments
+- Gateway Mode methods now raise `AuthenticationError` when called without credentials
 
 ---
 
