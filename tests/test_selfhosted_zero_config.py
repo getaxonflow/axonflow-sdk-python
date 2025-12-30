@@ -9,8 +9,16 @@ This tests the scenario where a first-time user:
 2. Connects the SDK with no credentials
 3. Makes requests that should succeed without authentication
 
+Community Features (no credentials required):
+- Health check
+- Execute query (Proxy Mode)
+
+Enterprise Features (credentials required):
+- Gateway Mode (get_policy_approved_context, audit_llm_call)
+- Policy enforcement
+
 Run with:
-    AXONFLOW_AGENT_URL=http://localhost:8080 \\
+    AXONFLOW_AGENT_URL=http://localhost:8080 \
     RUN_INTEGRATION_TESTS=1 pytest tests/test_selfhosted_zero_config.py -v
 """
 
@@ -19,6 +27,7 @@ import os
 import pytest
 
 from axonflow import AxonFlow
+from axonflow.exceptions import AuthenticationError
 from axonflow.types import TokenUsage
 
 
@@ -28,12 +37,23 @@ def is_localhost() -> bool:
     return "localhost" in agent_url or "127.0.0.1" in agent_url
 
 
-def get_selfhosted_config():
-    """Get self-hosted configuration (minimal credentials for localhost)."""
+def get_community_config():
+    """Get community/self-hosted configuration (no credentials)."""
     return {
         "agent_url": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
         "client_id": "default",  # Can be any value for self-hosted
-        "client_secret": "",  # Empty - zero-config mode
+        # No credentials - community mode
+        "debug": True,
+        "timeout": 30.0,
+    }
+
+
+def get_enterprise_config():
+    """Get enterprise configuration (with credentials for Gateway Mode)."""
+    return {
+        "agent_url": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
+        "client_id": "default",
+        "client_secret": "test-secret",  # Enterprise - credentials required
         "debug": True,
         "timeout": 30.0,
     }
@@ -50,70 +70,123 @@ pytestmark = pytest.mark.skipif(
 # 1. CLIENT INITIALIZATION WITHOUT CREDENTIALS
 # ============================================================
 class TestClientInitializationZeroConfig:
-    """Test that SDK can be initialized with minimal/no credentials for localhost."""
+    """Test that SDK can be initialized with minimal/no credentials for any endpoint."""
 
-    def test_create_client_with_empty_secret_for_localhost(self):
-        """SDK should accept empty client_secret for localhost."""
-        config = get_selfhosted_config()
+    def test_create_client_without_credentials_for_localhost(self):
+        """SDK should accept no credentials for localhost (community mode)."""
+        config = get_community_config()
         # This should not raise an error
         client = AxonFlow(**config)
         assert client is not None
-        print("✅ Client created with empty secret for localhost")
+        assert not client._has_credentials()
+        print("✅ Client created without credentials for localhost (community mode)")
 
-    def test_create_client_with_whitespace_secret_for_localhost(self):
-        """SDK should accept whitespace-only client_secret for localhost."""
+    def test_create_client_without_credentials_for_any_endpoint(self):
+        """SDK should accept no credentials for any endpoint (community mode)."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            agent_url="https://my-custom-domain.local",
             client_id="default",
-            client_secret="   ",  # Whitespace only
+            # No credentials - community mode works for any endpoint
             debug=True,
         )
         assert client is not None
-        print("✅ Client created with whitespace secret for localhost")
+        assert not client._has_credentials()
+        print("✅ Client created without credentials for any endpoint (community mode)")
+
+    def test_has_credentials_with_license_key(self):
+        """SDK should detect credentials when license_key is set."""
+        client = AxonFlow(
+            agent_url="http://localhost:8080",
+            license_key="test-license-key",
+            debug=True,
+        )
+        assert client._has_credentials()
+        print("✅ Client detected credentials with license_key")
+
+    def test_has_credentials_with_client_secret(self):
+        """SDK should detect credentials when client_secret is set."""
+        client = AxonFlow(
+            agent_url="http://localhost:8080",
+            client_id="test-client",
+            client_secret="test-secret",
+            debug=True,
+        )
+        assert client._has_credentials()
+        print("✅ Client detected credentials with client_secret")
 
 
 # ============================================================
-# 2. GATEWAY MODE WITHOUT AUTHENTICATION
+# 2. GATEWAY MODE (Enterprise Feature - requires credentials)
 # ============================================================
-class TestGatewayModeZeroConfig:
-    """Test Gateway Mode works without real credentials."""
+class TestGatewayModeEnterprise:
+    """Test Gateway Mode requires credentials (enterprise feature)."""
 
     @pytest.fixture
-    async def client(self):
-        """Create test client with zero-config."""
-        config = get_selfhosted_config()
+    async def enterprise_client(self):
+        """Create test client with credentials for enterprise features."""
+        config = get_enterprise_config()
+        async with AxonFlow(**config) as ax:
+            yield ax
+
+    @pytest.fixture
+    async def community_client(self):
+        """Create test client without credentials (community mode)."""
+        config = get_community_config()
         async with AxonFlow(**config) as ax:
             yield ax
 
     @pytest.mark.asyncio
-    async def test_pre_check_with_empty_token(self, client):
-        """Pre-check should work with empty user token."""
-        result = await client.get_policy_approved_context(
-            user_token="",  # Empty token - zero-config scenario
+    async def test_pre_check_requires_credentials(self, community_client):
+        """get_policy_approved_context should raise AuthenticationError without credentials."""
+        with pytest.raises(AuthenticationError) as exc_info:
+            await community_client.get_policy_approved_context(
+                user_token="",
+                query="What is the weather in Paris?",
+            )
+
+        assert "requires credentials" in str(exc_info.value)
+        assert "Gateway Mode" in str(exc_info.value)
+        print("✅ get_policy_approved_context requires credentials")
+
+    @pytest.mark.asyncio
+    async def test_audit_requires_credentials(self, community_client):
+        """audit_llm_call should raise AuthenticationError without credentials."""
+        with pytest.raises(AuthenticationError) as exc_info:
+            await community_client.audit_llm_call(
+                context_id="ctx_mock_123",
+                response_summary="Test response",
+                provider="openai",
+                model="gpt-4",
+                token_usage=TokenUsage(
+                    prompt_tokens=100,
+                    completion_tokens=50,
+                    total_tokens=150,
+                ),
+                latency_ms=250,
+            )
+
+        assert "requires credentials" in str(exc_info.value)
+        assert "Gateway Mode" in str(exc_info.value)
+        print("✅ audit_llm_call requires credentials")
+
+    @pytest.mark.asyncio
+    async def test_pre_check_with_credentials(self, enterprise_client):
+        """Pre-check should work with credentials."""
+        result = await enterprise_client.get_policy_approved_context(
+            user_token="",  # Empty token - but has enterprise credentials
             query="What is the weather in Paris?",
         )
 
         assert result.context_id, "Expected non-empty context_id"
         assert result.expires_at is not None, "Expected expires_at to be set"
 
-        print(f"✅ Pre-check succeeded with empty token: {result.context_id}")
+        print(f"✅ Pre-check succeeded with credentials: {result.context_id}")
 
     @pytest.mark.asyncio
-    async def test_pre_check_with_whitespace_token(self, client):
-        """Pre-check should work with whitespace-only token."""
-        result = await client.get_policy_approved_context(
-            user_token="   ",  # Whitespace only
-            query="Simple test query",
-        )
-
-        assert result.context_id, "Expected non-empty context_id"
-        print("✅ Pre-check succeeded with whitespace token")
-
-    @pytest.mark.asyncio
-    async def test_full_gateway_flow_zero_config(self, client):
-        """Complete Gateway Mode flow should work without credentials."""
+    async def test_full_gateway_flow_with_credentials(self, enterprise_client):
+        """Complete Gateway Mode flow should work with credentials."""
         # Step 1: Pre-check
-        pre_check = await client.get_policy_approved_context(
+        pre_check = await enterprise_client.get_policy_approved_context(
             user_token="",
             query="Analyze quarterly sales data",
         )
@@ -121,7 +194,7 @@ class TestGatewayModeZeroConfig:
         assert pre_check.context_id, "Expected context_id from pre-check"
 
         # Step 2: Audit (simulating direct LLM call completion)
-        audit = await client.audit_llm_call(
+        audit = await enterprise_client.audit_llm_call(
             context_id=pre_check.context_id,
             response_summary="Generated sales analysis report",
             provider="openai",
@@ -137,25 +210,25 @@ class TestGatewayModeZeroConfig:
         assert audit.success, "Expected audit to succeed"
         assert audit.audit_id, "Expected audit_id to be set"
 
-        print(f"✅ Full Gateway Mode flow completed: {audit.audit_id}")
+        print(f"✅ Full Gateway Mode flow completed with credentials: {audit.audit_id}")
 
 
 # ============================================================
-# 3. PROXY MODE WITHOUT AUTHENTICATION
+# 3. PROXY MODE WITHOUT AUTHENTICATION (Community Feature)
 # ============================================================
 class TestProxyModeZeroConfig:
-    """Test Proxy Mode works without real credentials."""
+    """Test Proxy Mode works without credentials (community feature)."""
 
     @pytest.fixture
     async def client(self):
-        """Create test client with zero-config."""
-        config = get_selfhosted_config()
+        """Create test client without credentials (community mode)."""
+        config = get_community_config()
         async with AxonFlow(**config) as ax:
             yield ax
 
     @pytest.mark.asyncio
-    async def test_execute_query_empty_token(self, client):
-        """Execute query should work with empty user token."""
+    async def test_execute_query_without_credentials(self, client):
+        """Execute query should work without credentials."""
         response = await client.execute_query(
             user_token="",  # Empty token
             query="What is 2 + 2?",
@@ -169,25 +242,25 @@ class TestProxyModeZeroConfig:
             print(f"⚠️ Query blocked by policy: {response.block_reason}")
         else:
             assert response.success, f"Expected success, got error: {response.error}"
-            print("✅ Query executed with empty token")
+            print("✅ Query executed without credentials")
 
 
 # ============================================================
-# 4. POLICY ENFORCEMENT STILL WORKS
+# 4. POLICY ENFORCEMENT (Enterprise Feature - requires credentials)
 # ============================================================
-class TestPolicyEnforcementZeroConfig:
-    """Verify policies are enforced even without authentication."""
+class TestPolicyEnforcementEnterprise:
+    """Verify policies are enforced with credentials."""
 
     @pytest.fixture
     async def client(self):
-        """Create test client with zero-config."""
-        config = get_selfhosted_config()
+        """Create test client with credentials for enterprise features."""
+        config = get_enterprise_config()
         async with AxonFlow(**config) as ax:
             yield ax
 
     @pytest.mark.asyncio
-    async def test_sql_injection_blocked_without_auth(self, client):
-        """SQL injection should be blocked even without credentials."""
+    async def test_sql_injection_blocked_with_credentials(self, client):
+        """SQL injection should be blocked with credentials."""
         result = await client.get_policy_approved_context(
             user_token="",
             query="SELECT * FROM users WHERE id=1; DROP TABLE users;--",
@@ -199,19 +272,19 @@ class TestPolicyEnforcementZeroConfig:
         print(f"✅ SQL injection blocked: {result.block_reason}")
 
     @pytest.mark.asyncio
-    async def test_pii_blocked_without_auth(self, client):
-        """PII should be blocked even without credentials."""
+    async def test_pii_blocked_with_credentials(self, client):
+        """PII should be blocked with credentials."""
         result = await client.get_policy_approved_context(
             user_token="",
             query="My social security number is 123-45-6789",
         )
 
         assert not result.approved, "PII should be blocked"
-        print("✅ PII blocked without credentials")
+        print("✅ PII blocked with credentials")
 
 
 # ============================================================
-# 5. HEALTH CHECK WITHOUT AUTH
+# 5. HEALTH CHECK WITHOUT AUTH (Community Feature)
 # ============================================================
 class TestHealthCheckZeroConfig:
     """Test health check works without authentication."""
@@ -219,7 +292,7 @@ class TestHealthCheckZeroConfig:
     @pytest.mark.asyncio
     async def test_health_check_no_credentials(self):
         """Health check should work without any credentials."""
-        config = get_selfhosted_config()
+        config = get_community_config()
         async with AxonFlow(**config) as client:
             healthy = await client.health_check()
             assert healthy, "Expected health check to pass"
@@ -233,13 +306,13 @@ class TestFirstTimeUserZeroConfig:
     """Test the first-time user experience with zero configuration."""
 
     @pytest.mark.asyncio
-    async def test_first_time_user_flow(self):
-        """Simulate a brand new user with minimal configuration."""
-        # First-time user configuration - minimal setup
+    async def test_first_time_user_community_features(self):
+        """Simulate a brand new user using community features."""
+        # First-time user configuration - minimal setup (no credentials)
         client = AxonFlow(
             agent_url=os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
             client_id="first-time-user",
-            client_secret="",  # Empty - zero-config
+            # No credentials - community mode
             debug=True,
         )
 
@@ -248,17 +321,42 @@ class TestFirstTimeUserZeroConfig:
             healthy = await client.health_check()
             assert healthy, "Health check should pass"
 
-            # Step 2: Pre-check should work with empty token
-            result = await client.get_policy_approved_context(
+            # Step 2: Execute query should work (community feature)
+            response = await client.execute_query(
                 user_token="",
                 query="Hello, this is my first query!",
+                request_type="chat",
             )
-            assert result.context_id, "Expected context_id"
+            # May succeed or be blocked by policy, but not auth error
+            assert response is not None
 
-        print("✅ First-time user experience validated")
+        print("✅ First-time user experience validated (community mode)")
         print("   - Client creation: OK")
         print("   - Health check: OK")
-        print("   - Pre-check: OK")
+        print("   - Execute query: OK")
+
+    @pytest.mark.asyncio
+    async def test_first_time_user_enterprise_features_require_credentials(self):
+        """Verify enterprise features require credentials for first-time users."""
+        # First-time user tries Gateway Mode without credentials
+        client = AxonFlow(
+            agent_url=os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
+            client_id="first-time-user",
+            # No credentials
+            debug=True,
+        )
+
+        async with client:
+            # Trying Gateway Mode should fail with clear error
+            with pytest.raises(AuthenticationError) as exc_info:
+                await client.get_policy_approved_context(
+                    user_token="",
+                    query="Hello, this is my first query!",
+                )
+
+            assert "requires credentials" in str(exc_info.value)
+
+        print("✅ Enterprise features require credentials with clear error message")
 
 
 # Note: Section 7 (Auth Headers) tests are in test_auth_headers.py
