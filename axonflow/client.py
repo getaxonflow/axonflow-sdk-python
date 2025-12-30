@@ -243,6 +243,33 @@ class AxonFlow:
         """Get client configuration."""
         return self._config
 
+    def _has_credentials(self) -> bool:
+        """Check if credentials are configured.
+
+        Returns True if either a license key or client secret is set.
+        These credentials are optional for community/self-hosted deployments,
+        but required for enterprise features like Gateway Mode.
+        """
+        return bool(self._config.client_secret or self._config.license_key)
+
+    def _require_credentials(self, feature: str) -> None:
+        """Require credentials for enterprise features.
+
+        Raises AuthenticationError if no credentials are configured.
+
+        Args:
+            feature: Name of the feature requiring credentials (for error message)
+
+        Raises:
+            AuthenticationError: If no credentials are configured
+        """
+        if not self._has_credentials():
+            msg = (
+                f"{feature} requires credentials. "
+                "Set client_secret or license_key when creating the client."
+            )
+            raise AuthenticationError(msg)
+
     async def __aenter__(self) -> AxonFlow:
         """Async context manager entry."""
         return self
@@ -737,6 +764,10 @@ class AxonFlow:
         This is the first step in Gateway Mode. Call this before making your
         LLM call to ensure policy compliance.
 
+        Note:
+            This is an enterprise feature that requires credentials.
+            Set client_secret or license_key when creating the client.
+
         Args:
             user_token: JWT token for the user making the request
             query: The query/prompt that will be sent to the LLM
@@ -747,7 +778,7 @@ class AxonFlow:
             PolicyApprovalResult with context ID and approved data
 
         Raises:
-            AuthenticationError: If user token is invalid
+            AuthenticationError: If credentials are not configured or user token is invalid
             ConnectionError: If unable to reach AxonFlow Agent
             TimeoutError: If request times out
 
@@ -760,6 +791,9 @@ class AxonFlow:
             >>> if not result.approved:
             ...     raise PolicyViolationError(result.block_reason)
         """
+        # Gateway Mode is an enterprise feature that requires credentials
+        self._require_credentials("Gateway Mode (get_policy_approved_context)")
+
         request_body = {
             "user_token": user_token,
             "client_id": self._config.client_id,
@@ -821,6 +855,10 @@ class AxonFlow:
         This is the second step in Gateway Mode. Call this after making your
         LLM call to record it in the audit trail.
 
+        Note:
+            This is an enterprise feature that requires credentials.
+            Set client_secret or license_key when creating the client.
+
         Args:
             context_id: Context ID from get_policy_approved_context()
             response_summary: Brief summary of the LLM response (not full response)
@@ -834,6 +872,7 @@ class AxonFlow:
             AuditResult confirming the audit was recorded
 
         Raises:
+            AuthenticationError: If credentials are not configured
             AxonFlowError: If audit recording fails
 
         Example:
@@ -850,6 +889,9 @@ class AxonFlow:
             ...     latency_ms=250
             ... )
         """
+        # Gateway Mode is an enterprise feature that requires credentials
+        self._require_credentials("Gateway Mode (audit_llm_call)")
+
         request_body = {
             "context_id": context_id,
             "client_id": self._config.client_id,
