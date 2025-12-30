@@ -47,8 +47,8 @@ class AxonFlowConfig(BaseModel):
 
     Attributes:
         agent_url: AxonFlow Agent URL (required)
-        client_id: Client ID for authentication (required)
-        client_secret: Client secret for authentication (required)
+        client_id: Client ID for authentication (optional for community/self-hosted mode)
+        client_secret: Client secret for authentication (optional for community/self-hosted mode)
         license_key: Optional license key for organization-level auth
         mode: Operation mode (production or sandbox)
         debug: Enable debug logging
@@ -56,13 +56,17 @@ class AxonFlowConfig(BaseModel):
         insecure_skip_verify: Skip TLS verification (dev only)
         retry: Retry configuration
         cache: Cache configuration
+
+    Note:
+        For community/self-hosted deployments, client_id and client_secret can be omitted.
+        The SDK will work without authentication headers in this mode.
     """
 
     model_config = ConfigDict(frozen=True)
 
     agent_url: str = Field(..., min_length=1, description="AxonFlow Agent URL")
-    client_id: str = Field(..., min_length=1, description="Client ID")
-    client_secret: str = Field(..., min_length=1, description="Client secret")
+    client_id: str | None = Field(default=None, description="Client ID (optional for community mode)")
+    client_secret: str | None = Field(default=None, description="Client secret (optional for community mode)")
     license_key: str | None = Field(default=None, description="License key")
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
