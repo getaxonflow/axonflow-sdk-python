@@ -82,7 +82,7 @@ class ClientRequest(BaseModel):
 
     query: str = Field(..., description="Query or prompt")
     user_token: str = Field(..., description="User token for auth")
-    client_id: str = Field(..., description="Client ID")
+    client_id: str | None = Field(default=None, description="Client ID (optional for community mode)")
     request_type: str = Field(..., description="Request type")
     context: dict[str, Any] = Field(default_factory=dict, description="Additional context")
 
