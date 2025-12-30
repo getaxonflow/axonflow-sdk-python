@@ -599,7 +599,7 @@ class AxonFlow:
 
         request = ClientRequest(
             query=query,
-            user_token=user_token or self._config.client_id,
+            user_token=user_token or self._config.client_id or "",
             client_id=self._config.client_id,
             request_type="multi-agent-plan",
             context=context,
@@ -678,7 +678,7 @@ class AxonFlow:
         """
         request = ClientRequest(
             query="",
-            user_token=user_token or self._config.client_id,
+            user_token=user_token or self._config.client_id or "",
             client_id=self._config.client_id,
             request_type="execute-plan",
             context={"plan_id": plan_id},
@@ -1208,8 +1208,9 @@ class AxonFlow:
 
         response = await self._request("GET", "/api/v1/static-policies/overrides")
         # Handle both array and wrapped response formats
-        if isinstance(response, list):
-            return [PolicyOverride.model_validate(item) for item in response]
+        # API may return list directly despite _request return type annotation
+        if isinstance(response, list):  # type: ignore[unreachable]
+            return [PolicyOverride.model_validate(item) for item in response]  # type: ignore[unreachable]
         # Fallback for wrapped response: {"overrides": [...], "count": N}
         overrides = response.get("overrides", [])
         return [PolicyOverride.model_validate(item) for item in overrides]
