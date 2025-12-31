@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes authentication issues in self-hosted mode
   - Ensures proper license validation flow
 
+- **Nested Event Loop Handling**: Fixed `SyncAxonFlow` wrapper to handle nested event loops
+  - `execute_query()` and other sync methods now work when called from running event loops
+  - Fixes "This event loop is already running" error in Jupyter notebooks and async contexts
+  - Uses `ThreadPoolExecutor` to run coroutines safely when event loop is already running
+
 ---
 
 ## [0.10.0] - 2025-12-30
