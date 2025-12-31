@@ -5,6 +5,17 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2025-12-31
+
+### Fixed
+
+- **MCP Connector Endpoint**: Fixed `query_connector()` to use `/api/request` endpoint with `request_type="mcp-query"` instead of deprecated `/mcp/resources/query` endpoint
+  - This aligns Python SDK with Go, TypeScript, and Java SDKs
+  - Fixes authentication issues in self-hosted mode
+  - Ensures proper license validation flow
+
+---
+
 ## [0.10.0] - 2025-12-30
 
 ### Changed

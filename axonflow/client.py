@@ -577,30 +577,38 @@ class AxonFlow:
         Args:
             user_token: User authentication token
             connector_name: Name of the connector
-            operation: Operation to perform
+            operation: Operation to perform (e.g., Slack API method like "conversations.list")
             params: Operation parameters
 
         Returns:
             ConnectorResponse with results
         """
-        request_data: dict[str, Any] = {
-            "client_id": self._config.client_id,
-            "user_token": user_token,
+        # Use the standard /api/request endpoint with request_type="mcp-query"
+        # This ensures proper authentication and license validation flow
+        context = {
             "connector": connector_name,
-            "operation": operation,
-            "parameters": params or {},
+            "params": params or {},
         }
 
-        if self._config.license_key:
-            request_data["license_key"] = self._config.license_key
-
-        response = await self._request(
-            "POST",
-            "/mcp/resources/query",
-            json_data=request_data,
+        # Execute via the standard request flow
+        client_response = await self.execute_query(
+            user_token=user_token,
+            query=operation,
+            request_type="mcp-query",
+            context=context,
         )
 
-        return ConnectorResponse.model_validate(response)
+        # Map ClientResponse to ConnectorResponse
+        return ConnectorResponse(
+            success=client_response.success,
+            data=client_response.data,
+            error=client_response.error,
+            meta={
+                "blocked": client_response.blocked,
+                "block_reason": client_response.block_reason,
+                "policy_info": client_response.policy_info.model_dump() if client_response.policy_info else {},
+            },
+        )
 
     async def generate_plan(
         self,
