@@ -24,10 +24,12 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import re
+from collections.abc import Coroutine
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
 import structlog
@@ -121,6 +123,10 @@ def _parse_datetime(value: str) -> datetime:
     value = re.sub(r"(\.\d{6})\d+", r"\1", value)
 
     return datetime.fromisoformat(value)
+
+
+# TypeVar for generic _run_sync method in SyncAxonFlow
+T = TypeVar("T")
 
 
 class AxonFlow:
@@ -577,30 +583,42 @@ class AxonFlow:
         Args:
             user_token: User authentication token
             connector_name: Name of the connector
-            operation: Operation to perform
+            operation: Operation to perform (e.g., Slack API method like "conversations.list")
             params: Operation parameters
 
         Returns:
             ConnectorResponse with results
         """
-        request_data: dict[str, Any] = {
-            "client_id": self._config.client_id,
-            "user_token": user_token,
+        # Use the standard /api/request endpoint with request_type="mcp-query"
+        # This ensures proper authentication and license validation flow
+        context = {
             "connector": connector_name,
-            "operation": operation,
-            "parameters": params or {},
+            "params": params or {},
         }
 
-        if self._config.license_key:
-            request_data["license_key"] = self._config.license_key
-
-        response = await self._request(
-            "POST",
-            "/mcp/resources/query",
-            json_data=request_data,
+        # Execute via the standard request flow
+        client_response = await self.execute_query(
+            user_token=user_token,
+            query=operation,
+            request_type="mcp-query",
+            context=context,
         )
 
-        return ConnectorResponse.model_validate(response)
+        # Map ClientResponse to ConnectorResponse
+        policy_info = {}
+        if client_response.policy_info:
+            policy_info = client_response.policy_info.model_dump()
+
+        return ConnectorResponse(
+            success=client_response.success,
+            data=client_response.data,
+            error=client_response.error,
+            meta={
+                "blocked": client_response.blocked,
+                "block_reason": client_response.block_reason,
+                "policy_info": policy_info,
+            },
+        )
 
     async def generate_plan(
         self,
@@ -1726,21 +1744,40 @@ class SyncAxonFlow:
     Wraps all async methods for synchronous usage.
     """
 
-    __slots__ = ("_async_client", "_loop")
+    __slots__ = ("_async_client", "_loop", "_owns_loop")
 
     def __init__(self, async_client: AxonFlow) -> None:
         self._async_client = async_client
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._owns_loop: bool = False
 
     def _get_loop(self) -> asyncio.AbstractEventLoop:
-        """Get or create event loop."""
+        """Get or create event loop for synchronous execution."""
         if self._loop is None or self._loop.is_closed():
             try:
                 self._loop = asyncio.get_event_loop()
+                if self._loop.is_running():
+                    # Loop exists but is running, create our own
+                    self._loop = asyncio.new_event_loop()
+                    self._owns_loop = True
             except RuntimeError:
                 self._loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self._loop)
+                self._owns_loop = True
         return self._loop
+
+    def _run_sync(self, coro: Coroutine[Any, Any, T]) -> T:
+        """Run a coroutine synchronously, handling nested event loops."""
+        # Check if there's a running loop in the current thread
+        try:
+            asyncio.get_running_loop()
+            # We're inside an async context - run in a thread pool
+            # This avoids "This event loop is already running" errors
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        except RuntimeError:
+            # No running loop - safe to use run_until_complete
+            return self._get_loop().run_until_complete(coro)
 
     def __enter__(self) -> SyncAxonFlow:
         return self
@@ -1754,8 +1791,12 @@ class SyncAxonFlow:
         self.close()
 
     def close(self) -> None:
-        """Close the client."""
-        self._get_loop().run_until_complete(self._async_client.close())
+        """Close the client and clean up resources."""
+        self._run_sync(self._async_client.close())
+        # Close the event loop if we created it
+        if self._owns_loop and self._loop is not None and not self._loop.is_closed():
+            self._loop.close()
+            self._loop = None
 
     @property
     def config(self) -> AxonFlowConfig:
@@ -1764,7 +1805,7 @@ class SyncAxonFlow:
 
     def health_check(self) -> bool:
         """Check if AxonFlow Agent is healthy."""
-        return self._get_loop().run_until_complete(self._async_client.health_check())
+        return self._run_sync(self._async_client.health_check())
 
     def execute_query(
         self,
@@ -1774,17 +1815,17 @@ class SyncAxonFlow:
         context: dict[str, Any] | None = None,
     ) -> ClientResponse:
         """Execute a query through AxonFlow."""
-        return self._get_loop().run_until_complete(
+        return self._run_sync(
             self._async_client.execute_query(user_token, query, request_type, context)
         )
 
     def list_connectors(self) -> list[ConnectorMetadata]:
         """List all available MCP connectors."""
-        return self._get_loop().run_until_complete(self._async_client.list_connectors())
+        return self._run_sync(self._async_client.list_connectors())
 
     def install_connector(self, request: ConnectorInstallRequest) -> None:
         """Install an MCP connector."""
-        return self._get_loop().run_until_complete(self._async_client.install_connector(request))
+        return self._run_sync(self._async_client.install_connector(request))
 
     def query_connector(
         self,
@@ -1794,7 +1835,7 @@ class SyncAxonFlow:
         params: dict[str, Any] | None = None,
     ) -> ConnectorResponse:
         """Query an MCP connector directly."""
-        return self._get_loop().run_until_complete(
+        return self._run_sync(
             self._async_client.query_connector(user_token, connector_name, operation, params)
         )
 
@@ -1805,9 +1846,7 @@ class SyncAxonFlow:
         user_token: str | None = None,
     ) -> PlanResponse:
         """Generate a multi-agent execution plan."""
-        return self._get_loop().run_until_complete(
-            self._async_client.generate_plan(query, domain, user_token)
-        )
+        return self._run_sync(self._async_client.generate_plan(query, domain, user_token))
 
     def execute_plan(
         self,
@@ -1815,13 +1854,11 @@ class SyncAxonFlow:
         user_token: str | None = None,
     ) -> PlanExecutionResponse:
         """Execute a previously generated plan."""
-        return self._get_loop().run_until_complete(
-            self._async_client.execute_plan(plan_id, user_token)
-        )
+        return self._run_sync(self._async_client.execute_plan(plan_id, user_token))
 
     def get_plan_status(self, plan_id: str) -> PlanExecutionResponse:
         """Get status of a running or completed plan."""
-        return self._get_loop().run_until_complete(self._async_client.get_plan_status(plan_id))
+        return self._run_sync(self._async_client.get_plan_status(plan_id))
 
     # Gateway Mode sync wrappers
 
@@ -1833,7 +1870,7 @@ class SyncAxonFlow:
         context: dict[str, Any] | None = None,
     ) -> PolicyApprovalResult:
         """Perform policy pre-check before making LLM call."""
-        return self._get_loop().run_until_complete(
+        return self._run_sync(
             self._async_client.get_policy_approved_context(user_token, query, data_sources, context)
         )
 
@@ -1848,7 +1885,7 @@ class SyncAxonFlow:
         metadata: dict[str, Any] | None = None,
     ) -> AuditResult:
         """Report LLM call details for audit logging."""
-        return self._get_loop().run_until_complete(
+        return self._run_sync(
             self._async_client.audit_llm_call(
                 context_id, response_summary, provider, model, token_usage, latency_ms, metadata
             )
@@ -1861,18 +1898,18 @@ class SyncAxonFlow:
         options: ListStaticPoliciesOptions | None = None,
     ) -> list[StaticPolicy]:
         """List all static policies with optional filtering."""
-        return self._get_loop().run_until_complete(self._async_client.list_static_policies(options))
+        return self._run_sync(self._async_client.list_static_policies(options))
 
     def get_static_policy(self, policy_id: str) -> StaticPolicy:
         """Get a specific static policy by ID."""
-        return self._get_loop().run_until_complete(self._async_client.get_static_policy(policy_id))
+        return self._run_sync(self._async_client.get_static_policy(policy_id))
 
     def create_static_policy(
         self,
         request: CreateStaticPolicyRequest,
     ) -> StaticPolicy:
         """Create a new static policy."""
-        return self._get_loop().run_until_complete(self._async_client.create_static_policy(request))
+        return self._run_sync(self._async_client.create_static_policy(request))
 
     def update_static_policy(
         self,
@@ -1880,15 +1917,11 @@ class SyncAxonFlow:
         request: UpdateStaticPolicyRequest,
     ) -> StaticPolicy:
         """Update an existing static policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.update_static_policy(policy_id, request)
-        )
+        return self._run_sync(self._async_client.update_static_policy(policy_id, request))
 
     def delete_static_policy(self, policy_id: str) -> None:
         """Delete a static policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.delete_static_policy(policy_id)
-        )
+        return self._run_sync(self._async_client.delete_static_policy(policy_id))
 
     def toggle_static_policy(
         self,
@@ -1896,18 +1929,14 @@ class SyncAxonFlow:
         enabled: bool,
     ) -> StaticPolicy:
         """Toggle a static policy's enabled status."""
-        return self._get_loop().run_until_complete(
-            self._async_client.toggle_static_policy(policy_id, enabled)
-        )
+        return self._run_sync(self._async_client.toggle_static_policy(policy_id, enabled))
 
     def get_effective_static_policies(
         self,
         options: EffectivePoliciesOptions | None = None,
     ) -> list[StaticPolicy]:
         """Get effective static policies with tier inheritance applied."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_effective_static_policies(options)
-        )
+        return self._run_sync(self._async_client.get_effective_static_policies(options))
 
     def test_pattern(
         self,
@@ -1915,18 +1944,14 @@ class SyncAxonFlow:
         test_inputs: list[str],
     ) -> TestPatternResult:
         """Test a regex pattern against sample inputs."""
-        return self._get_loop().run_until_complete(
-            self._async_client.test_pattern(pattern, test_inputs)
-        )
+        return self._run_sync(self._async_client.test_pattern(pattern, test_inputs))
 
     def get_static_policy_versions(
         self,
         policy_id: str,
     ) -> list[PolicyVersion]:
         """Get version history for a static policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_static_policy_versions(policy_id)
-        )
+        return self._run_sync(self._async_client.get_static_policy_versions(policy_id))
 
     # Policy override sync wrappers
 
@@ -1936,19 +1961,15 @@ class SyncAxonFlow:
         request: CreatePolicyOverrideRequest,
     ) -> PolicyOverride:
         """Create an override for a static policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.create_policy_override(policy_id, request)
-        )
+        return self._run_sync(self._async_client.create_policy_override(policy_id, request))
 
     def delete_policy_override(self, policy_id: str) -> None:
         """Delete an override for a static policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.delete_policy_override(policy_id)
-        )
+        return self._run_sync(self._async_client.delete_policy_override(policy_id))
 
     def list_policy_overrides(self) -> list[PolicyOverride]:
         """List all active policy overrides (Enterprise)."""
-        return self._get_loop().run_until_complete(self._async_client.list_policy_overrides())
+        return self._run_sync(self._async_client.list_policy_overrides())
 
     # Dynamic policy sync wrappers
 
@@ -1957,22 +1978,18 @@ class SyncAxonFlow:
         options: ListDynamicPoliciesOptions | None = None,
     ) -> list[DynamicPolicy]:
         """List all dynamic policies with optional filtering."""
-        return self._get_loop().run_until_complete(
-            self._async_client.list_dynamic_policies(options)
-        )
+        return self._run_sync(self._async_client.list_dynamic_policies(options))
 
     def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
         """Get a specific dynamic policy by ID."""
-        return self._get_loop().run_until_complete(self._async_client.get_dynamic_policy(policy_id))
+        return self._run_sync(self._async_client.get_dynamic_policy(policy_id))
 
     def create_dynamic_policy(
         self,
         request: CreateDynamicPolicyRequest,
     ) -> DynamicPolicy:
         """Create a new dynamic policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.create_dynamic_policy(request)
-        )
+        return self._run_sync(self._async_client.create_dynamic_policy(request))
 
     def update_dynamic_policy(
         self,
@@ -1980,15 +1997,11 @@ class SyncAxonFlow:
         request: UpdateDynamicPolicyRequest,
     ) -> DynamicPolicy:
         """Update an existing dynamic policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.update_dynamic_policy(policy_id, request)
-        )
+        return self._run_sync(self._async_client.update_dynamic_policy(policy_id, request))
 
     def delete_dynamic_policy(self, policy_id: str) -> None:
         """Delete a dynamic policy."""
-        return self._get_loop().run_until_complete(
-            self._async_client.delete_dynamic_policy(policy_id)
-        )
+        return self._run_sync(self._async_client.delete_dynamic_policy(policy_id))
 
     def toggle_dynamic_policy(
         self,
@@ -1996,18 +2009,14 @@ class SyncAxonFlow:
         enabled: bool,
     ) -> DynamicPolicy:
         """Toggle a dynamic policy's enabled status."""
-        return self._get_loop().run_until_complete(
-            self._async_client.toggle_dynamic_policy(policy_id, enabled)
-        )
+        return self._run_sync(self._async_client.toggle_dynamic_policy(policy_id, enabled))
 
     def get_effective_dynamic_policies(
         self,
         options: EffectivePoliciesOptions | None = None,
     ) -> list[DynamicPolicy]:
         """Get effective dynamic policies with tier inheritance applied."""
-        return self._get_loop().run_until_complete(
-            self._async_client.get_effective_dynamic_policies(options)
-        )
+        return self._run_sync(self._async_client.get_effective_dynamic_policies(options))
 
     # Code Governance sync wrappers
 
@@ -2016,57 +2025,49 @@ class SyncAxonFlow:
         request: ValidateGitProviderRequest,
     ) -> ValidateGitProviderResponse:
         """Validate Git provider credentials before configuration."""
-        return self._get_loop().run_until_complete(
-            self._async_client.validate_git_provider(request)
-        )
+        return self._run_sync(self._async_client.validate_git_provider(request))
 
     def configure_git_provider(
         self,
         request: ConfigureGitProviderRequest,
     ) -> ConfigureGitProviderResponse:
         """Configure a Git provider for code governance."""
-        return self._get_loop().run_until_complete(
-            self._async_client.configure_git_provider(request)
-        )
+        return self._run_sync(self._async_client.configure_git_provider(request))
 
     def list_git_providers(self) -> ListGitProvidersResponse:
         """List all configured Git providers for the tenant."""
-        return self._get_loop().run_until_complete(self._async_client.list_git_providers())
+        return self._run_sync(self._async_client.list_git_providers())
 
     def delete_git_provider(self, provider_type: GitProviderType) -> None:
         """Delete a configured Git provider."""
-        return self._get_loop().run_until_complete(
-            self._async_client.delete_git_provider(provider_type)
-        )
+        return self._run_sync(self._async_client.delete_git_provider(provider_type))
 
     def create_pr(self, request: CreatePRRequest) -> CreatePRResponse:
         """Create a Pull Request from LLM-generated code."""
-        return self._get_loop().run_until_complete(self._async_client.create_pr(request))
+        return self._run_sync(self._async_client.create_pr(request))
 
     def list_prs(
         self,
         options: ListPRsOptions | None = None,
     ) -> ListPRsResponse:
         """List Pull Requests created through code governance."""
-        return self._get_loop().run_until_complete(self._async_client.list_prs(options))
+        return self._run_sync(self._async_client.list_prs(options))
 
     def get_pr(self, pr_id: str) -> PRRecord:
         """Get a specific PR record by ID."""
-        return self._get_loop().run_until_complete(self._async_client.get_pr(pr_id))
+        return self._run_sync(self._async_client.get_pr(pr_id))
 
     def sync_pr_status(self, pr_id: str) -> PRRecord:
         """Sync PR status with the Git provider."""
-        return self._get_loop().run_until_complete(self._async_client.sync_pr_status(pr_id))
+        return self._run_sync(self._async_client.sync_pr_status(pr_id))
 
     def get_code_governance_metrics(self) -> CodeGovernanceMetrics:
         """Get aggregated code governance metrics."""
-        return self._get_loop().run_until_complete(self._async_client.get_code_governance_metrics())
+        return self._run_sync(self._async_client.get_code_governance_metrics())
 
     def export_code_governance_data(
         self,
         options: ExportOptions | None = None,
     ) -> ExportResponse:
         """Export code governance data for compliance reporting."""
-        return self._get_loop().run_until_complete(
-            self._async_client.export_code_governance_data(options)
-        )
+        return self._run_sync(self._async_client.export_code_governance_data(options))
