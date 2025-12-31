@@ -24,6 +24,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import re
 from datetime import datetime
@@ -599,6 +600,10 @@ class AxonFlow:
         )
 
         # Map ClientResponse to ConnectorResponse
+        policy_info = {}
+        if client_response.policy_info:
+            policy_info = client_response.policy_info.model_dump()
+
         return ConnectorResponse(
             success=client_response.success,
             data=client_response.data,
@@ -606,7 +611,7 @@ class AxonFlow:
             meta={
                 "blocked": client_response.blocked,
                 "block_reason": client_response.block_reason,
-                "policy_info": client_response.policy_info.model_dump() if client_response.policy_info else {},
+                "policy_info": policy_info,
             },
         )
 
@@ -1742,44 +1747,32 @@ class SyncAxonFlow:
         self._owns_loop: bool = False
 
     def _get_loop(self) -> asyncio.AbstractEventLoop:
-        """Get or create event loop."""
+        """Get or create event loop for synchronous execution."""
         if self._loop is None or self._loop.is_closed():
             try:
-                # Check if there's already a running loop
-                running_loop = asyncio.get_running_loop()
-                # If we get here, there's a running loop - we can't use run_until_complete
-                # Create our own loop that we'll run in _run_sync
-                self._loop = asyncio.new_event_loop()
-                self._owns_loop = True
-            except RuntimeError:
-                # No running loop - safe to use get_event_loop or create new one
-                try:
-                    self._loop = asyncio.get_event_loop()
-                    if self._loop.is_running():
-                        # Loop exists but is running, create our own
-                        self._loop = asyncio.new_event_loop()
-                        self._owns_loop = True
-                except RuntimeError:
+                self._loop = asyncio.get_event_loop()
+                if self._loop.is_running():
+                    # Loop exists but is running, create our own
                     self._loop = asyncio.new_event_loop()
                     self._owns_loop = True
+            except RuntimeError:
+                self._loop = asyncio.new_event_loop()
+                self._owns_loop = True
         return self._loop
 
     def _run_sync(self, coro: Any) -> Any:
         """Run a coroutine synchronously, handling nested event loops."""
-        import concurrent.futures
-
-        loop = self._get_loop()
-
         # Check if there's a running loop in the current thread
         try:
-            running_loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're inside an async context - run in a thread pool
+            # This avoids "This event loop is already running" errors
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(asyncio.run, coro)
                 return future.result()
         except RuntimeError:
             # No running loop - safe to use run_until_complete
-            return loop.run_until_complete(coro)
+            return self._get_loop().run_until_complete(coro)
 
     def __enter__(self) -> SyncAxonFlow:
         return self
@@ -1793,8 +1786,12 @@ class SyncAxonFlow:
         self.close()
 
     def close(self) -> None:
-        """Close the client."""
+        """Close the client and clean up resources."""
         self._run_sync(self._async_client.close())
+        # Close the event loop if we created it
+        if self._owns_loop and self._loop is not None and not self._loop.is_closed():
+            self._loop.close()
+            self._loop = None
 
     @property
     def config(self) -> AxonFlowConfig:
