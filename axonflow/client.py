@@ -27,8 +27,9 @@ import asyncio
 import concurrent.futures
 import hashlib
 import re
+from collections.abc import Coroutine
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
 import structlog
@@ -122,6 +123,10 @@ def _parse_datetime(value: str) -> datetime:
     value = re.sub(r"(\.\d{6})\d+", r"\1", value)
 
     return datetime.fromisoformat(value)
+
+
+# TypeVar for generic _run_sync method in SyncAxonFlow
+T = TypeVar("T")
 
 
 class AxonFlow:
@@ -1760,7 +1765,7 @@ class SyncAxonFlow:
                 self._owns_loop = True
         return self._loop
 
-    def _run_sync(self, coro: Any) -> Any:
+    def _run_sync(self, coro: Coroutine[Any, Any, T]) -> T:
         """Run a coroutine synchronously, handling nested event loops."""
         # Check if there's a running loop in the current thread
         try:
