@@ -1841,9 +1841,7 @@ class SyncAxonFlow:
         user_token: str | None = None,
     ) -> PlanResponse:
         """Generate a multi-agent execution plan."""
-        return self._run_sync(
-            self._async_client.generate_plan(query, domain, user_token)
-        )
+        return self._run_sync(self._async_client.generate_plan(query, domain, user_token))
 
     def execute_plan(
         self,
@@ -1851,9 +1849,7 @@ class SyncAxonFlow:
         user_token: str | None = None,
     ) -> PlanExecutionResponse:
         """Execute a previously generated plan."""
-        return self._run_sync(
-            self._async_client.execute_plan(plan_id, user_token)
-        )
+        return self._run_sync(self._async_client.execute_plan(plan_id, user_token))
 
     def get_plan_status(self, plan_id: str) -> PlanExecutionResponse:
         """Get status of a running or completed plan."""
@@ -1916,15 +1912,11 @@ class SyncAxonFlow:
         request: UpdateStaticPolicyRequest,
     ) -> StaticPolicy:
         """Update an existing static policy."""
-        return self._run_sync(
-            self._async_client.update_static_policy(policy_id, request)
-        )
+        return self._run_sync(self._async_client.update_static_policy(policy_id, request))
 
     def delete_static_policy(self, policy_id: str) -> None:
         """Delete a static policy."""
-        return self._run_sync(
-            self._async_client.delete_static_policy(policy_id)
-        )
+        return self._run_sync(self._async_client.delete_static_policy(policy_id))
 
     def toggle_static_policy(
         self,
@@ -1932,18 +1924,14 @@ class SyncAxonFlow:
         enabled: bool,
     ) -> StaticPolicy:
         """Toggle a static policy's enabled status."""
-        return self._run_sync(
-            self._async_client.toggle_static_policy(policy_id, enabled)
-        )
+        return self._run_sync(self._async_client.toggle_static_policy(policy_id, enabled))
 
     def get_effective_static_policies(
         self,
         options: EffectivePoliciesOptions | None = None,
     ) -> list[StaticPolicy]:
         """Get effective static policies with tier inheritance applied."""
-        return self._run_sync(
-            self._async_client.get_effective_static_policies(options)
-        )
+        return self._run_sync(self._async_client.get_effective_static_policies(options))
 
     def test_pattern(
         self,
@@ -1951,18 +1939,14 @@ class SyncAxonFlow:
         test_inputs: list[str],
     ) -> TestPatternResult:
         """Test a regex pattern against sample inputs."""
-        return self._run_sync(
-            self._async_client.test_pattern(pattern, test_inputs)
-        )
+        return self._run_sync(self._async_client.test_pattern(pattern, test_inputs))
 
     def get_static_policy_versions(
         self,
         policy_id: str,
     ) -> list[PolicyVersion]:
         """Get version history for a static policy."""
-        return self._run_sync(
-            self._async_client.get_static_policy_versions(policy_id)
-        )
+        return self._run_sync(self._async_client.get_static_policy_versions(policy_id))
 
     # Policy override sync wrappers
 
@@ -1972,15 +1956,11 @@ class SyncAxonFlow:
         request: CreatePolicyOverrideRequest,
     ) -> PolicyOverride:
         """Create an override for a static policy."""
-        return self._run_sync(
-            self._async_client.create_policy_override(policy_id, request)
-        )
+        return self._run_sync(self._async_client.create_policy_override(policy_id, request))
 
     def delete_policy_override(self, policy_id: str) -> None:
         """Delete an override for a static policy."""
-        return self._run_sync(
-            self._async_client.delete_policy_override(policy_id)
-        )
+        return self._run_sync(self._async_client.delete_policy_override(policy_id))
 
     def list_policy_overrides(self) -> list[PolicyOverride]:
         """List all active policy overrides (Enterprise)."""
@@ -1993,9 +1973,7 @@ class SyncAxonFlow:
         options: ListDynamicPoliciesOptions | None = None,
     ) -> list[DynamicPolicy]:
         """List all dynamic policies with optional filtering."""
-        return self._run_sync(
-            self._async_client.list_dynamic_policies(options)
-        )
+        return self._run_sync(self._async_client.list_dynamic_policies(options))
 
     def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
         """Get a specific dynamic policy by ID."""
@@ -2006,9 +1984,7 @@ class SyncAxonFlow:
         request: CreateDynamicPolicyRequest,
     ) -> DynamicPolicy:
         """Create a new dynamic policy."""
-        return self._run_sync(
-            self._async_client.create_dynamic_policy(request)
-        )
+        return self._run_sync(self._async_client.create_dynamic_policy(request))
 
     def update_dynamic_policy(
         self,
@@ -2016,15 +1992,11 @@ class SyncAxonFlow:
         request: UpdateDynamicPolicyRequest,
     ) -> DynamicPolicy:
         """Update an existing dynamic policy."""
-        return self._run_sync(
-            self._async_client.update_dynamic_policy(policy_id, request)
-        )
+        return self._run_sync(self._async_client.update_dynamic_policy(policy_id, request))
 
     def delete_dynamic_policy(self, policy_id: str) -> None:
         """Delete a dynamic policy."""
-        return self._run_sync(
-            self._async_client.delete_dynamic_policy(policy_id)
-        )
+        return self._run_sync(self._async_client.delete_dynamic_policy(policy_id))
 
     def toggle_dynamic_policy(
         self,
@@ -2032,18 +2004,14 @@ class SyncAxonFlow:
         enabled: bool,
     ) -> DynamicPolicy:
         """Toggle a dynamic policy's enabled status."""
-        return self._run_sync(
-            self._async_client.toggle_dynamic_policy(policy_id, enabled)
-        )
+        return self._run_sync(self._async_client.toggle_dynamic_policy(policy_id, enabled))
 
     def get_effective_dynamic_policies(
         self,
         options: EffectivePoliciesOptions | None = None,
     ) -> list[DynamicPolicy]:
         """Get effective dynamic policies with tier inheritance applied."""
-        return self._run_sync(
-            self._async_client.get_effective_dynamic_policies(options)
-        )
+        return self._run_sync(self._async_client.get_effective_dynamic_policies(options))
 
     # Code Governance sync wrappers
 
@@ -2052,18 +2020,14 @@ class SyncAxonFlow:
         request: ValidateGitProviderRequest,
     ) -> ValidateGitProviderResponse:
         """Validate Git provider credentials before configuration."""
-        return self._run_sync(
-            self._async_client.validate_git_provider(request)
-        )
+        return self._run_sync(self._async_client.validate_git_provider(request))
 
     def configure_git_provider(
         self,
         request: ConfigureGitProviderRequest,
     ) -> ConfigureGitProviderResponse:
         """Configure a Git provider for code governance."""
-        return self._run_sync(
-            self._async_client.configure_git_provider(request)
-        )
+        return self._run_sync(self._async_client.configure_git_provider(request))
 
     def list_git_providers(self) -> ListGitProvidersResponse:
         """List all configured Git providers for the tenant."""
@@ -2071,9 +2035,7 @@ class SyncAxonFlow:
 
     def delete_git_provider(self, provider_type: GitProviderType) -> None:
         """Delete a configured Git provider."""
-        return self._run_sync(
-            self._async_client.delete_git_provider(provider_type)
-        )
+        return self._run_sync(self._async_client.delete_git_provider(provider_type))
 
     def create_pr(self, request: CreatePRRequest) -> CreatePRResponse:
         """Create a Pull Request from LLM-generated code."""
@@ -2103,6 +2065,4 @@ class SyncAxonFlow:
         options: ExportOptions | None = None,
     ) -> ExportResponse:
         """Export code governance data for compliance reporting."""
-        return self._run_sync(
-            self._async_client.export_code_governance_data(options)
-        )
+        return self._run_sync(self._async_client.export_code_governance_data(options))
