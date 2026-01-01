@@ -248,10 +248,10 @@ mypy axonflow
 
 ## Documentation
 
-- [API Reference](https://docs.getaxonflow.com/sdk/python/api)
-- [Gateway Mode Guide](https://docs.getaxonflow.com/sdk/python/gateway-mode)
-- [Examples](https://github.com/getaxonflow/axonflow/tree/main/sdk/python/examples)
+- [Getting Started](https://docs.getaxonflow.com/sdk/python-getting-started)
+- [Gateway Mode Guide](https://docs.getaxonflow.com/sdk/gateway-mode)
+- [Examples](https://github.com/getaxonflow/axonflow/tree/main/examples)
 
 ## License
 
-Apache 2.0 - See [LICENSE](LICENSE) for details.
+MIT - See [LICENSE](LICENSE) for details.

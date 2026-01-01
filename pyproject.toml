@@ -19,7 +19,7 @@ keywords = [
     "policy", "compliance", "enterprise", "mcp", "multi-agent"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -70,7 +70,7 @@ all = [
 
 [project.urls]
 Homepage = "https://getaxonflow.com"
-Documentation = "https://docs.getaxonflow.com/sdk/python"
+Documentation = "https://docs.getaxonflow.com/sdk/python-getting-started"
 Repository = "https://github.com/getaxonflow/axonflow-sdk-python"
 Changelog = "https://github.com/getaxonflow/axonflow-sdk-python/blob/main/CHANGELOG.md"
 Issues = "https://github.com/getaxonflow/axonflow-sdk-python/issues"
