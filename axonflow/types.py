@@ -337,3 +337,228 @@ class ExecutionExportOptions(BaseModel):
     include_input: bool = Field(default=True, description="Include step inputs")
     include_output: bool = Field(default=True, description="Include step outputs")
     include_policies: bool = Field(default=True, description="Include policy details")
+
+
+# ========================================
+# COST CONTROLS TYPES
+# ========================================
+
+
+class BudgetScope(str, Enum):
+    """Budget scope determines what entity the budget applies to."""
+
+    ORGANIZATION = "organization"
+    TEAM = "team"
+    AGENT = "agent"
+    WORKFLOW = "workflow"
+    USER = "user"
+
+
+class BudgetPeriod(str, Enum):
+    """Budget period determines the time window for budget tracking."""
+
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
+
+
+class BudgetOnExceed(str, Enum):
+    """Action to take when budget is exceeded."""
+
+    WARN = "warn"
+    BLOCK = "block"
+    DOWNGRADE = "downgrade"
+
+
+class CreateBudgetRequest(BaseModel):
+    """Request to create a new budget."""
+
+    id: str = Field(..., min_length=1, description="Budget ID")
+    name: str = Field(..., min_length=1, description="Budget name")
+    scope: BudgetScope = Field(..., description="Budget scope")
+    limit_usd: float = Field(..., gt=0, description="Budget limit in USD")
+    period: BudgetPeriod = Field(..., description="Budget period")
+    on_exceed: BudgetOnExceed = Field(..., description="Action when exceeded")
+    alert_thresholds: list[int] = Field(default_factory=list, description="Alert thresholds")
+    scope_id: str | None = Field(default=None, description="Scope entity ID")
+
+
+class UpdateBudgetRequest(BaseModel):
+    """Request to update an existing budget."""
+
+    name: str | None = Field(default=None, description="New budget name")
+    limit_usd: float | None = Field(default=None, gt=0, description="New limit in USD")
+    on_exceed: BudgetOnExceed | None = Field(default=None, description="New action")
+    alert_thresholds: list[int] | None = Field(default=None, description="New thresholds")
+
+
+class ListBudgetsOptions(BaseModel):
+    """Options for listing budgets."""
+
+    scope: BudgetScope | None = Field(default=None, description="Filter by scope")
+    limit: int = Field(default=50, ge=1, le=100, description="Page size")
+    offset: int = Field(default=0, ge=0, description="Pagination offset")
+
+
+class Budget(BaseModel):
+    """A budget entity."""
+
+    id: str = Field(..., description="Budget ID")
+    name: str = Field(..., description="Budget name")
+    scope: str = Field(..., description="Budget scope")
+    limit_usd: float = Field(..., description="Budget limit in USD")
+    period: str = Field(..., description="Budget period")
+    on_exceed: str = Field(..., description="Action when exceeded")
+    alert_thresholds: list[int] = Field(default_factory=list, description="Alert thresholds")
+    enabled: bool = Field(default=True, description="Whether budget is enabled")
+    scope_id: str | None = Field(default=None, description="Scope entity ID")
+    created_at: str | None = Field(default=None, description="Created timestamp")
+    updated_at: str | None = Field(default=None, description="Updated timestamp")
+
+
+class BudgetsResponse(BaseModel):
+    """Response containing a list of budgets."""
+
+    budgets: list[Budget] = Field(default_factory=list)
+    total: int = Field(default=0, ge=0)
+
+
+class BudgetStatus(BaseModel):
+    """Current status of a budget."""
+
+    budget: Budget = Field(..., description="The budget")
+    used_usd: float = Field(default=0.0, ge=0, description="Amount used in USD")
+    remaining_usd: float = Field(default=0.0, description="Remaining amount in USD")
+    percentage: float = Field(default=0.0, ge=0, description="Usage percentage")
+    is_exceeded: bool = Field(default=False, description="Whether budget is exceeded")
+    is_blocked: bool = Field(default=False, description="Whether budget is blocking")
+    period_start: str = Field(..., description="Period start timestamp")
+    period_end: str = Field(..., description="Period end timestamp")
+
+
+class BudgetAlert(BaseModel):
+    """A budget alert."""
+
+    id: str = Field(..., description="Alert ID")
+    budget_id: str = Field(..., description="Budget ID")
+    alert_type: str = Field(..., description="Alert type")
+    threshold: int = Field(..., description="Threshold that was reached")
+    percentage_reached: float = Field(..., description="Percentage when alert triggered")
+    amount_usd: float = Field(..., description="Amount when alert triggered")
+    message: str = Field(..., description="Alert message")
+    created_at: str = Field(..., description="Alert timestamp")
+
+
+class BudgetAlertsResponse(BaseModel):
+    """Response containing budget alerts."""
+
+    alerts: list[BudgetAlert] | None = Field(default=None)
+    count: int = Field(default=0, ge=0)
+
+
+class BudgetCheckRequest(BaseModel):
+    """Request to check if a request is allowed by budgets."""
+
+    org_id: str | None = Field(default=None, description="Organization ID")
+    team_id: str | None = Field(default=None, description="Team ID")
+    agent_id: str | None = Field(default=None, description="Agent ID")
+    workflow_id: str | None = Field(default=None, description="Workflow ID")
+    user_id: str | None = Field(default=None, description="User ID")
+
+
+class BudgetDecision(BaseModel):
+    """Budget decision result."""
+
+    allowed: bool = Field(..., description="Whether request is allowed")
+    action: str | None = Field(default=None, description="Suggested action")
+    message: str | None = Field(default=None, description="Decision message")
+    budgets: list[Budget] | None = Field(default=None, description="Related budgets")
+
+
+class UsageSummary(BaseModel):
+    """Usage summary for a period."""
+
+    total_cost_usd: float = Field(default=0.0, ge=0, description="Total cost in USD")
+    total_requests: int = Field(default=0, ge=0, description="Total requests")
+    total_tokens_in: int = Field(default=0, ge=0, description="Total input tokens")
+    total_tokens_out: int = Field(default=0, ge=0, description="Total output tokens")
+    average_cost_per_request: float = Field(default=0.0, ge=0, description="Avg cost per request")
+    period: str = Field(..., description="Period type")
+    period_start: str = Field(..., description="Period start timestamp")
+    period_end: str = Field(..., description="Period end timestamp")
+
+
+class UsageBreakdownItem(BaseModel):
+    """An item in a usage breakdown."""
+
+    group_value: str = Field(..., description="Group dimension value")
+    cost_usd: float = Field(default=0.0, ge=0, description="Cost in USD")
+    percentage: float = Field(default=0.0, ge=0, description="Percentage of total")
+    request_count: int = Field(default=0, ge=0, description="Request count")
+    tokens_in: int = Field(default=0, ge=0, description="Input tokens")
+    tokens_out: int = Field(default=0, ge=0, description="Output tokens")
+
+
+class UsageBreakdown(BaseModel):
+    """Usage breakdown by a grouping dimension."""
+
+    group_by: str = Field(..., description="Grouping dimension")
+    total_cost_usd: float = Field(default=0.0, ge=0, description="Total cost in USD")
+    items: list[UsageBreakdownItem] | None = Field(default=None)
+    period: str | None = Field(default=None, description="Period type")
+    period_start: str | None = Field(default=None, description="Period start timestamp")
+    period_end: str | None = Field(default=None, description="Period end timestamp")
+
+
+class ListUsageRecordsOptions(BaseModel):
+    """Options for listing usage records."""
+
+    limit: int = Field(default=50, ge=1, le=100, description="Page size")
+    offset: int = Field(default=0, ge=0, description="Pagination offset")
+    provider: str | None = Field(default=None, description="Filter by provider")
+    model: str | None = Field(default=None, description="Filter by model")
+
+
+class UsageRecord(BaseModel):
+    """A single usage record."""
+
+    id: str = Field(..., description="Record ID")
+    provider: str = Field(..., description="LLM provider")
+    model: str = Field(..., description="Model name")
+    tokens_in: int = Field(default=0, ge=0, description="Input tokens")
+    tokens_out: int = Field(default=0, ge=0, description="Output tokens")
+    cost_usd: float = Field(default=0.0, ge=0, description="Cost in USD")
+    request_id: str | None = Field(default=None, description="Request ID")
+    org_id: str | None = Field(default=None, description="Organization ID")
+    agent_id: str | None = Field(default=None, description="Agent ID")
+    timestamp: str | None = Field(default=None, description="Record timestamp")
+
+
+class UsageRecordsResponse(BaseModel):
+    """Response containing usage records."""
+
+    records: list[UsageRecord] | None = Field(default=None)
+    total: int = Field(default=0, ge=0)
+
+
+class ModelPricing(BaseModel):
+    """Model pricing information."""
+
+    input_per_1k: float = Field(..., ge=0, description="Cost per 1K input tokens")
+    output_per_1k: float = Field(..., ge=0, description="Cost per 1K output tokens")
+
+
+class PricingInfo(BaseModel):
+    """Pricing information for a provider/model."""
+
+    provider: str = Field(..., description="LLM provider")
+    model: str = Field(..., description="Model name")
+    pricing: ModelPricing = Field(..., description="Pricing details")
+
+
+class PricingListResponse(BaseModel):
+    """Response containing pricing information."""
+
+    pricing: list[PricingInfo] = Field(default_factory=list)

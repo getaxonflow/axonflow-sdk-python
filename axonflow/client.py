@@ -1958,6 +1958,272 @@ class AxonFlow:
 
         await self._orchestrator_request("DELETE", f"/api/v1/executions/{execution_id}")
 
+    # ========================================
+    # COST CONTROLS - BUDGETS
+    # ========================================
+
+    async def create_budget(self, request: "CreateBudgetRequest") -> "Budget":
+        """Create a new budget.
+
+        Args:
+            request: Budget creation request
+
+        Returns:
+            The created budget
+
+        Example:
+            >>> budget = await client.create_budget(CreateBudgetRequest(
+            ...     id="my-budget",
+            ...     name="Monthly Budget",
+            ...     scope=BudgetScope.ORGANIZATION,
+            ...     limit_usd=100.0,
+            ...     period=BudgetPeriod.MONTHLY,
+            ...     on_exceed=BudgetOnExceed.WARN,
+            ...     alert_thresholds=[50, 80, 100]
+            ... ))
+        """
+        from axonflow.types import Budget
+
+        response = await self._orchestrator_request(
+            "POST", "/api/v1/budgets", json_data=request.model_dump(exclude_none=True)
+        )
+        return Budget.model_validate(response)
+
+    async def get_budget(self, budget_id: str) -> "Budget":
+        """Get a budget by ID.
+
+        Args:
+            budget_id: Budget ID
+
+        Returns:
+            The budget
+        """
+        from axonflow.types import Budget
+
+        response = await self._orchestrator_request("GET", f"/api/v1/budgets/{budget_id}")
+        return Budget.model_validate(response)
+
+    async def list_budgets(
+        self, options: "ListBudgetsOptions | None" = None
+    ) -> "BudgetsResponse":
+        """List all budgets.
+
+        Args:
+            options: Filtering and pagination options
+
+        Returns:
+            List of budgets
+        """
+        from axonflow.types import BudgetsResponse
+
+        params: list[str] = []
+        if options:
+            if options.scope:
+                params.append(f"scope={options.scope.value}")
+            if options.limit:
+                params.append(f"limit={options.limit}")
+            if options.offset:
+                params.append(f"offset={options.offset}")
+
+        path = "/api/v1/budgets"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        response = await self._orchestrator_request("GET", path)
+        return BudgetsResponse.model_validate(response)
+
+    async def update_budget(
+        self, budget_id: str, request: "UpdateBudgetRequest"
+    ) -> "Budget":
+        """Update an existing budget.
+
+        Args:
+            budget_id: Budget ID
+            request: Update request
+
+        Returns:
+            The updated budget
+        """
+        from axonflow.types import Budget
+
+        response = await self._orchestrator_request(
+            "PUT",
+            f"/api/v1/budgets/{budget_id}",
+            json_data=request.model_dump(exclude_none=True),
+        )
+        return Budget.model_validate(response)
+
+    async def delete_budget(self, budget_id: str) -> None:
+        """Delete a budget.
+
+        Args:
+            budget_id: Budget ID
+        """
+        await self._orchestrator_request("DELETE", f"/api/v1/budgets/{budget_id}")
+
+    # ========================================
+    # COST CONTROLS - BUDGET STATUS & ALERTS
+    # ========================================
+
+    async def get_budget_status(self, budget_id: str) -> "BudgetStatus":
+        """Get the current status of a budget.
+
+        Args:
+            budget_id: Budget ID
+
+        Returns:
+            Budget status including usage and remaining amount
+        """
+        from axonflow.types import BudgetStatus
+
+        response = await self._orchestrator_request(
+            "GET", f"/api/v1/budgets/{budget_id}/status"
+        )
+        return BudgetStatus.model_validate(response)
+
+    async def get_budget_alerts(self, budget_id: str) -> "BudgetAlertsResponse":
+        """Get alerts for a budget.
+
+        Args:
+            budget_id: Budget ID
+
+        Returns:
+            Budget alerts
+        """
+        from axonflow.types import BudgetAlertsResponse
+
+        response = await self._orchestrator_request(
+            "GET", f"/api/v1/budgets/{budget_id}/alerts"
+        )
+        return BudgetAlertsResponse.model_validate(response)
+
+    async def check_budget(self, request: "BudgetCheckRequest") -> "BudgetDecision":
+        """Perform a pre-flight budget check.
+
+        Args:
+            request: Check request with scope IDs
+
+        Returns:
+            Budget decision
+        """
+        from axonflow.types import BudgetDecision
+
+        response = await self._orchestrator_request(
+            "POST", "/api/v1/budgets/check", json_data=request.model_dump(exclude_none=True)
+        )
+        return BudgetDecision.model_validate(response)
+
+    # ========================================
+    # COST CONTROLS - USAGE
+    # ========================================
+
+    async def get_usage_summary(self, period: str | None = None) -> "UsageSummary":
+        """Get usage summary for a period.
+
+        Args:
+            period: Period (daily, weekly, monthly, quarterly, yearly)
+
+        Returns:
+            Usage summary
+        """
+        from axonflow.types import UsageSummary
+
+        path = "/api/v1/usage"
+        if period:
+            path = f"{path}?period={period}"
+
+        response = await self._orchestrator_request("GET", path)
+        return UsageSummary.model_validate(response)
+
+    async def get_usage_breakdown(
+        self, group_by: str, period: str | None = None
+    ) -> "UsageBreakdown":
+        """Get usage breakdown by a grouping dimension.
+
+        Args:
+            group_by: Dimension to group by (provider, model, agent, team, workflow)
+            period: Period (daily, weekly, monthly, quarterly, yearly)
+
+        Returns:
+            Usage breakdown
+        """
+        from axonflow.types import UsageBreakdown
+
+        params: list[str] = [f"group_by={group_by}"]
+        if period:
+            params.append(f"period={period}")
+
+        path = f"/api/v1/usage/breakdown?{'&'.join(params)}"
+        response = await self._orchestrator_request("GET", path)
+        return UsageBreakdown.model_validate(response)
+
+    async def list_usage_records(
+        self, options: "ListUsageRecordsOptions | None" = None
+    ) -> "UsageRecordsResponse":
+        """List usage records.
+
+        Args:
+            options: Filtering and pagination options
+
+        Returns:
+            List of usage records
+        """
+        from axonflow.types import UsageRecordsResponse
+
+        params: list[str] = []
+        if options:
+            if options.limit:
+                params.append(f"limit={options.limit}")
+            if options.offset:
+                params.append(f"offset={options.offset}")
+            if options.provider:
+                params.append(f"provider={options.provider}")
+            if options.model:
+                params.append(f"model={options.model}")
+
+        path = "/api/v1/usage/records"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        response = await self._orchestrator_request("GET", path)
+        return UsageRecordsResponse.model_validate(response)
+
+    # ========================================
+    # COST CONTROLS - PRICING
+    # ========================================
+
+    async def get_pricing(
+        self, provider: str | None = None, model: str | None = None
+    ) -> "PricingListResponse":
+        """Get pricing information for models.
+
+        Args:
+            provider: Filter by provider (optional)
+            model: Filter by model (optional)
+
+        Returns:
+            Pricing information
+        """
+        from axonflow.types import PricingInfo, PricingListResponse
+
+        params: list[str] = []
+        if provider:
+            params.append(f"provider={provider}")
+        if model:
+            params.append(f"model={model}")
+
+        path = "/api/v1/pricing"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        response = await self._orchestrator_request("GET", path)
+
+        # Handle single object vs array response
+        if isinstance(response, dict) and "provider" in response:
+            # Single object response - wrap in list
+            return PricingListResponse(pricing=[PricingInfo.model_validate(response)])
+        return PricingListResponse.model_validate(response)
+
 
 class SyncAxonFlow:
     """Synchronous wrapper for AxonFlow client.
@@ -2325,3 +2591,63 @@ class SyncAxonFlow:
     def delete_execution(self, execution_id: str) -> None:
         """Delete an execution and all associated step snapshots."""
         return self._run_sync(self._async_client.delete_execution(execution_id))
+
+    # Cost Controls sync wrappers
+
+    def create_budget(self, request: "CreateBudgetRequest") -> "Budget":
+        """Create a new budget."""
+        return self._run_sync(self._async_client.create_budget(request))
+
+    def get_budget(self, budget_id: str) -> "Budget":
+        """Get a budget by ID."""
+        return self._run_sync(self._async_client.get_budget(budget_id))
+
+    def list_budgets(
+        self, options: "ListBudgetsOptions | None" = None
+    ) -> "BudgetsResponse":
+        """List all budgets."""
+        return self._run_sync(self._async_client.list_budgets(options))
+
+    def update_budget(
+        self, budget_id: str, request: "UpdateBudgetRequest"
+    ) -> "Budget":
+        """Update an existing budget."""
+        return self._run_sync(self._async_client.update_budget(budget_id, request))
+
+    def delete_budget(self, budget_id: str) -> None:
+        """Delete a budget."""
+        return self._run_sync(self._async_client.delete_budget(budget_id))
+
+    def get_budget_status(self, budget_id: str) -> "BudgetStatus":
+        """Get the current status of a budget."""
+        return self._run_sync(self._async_client.get_budget_status(budget_id))
+
+    def get_budget_alerts(self, budget_id: str) -> "BudgetAlertsResponse":
+        """Get alerts for a budget."""
+        return self._run_sync(self._async_client.get_budget_alerts(budget_id))
+
+    def check_budget(self, request: "BudgetCheckRequest") -> "BudgetDecision":
+        """Perform a pre-flight budget check."""
+        return self._run_sync(self._async_client.check_budget(request))
+
+    def get_usage_summary(self, period: str | None = None) -> "UsageSummary":
+        """Get usage summary for a period."""
+        return self._run_sync(self._async_client.get_usage_summary(period))
+
+    def get_usage_breakdown(
+        self, group_by: str, period: str | None = None
+    ) -> "UsageBreakdown":
+        """Get usage breakdown by a grouping dimension."""
+        return self._run_sync(self._async_client.get_usage_breakdown(group_by, period))
+
+    def list_usage_records(
+        self, options: "ListUsageRecordsOptions | None" = None
+    ) -> "UsageRecordsResponse":
+        """List usage records."""
+        return self._run_sync(self._async_client.list_usage_records(options))
+
+    def get_pricing(
+        self, provider: str | None = None, model: str | None = None
+    ) -> "PricingListResponse":
+        """Get pricing information for models."""
+        return self._run_sync(self._async_client.get_pricing(provider, model))
