@@ -88,6 +88,12 @@ from axonflow.types import (
     ConnectorInstallRequest,
     ConnectorMetadata,
     ConnectorResponse,
+    ExecutionDetail,
+    ExecutionExportOptions,
+    ExecutionSnapshot,
+    ExecutionSummary,
+    ListExecutionsOptions,
+    ListExecutionsResponse,
     Mode,
     PlanExecutionResponse,
     PlanResponse,
@@ -96,6 +102,7 @@ from axonflow.types import (
     PolicyEvaluationInfo,
     RateLimitInfo,
     RetryConfig,
+    TimelineEntry,
     TokenUsage,
 )
 
@@ -126,6 +133,14 @@ __all__ = [
     "PolicyApprovalResult",
     "TokenUsage",
     "AuditResult",
+    # Execution Replay types
+    "ExecutionSummary",
+    "ExecutionSnapshot",
+    "ExecutionDetail",
+    "TimelineEntry",
+    "ListExecutionsOptions",
+    "ListExecutionsResponse",
+    "ExecutionExportOptions",
     # Policy CRUD types
     "PolicyCategory",
     "PolicyTier",
