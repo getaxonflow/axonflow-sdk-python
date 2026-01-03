@@ -1776,7 +1776,8 @@ class AxonFlow:
             response.raise_for_status()
             if response.status_code == 204:  # noqa: PLR2004
                 return None
-            return response.json()
+            result: dict[str, Any] | list[Any] = response.json()
+            return result  # noqa: TRY300
 
         except httpx.ConnectError as e:
             msg = f"Failed to connect to Orchestrator: {e}"
@@ -1872,6 +1873,8 @@ class AxonFlow:
 
         path = f"/api/v1/executions/{execution_id}/steps"
         response = await self._orchestrator_request("GET", path)
+        if response is None:
+            return []
         return [ExecutionSnapshot.model_validate(s) for s in response]
 
     async def get_execution_timeline(self, execution_id: str) -> list[TimelineEntry]:
@@ -1894,6 +1897,8 @@ class AxonFlow:
 
         path = f"/api/v1/executions/{execution_id}/timeline"
         response = await self._orchestrator_request("GET", path)
+        if response is None:
+            return []
         return [TimelineEntry.model_validate(e) for e in response]
 
     async def export_execution(
