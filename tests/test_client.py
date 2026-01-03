@@ -559,3 +559,290 @@ class TestParseDatetime:
 
         result = _parse_datetime("2024-12-15T10:30:00Z")
         assert result.microsecond == 0
+
+
+class TestExecutionReplay:
+    """Test Execution Replay API methods."""
+
+    @pytest.mark.asyncio
+    async def test_list_executions_empty(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing executions returns empty list."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions",
+            json={"executions": [], "total": 0, "limit": 50, "offset": 0},
+        )
+        result = await client.list_executions()
+        assert result.total == 0
+        assert result.executions == []
+        assert result.limit == 50
+
+    @pytest.mark.asyncio
+    async def test_list_executions_with_data(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing executions returns data."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions?status=completed&limit=10",
+            json={
+                "executions": [
+                    {
+                        "request_id": "exec-123",
+                        "workflow_name": "test-workflow",
+                        "status": "completed",
+                        "total_steps": 3,
+                        "completed_steps": 3,
+                        "started_at": "2026-01-03T12:00:00Z",
+                        "completed_at": "2026-01-03T12:00:05Z",
+                        "duration_ms": 5000,
+                        "total_tokens": 150,
+                        "total_cost_usd": 0.01,
+                    }
+                ],
+                "total": 1,
+                "limit": 10,
+                "offset": 0,
+            },
+        )
+        from axonflow.types import ListExecutionsOptions
+
+        result = await client.list_executions(ListExecutionsOptions(status="completed", limit=10))
+        assert result.total == 1
+        assert len(result.executions) == 1
+        assert result.executions[0].request_id == "exec-123"
+        assert result.executions[0].status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_get_execution(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting a single execution."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/exec-123",
+            json={
+                "summary": {
+                    "request_id": "exec-123",
+                    "workflow_name": "test-workflow",
+                    "status": "completed",
+                    "total_steps": 2,
+                    "completed_steps": 2,
+                    "started_at": "2026-01-03T12:00:00Z",
+                    "completed_at": "2026-01-03T12:00:05Z",
+                    "duration_ms": 5000,
+                    "total_tokens": 100,
+                    "total_cost_usd": 0.005,
+                },
+                "steps": [
+                    {
+                        "request_id": "exec-123",
+                        "step_index": 0,
+                        "step_name": "greet",
+                        "status": "completed",
+                        "started_at": "2026-01-03T12:00:00Z",
+                        "completed_at": "2026-01-03T12:00:02Z",
+                        "duration_ms": 2000,
+                        "provider": "anthropic",
+                        "model": "claude-sonnet-4",
+                        "tokens_in": 20,
+                        "tokens_out": 30,
+                        "cost_usd": 0.002,
+                    },
+                    {
+                        "request_id": "exec-123",
+                        "step_index": 1,
+                        "step_name": "process",
+                        "status": "completed",
+                        "started_at": "2026-01-03T12:00:02Z",
+                        "completed_at": "2026-01-03T12:00:05Z",
+                        "duration_ms": 3000,
+                        "provider": "openai",
+                        "model": "gpt-4",
+                        "tokens_in": 25,
+                        "tokens_out": 25,
+                        "cost_usd": 0.003,
+                    },
+                ],
+            },
+        )
+        result = await client.get_execution("exec-123")
+        assert result.summary.request_id == "exec-123"
+        assert result.summary.status == "completed"
+        assert len(result.steps) == 2
+        assert result.steps[0].step_name == "greet"
+        assert result.steps[1].step_name == "process"
+
+    @pytest.mark.asyncio
+    async def test_get_execution_steps(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting execution steps."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/steps",
+            json=[
+                {
+                    "request_id": "exec-123",
+                    "step_index": 0,
+                    "step_name": "step1",
+                    "status": "completed",
+                    "started_at": "2026-01-03T12:00:00Z",
+                    "completed_at": "2026-01-03T12:00:01Z",
+                    "duration_ms": 1000,
+                    "tokens_in": 10,
+                    "tokens_out": 15,
+                    "cost_usd": 0.001,
+                },
+                {
+                    "request_id": "exec-123",
+                    "step_index": 1,
+                    "step_name": "step2",
+                    "status": "completed",
+                    "started_at": "2026-01-03T12:00:01Z",
+                    "completed_at": "2026-01-03T12:00:02Z",
+                    "duration_ms": 1000,
+                    "tokens_in": 15,
+                    "tokens_out": 20,
+                    "cost_usd": 0.002,
+                },
+            ],
+        )
+        result = await client.get_execution_steps("exec-123")
+        assert len(result) == 2
+        assert result[0].step_index == 0
+        assert result[0].step_name == "step1"
+        assert result[1].step_index == 1
+        assert result[1].step_name == "step2"
+
+    @pytest.mark.asyncio
+    async def test_get_execution_timeline(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting execution timeline."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/timeline",
+            json=[
+                {
+                    "step_index": 0,
+                    "step_name": "start",
+                    "status": "completed",
+                    "started_at": "2026-01-03T12:00:00Z",
+                    "completed_at": "2026-01-03T12:00:01Z",
+                    "duration_ms": 1000,
+                    "has_error": False,
+                    "has_approval": False,
+                },
+                {
+                    "step_index": 1,
+                    "step_name": "approve",
+                    "status": "completed",
+                    "started_at": "2026-01-03T12:00:01Z",
+                    "completed_at": "2026-01-03T12:00:10Z",
+                    "duration_ms": 9000,
+                    "has_error": False,
+                    "has_approval": True,
+                },
+                {
+                    "step_index": 2,
+                    "step_name": "finish",
+                    "status": "failed",
+                    "started_at": "2026-01-03T12:00:10Z",
+                    "completed_at": "2026-01-03T12:00:11Z",
+                    "duration_ms": 1000,
+                    "has_error": True,
+                    "has_approval": False,
+                },
+            ],
+        )
+        result = await client.get_execution_timeline("exec-123")
+        assert len(result) == 3
+        assert result[0].step_name == "start"
+        assert result[0].has_error is False
+        assert result[1].step_name == "approve"
+        assert result[1].has_approval is True
+        assert result[2].step_name == "finish"
+        assert result[2].has_error is True
+
+    @pytest.mark.asyncio
+    async def test_export_execution(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test exporting execution with custom options."""
+        # Setting include_policies=False to test non-default behavior
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/export?format=json&include_input=true&include_output=true",
+            json={
+                "execution_id": "exec-123",
+                "workflow_name": "test-workflow",
+                "exported_at": "2026-01-03T12:00:00Z",
+                "summary": {"status": "completed"},
+                "steps": [{"step_index": 0, "input": {"query": "test"}}],
+            },
+        )
+        from axonflow.types import ExecutionExportOptions
+
+        result = await client.export_execution(
+            "exec-123",
+            ExecutionExportOptions(include_input=True, include_output=True, include_policies=False),
+        )
+        assert result["execution_id"] == "exec-123"
+        assert result["workflow_name"] == "test-workflow"
+        assert "steps" in result
+
+    @pytest.mark.asyncio
+    async def test_export_execution_no_options(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test exporting execution without options."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/export",
+            json={
+                "execution_id": "exec-123",
+                "exported_at": "2026-01-03T12:00:00Z",
+            },
+        )
+        result = await client.export_execution("exec-123")
+        assert result["execution_id"] == "exec-123"
+
+    @pytest.mark.asyncio
+    async def test_delete_execution(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test deleting execution."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/exec-123",
+            method="DELETE",
+            status_code=204,
+        )
+        # Should not raise
+        await client.delete_execution("exec-123")
+
+    @pytest.mark.asyncio
+    async def test_execution_not_found(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test execution not found returns 404."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8081/api/v1/executions/nonexistent",
+            status_code=404,
+            json={"error": "execution not found"},
+        )
+        with pytest.raises(Exception):  # noqa: B017
+            await client.get_execution("nonexistent")

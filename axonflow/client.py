@@ -30,6 +30,7 @@ import re
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -90,6 +91,11 @@ from axonflow.types import (
     ConnectorInstallRequest,
     ConnectorMetadata,
     ConnectorResponse,
+    ExecutionDetail,
+    ExecutionExportOptions,
+    ExecutionSnapshot,
+    ListExecutionsOptions,
+    ListExecutionsResponse,
     Mode,
     PlanExecutionResponse,
     PlanResponse,
@@ -97,6 +103,7 @@ from axonflow.types import (
     PolicyApprovalResult,
     RateLimitInfo,
     RetryConfig,
+    TimelineEntry,
     TokenUsage,
 )
 
@@ -147,6 +154,7 @@ class AxonFlow:
         client_id: str | None = None,
         client_secret: str | None = None,
         *,
+        orchestrator_url: str | None = None,
         license_key: str | None = None,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
@@ -164,6 +172,8 @@ class AxonFlow:
             agent_url: AxonFlow Agent URL
             client_id: Client ID (optional for community/self-hosted mode)
             client_secret: Client secret (optional for community/self-hosted mode)
+            orchestrator_url: Orchestrator URL for Execution Replay API
+                (optional, defaults to agent URL with port 8081)
             license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
@@ -185,6 +195,7 @@ class AxonFlow:
 
         self._config = AxonFlowConfig(
             agent_url=agent_url.rstrip("/"),
+            orchestrator_url=orchestrator_url.rstrip("/") if orchestrator_url else None,
             client_id=client_id,
             client_secret=client_secret,
             license_key=license_key,
@@ -1737,6 +1748,216 @@ class AxonFlow:
         response = await self._request("GET", path)
         return ExportResponse.model_validate(response)
 
+    # =========================================================================
+    # Execution Replay Methods
+    # =========================================================================
+
+    def _get_orchestrator_url(self) -> str:
+        """Get orchestrator URL, defaulting to agent URL with port 8081."""
+        if self._config.orchestrator_url:
+            return self._config.orchestrator_url
+        # Default: assume orchestrator is on same host as agent, port 8081
+        parsed = urlparse(self._config.agent_url)
+        return f"{parsed.scheme}://{parsed.hostname}:8081"
+
+    async def _orchestrator_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | list[Any] | None:
+        """Make HTTP request to Orchestrator."""
+        base_url = self._get_orchestrator_url()
+        url = f"{base_url}{path}"
+
+        try:
+            response = await self._http_client.request(method, url, json=json_data)
+            response.raise_for_status()
+            if response.status_code == 204:  # noqa: PLR2004
+                return None
+            result: dict[str, Any] | list[Any] = response.json()
+            return result  # noqa: TRY300
+
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to Orchestrator: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+        except httpx.HTTPStatusError as e:
+            msg = f"HTTP {e.response.status_code}: {e.response.text}"
+            raise AxonFlowError(msg) from e
+
+    async def list_executions(
+        self,
+        options: ListExecutionsOptions | None = None,
+    ) -> ListExecutionsResponse:
+        """List workflow executions with optional filtering.
+
+        Args:
+            options: Filtering and pagination options
+
+        Returns:
+            ListExecutionsResponse with executions and pagination info
+
+        Example:
+            >>> result = await client.list_executions(
+            ...     ListExecutionsOptions(status="completed", limit=10)
+            ... )
+            >>> for exec in result.executions:
+            ...     print(f"{exec.request_id}: {exec.status}")
+        """
+        params: list[str] = []
+        if options:
+            if options.limit:
+                params.append(f"limit={options.limit}")
+            if options.offset:
+                params.append(f"offset={options.offset}")
+            if options.status:
+                params.append(f"status={options.status}")
+            if options.workflow_id:
+                params.append(f"workflow_id={options.workflow_id}")
+            if options.start_time:
+                params.append(f"start_time={options.start_time.isoformat()}")
+            if options.end_time:
+                params.append(f"end_time={options.end_time.isoformat()}")
+
+        path = "/api/v1/executions"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        if self._config.debug:
+            self._logger.debug("Listing executions", path=path)
+
+        response = await self._orchestrator_request("GET", path)
+        return ListExecutionsResponse.model_validate(response)
+
+    async def get_execution(self, execution_id: str) -> ExecutionDetail:
+        """Get a complete execution record including summary and all steps.
+
+        Args:
+            execution_id: Execution/request ID
+
+        Returns:
+            ExecutionDetail with summary and steps
+
+        Example:
+            >>> execution = await client.get_execution("exec-abc123")
+            >>> print(f"Status: {execution.summary.status}")
+            >>> for step in execution.steps:
+            ...     print(f"  Step {step.step_index}: {step.step_name}")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting execution", execution_id=execution_id)
+
+        response = await self._orchestrator_request("GET", f"/api/v1/executions/{execution_id}")
+        return ExecutionDetail.model_validate(response)
+
+    async def get_execution_steps(self, execution_id: str) -> list[ExecutionSnapshot]:
+        """Get all step snapshots for an execution.
+
+        Args:
+            execution_id: Execution/request ID
+
+        Returns:
+            List of step snapshots
+
+        Example:
+            >>> steps = await client.get_execution_steps("exec-abc123")
+            >>> for step in steps:
+            ...     print(f"Step {step.step_index}: {step.status}")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting execution steps", execution_id=execution_id)
+
+        path = f"/api/v1/executions/{execution_id}/steps"
+        response = await self._orchestrator_request("GET", path)
+        if response is None:
+            return []
+        return [ExecutionSnapshot.model_validate(s) for s in response]
+
+    async def get_execution_timeline(self, execution_id: str) -> list[TimelineEntry]:
+        """Get timeline view of execution for visualization.
+
+        Args:
+            execution_id: Execution/request ID
+
+        Returns:
+            List of timeline entries
+
+        Example:
+            >>> timeline = await client.get_execution_timeline("exec-abc123")
+            >>> for entry in timeline:
+            ...     status = f" [ERROR]" if entry.has_error else ""
+            ...     print(f"[{entry.step_index}] {entry.step_name}: {entry.status}{status}")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting execution timeline", execution_id=execution_id)
+
+        path = f"/api/v1/executions/{execution_id}/timeline"
+        response = await self._orchestrator_request("GET", path)
+        if response is None:
+            return []
+        return [TimelineEntry.model_validate(e) for e in response]
+
+    async def export_execution(
+        self,
+        execution_id: str,
+        options: ExecutionExportOptions | None = None,
+    ) -> dict[str, Any]:
+        """Export a complete execution record for compliance or archival.
+
+        Args:
+            execution_id: Execution/request ID
+            options: Export options (format, what to include)
+
+        Returns:
+            Exported execution data
+
+        Example:
+            >>> export = await client.export_execution(
+            ...     "exec-abc123",
+            ...     ExecutionExportOptions(include_input=True, include_output=True)
+            ... )
+            >>> import json
+            >>> with open("audit-export.json", "w") as f:
+            ...     json.dump(export, f, indent=2)
+        """
+        params: list[str] = []
+        if options:
+            if options.format:
+                params.append(f"format={options.format}")
+            if options.include_input:
+                params.append("include_input=true")
+            if options.include_output:
+                params.append("include_output=true")
+            if options.include_policies:
+                params.append("include_policies=true")
+
+        path = f"/api/v1/executions/{execution_id}/export"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        if self._config.debug:
+            self._logger.debug("Exporting execution", execution_id=execution_id)
+
+        return await self._orchestrator_request("GET", path)  # type: ignore[return-value]
+
+    async def delete_execution(self, execution_id: str) -> None:
+        """Delete an execution and all associated step snapshots.
+
+        Args:
+            execution_id: Execution/request ID
+
+        Example:
+            >>> await client.delete_execution("exec-abc123")
+        """
+        if self._config.debug:
+            self._logger.debug("Deleting execution", execution_id=execution_id)
+
+        await self._orchestrator_request("DELETE", f"/api/v1/executions/{execution_id}")
+
 
 class SyncAxonFlow:
     """Synchronous wrapper for AxonFlow client.
@@ -2071,3 +2292,36 @@ class SyncAxonFlow:
     ) -> ExportResponse:
         """Export code governance data for compliance reporting."""
         return self._run_sync(self._async_client.export_code_governance_data(options))
+
+    # Execution Replay sync wrappers
+
+    def list_executions(
+        self,
+        options: ListExecutionsOptions | None = None,
+    ) -> ListExecutionsResponse:
+        """List workflow executions with optional filtering."""
+        return self._run_sync(self._async_client.list_executions(options))
+
+    def get_execution(self, execution_id: str) -> ExecutionDetail:
+        """Get a complete execution record including summary and all steps."""
+        return self._run_sync(self._async_client.get_execution(execution_id))
+
+    def get_execution_steps(self, execution_id: str) -> list[ExecutionSnapshot]:
+        """Get all step snapshots for an execution."""
+        return self._run_sync(self._async_client.get_execution_steps(execution_id))
+
+    def get_execution_timeline(self, execution_id: str) -> list[TimelineEntry]:
+        """Get timeline view of execution for visualization."""
+        return self._run_sync(self._async_client.get_execution_timeline(execution_id))
+
+    def export_execution(
+        self,
+        execution_id: str,
+        options: ExecutionExportOptions | None = None,
+    ) -> dict[str, Any]:
+        """Export a complete execution record for compliance or archival."""
+        return self._run_sync(self._async_client.export_execution(execution_id, options))
+
+    def delete_execution(self, execution_id: str) -> None:
+        """Delete an execution and all associated step snapshots."""
+        return self._run_sync(self._async_client.delete_execution(execution_id))

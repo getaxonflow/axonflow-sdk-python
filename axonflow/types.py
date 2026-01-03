@@ -47,6 +47,8 @@ class AxonFlowConfig(BaseModel):
 
     Attributes:
         agent_url: AxonFlow Agent URL (required)
+        orchestrator_url: Orchestrator URL for Execution Replay API
+            (optional, defaults to agent URL with port 8081)
         client_id: Client ID for authentication (optional for community/self-hosted mode)
         client_secret: Client secret for authentication (optional for community/self-hosted mode)
         license_key: Optional license key for organization-level auth
@@ -65,6 +67,7 @@ class AxonFlowConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     agent_url: str = Field(..., min_length=1, description="AxonFlow Agent URL")
+    orchestrator_url: str | None = Field(default=None, description="Orchestrator URL")
     client_id: str | None = Field(default=None, description="Client ID (optional)")
     client_secret: str | None = Field(default=None, description="Client secret (optional)")
     license_key: str | None = Field(default=None, description="License key")
@@ -234,3 +237,103 @@ class AuditResult(BaseModel):
 
     success: bool
     audit_id: str
+
+
+# =========================================================================
+# Execution Replay Types
+# =========================================================================
+
+
+class ExecutionSummary(BaseModel):
+    """Workflow execution summary."""
+
+    request_id: str = Field(..., description="Unique execution identifier")
+    workflow_name: str = Field(default="", description="Name of the workflow")
+    status: str = Field(..., description="Status: running, completed, failed")
+    total_steps: int = Field(default=0, ge=0, description="Total number of steps")
+    completed_steps: int = Field(default=0, ge=0, description="Completed steps")
+    started_at: datetime = Field(..., description="When execution started")
+    completed_at: datetime | None = Field(default=None, description="When execution completed")
+    duration_ms: int | None = Field(default=None, ge=0, description="Duration in milliseconds")
+    total_tokens: int = Field(default=0, ge=0, description="Total tokens used")
+    total_cost_usd: float = Field(default=0.0, ge=0, description="Total cost in USD")
+    org_id: str = Field(default="", description="Organization ID")
+    tenant_id: str = Field(default="", description="Tenant ID")
+    user_id: str = Field(default="", description="User ID")
+    error_message: str = Field(default="", description="Error message if failed")
+    input_summary: Any | None = Field(default=None, description="Input summary")
+    output_summary: Any | None = Field(default=None, description="Output summary")
+
+
+class ExecutionSnapshot(BaseModel):
+    """Snapshot of a workflow execution step."""
+
+    request_id: str = Field(..., description="Execution identifier")
+    step_index: int = Field(..., ge=0, description="Step position (0-indexed)")
+    step_name: str = Field(..., description="Step name")
+    status: str = Field(..., description="Step status")
+    started_at: datetime = Field(..., description="Step start time")
+    completed_at: datetime | None = Field(default=None, description="Step completion time")
+    duration_ms: int | None = Field(default=None, ge=0, description="Duration in milliseconds")
+    provider: str = Field(default="", description="LLM provider name")
+    model: str = Field(default="", description="Model used")
+    tokens_in: int = Field(default=0, ge=0, description="Input tokens")
+    tokens_out: int = Field(default=0, ge=0, description="Output tokens")
+    cost_usd: float = Field(default=0.0, ge=0, description="Step cost in USD")
+    input: Any | None = Field(default=None, description="Step input")
+    output: Any | None = Field(default=None, description="Step output")
+    error_message: str = Field(default="", description="Error message if failed")
+    policies_checked: list[str] = Field(default_factory=list, description="Policies evaluated")
+    policies_triggered: list[str] = Field(default_factory=list, description="Policies triggered")
+    approval_required: bool = Field(default=False, description="Whether approval was required")
+    approved_by: str = Field(default="", description="Approver ID")
+    approved_at: str = Field(default="", description="Approval timestamp")
+
+
+class TimelineEntry(BaseModel):
+    """Timeline entry for execution visualization."""
+
+    step_index: int = Field(..., ge=0, description="Step position")
+    step_name: str = Field(..., description="Step name")
+    status: str = Field(..., description="Step status")
+    started_at: datetime = Field(..., description="Step start time")
+    completed_at: datetime | None = Field(default=None, description="Step completion time")
+    duration_ms: int | None = Field(default=None, ge=0, description="Duration in milliseconds")
+    has_error: bool = Field(default=False, description="Whether step has error")
+    has_approval: bool = Field(default=False, description="Whether step required approval")
+
+
+class ListExecutionsResponse(BaseModel):
+    """Response from list executions API."""
+
+    executions: list[ExecutionSummary] = Field(default_factory=list)
+    total: int = Field(default=0, ge=0, description="Total count")
+    limit: int = Field(default=50, ge=1, description="Page size")
+    offset: int = Field(default=0, ge=0, description="Offset")
+
+
+class ExecutionDetail(BaseModel):
+    """Full execution with summary and steps."""
+
+    summary: ExecutionSummary
+    steps: list[ExecutionSnapshot] = Field(default_factory=list)
+
+
+class ListExecutionsOptions(BaseModel):
+    """Options for listing executions."""
+
+    limit: int = Field(default=50, ge=1, le=100, description="Page size")
+    offset: int = Field(default=0, ge=0, description="Pagination offset")
+    status: str | None = Field(default=None, description="Filter by status")
+    workflow_id: str | None = Field(default=None, description="Filter by workflow")
+    start_time: datetime | None = Field(default=None, description="Filter from timestamp")
+    end_time: datetime | None = Field(default=None, description="Filter to timestamp")
+
+
+class ExecutionExportOptions(BaseModel):
+    """Options for exporting an execution."""
+
+    format: str = Field(default="json", description="Export format")
+    include_input: bool = Field(default=True, description="Include step inputs")
+    include_output: bool = Field(default=True, description="Include step outputs")
+    include_policies: bool = Field(default=True, description="Include policy details")
