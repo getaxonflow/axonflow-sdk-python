@@ -85,26 +85,40 @@ from axonflow.policies import (
 from axonflow.types import (
     AuditResult,
     AxonFlowConfig,
+    Budget,
+    BudgetAlertsResponse,
+    BudgetDecision,
+    BudgetsResponse,
+    BudgetStatus,
     CacheConfig,
     ClientRequest,
     ClientResponse,
     ConnectorInstallRequest,
     ConnectorMetadata,
     ConnectorResponse,
+    CreateBudgetRequest,
     ExecutionDetail,
     ExecutionExportOptions,
     ExecutionSnapshot,
+    ListBudgetsOptions,
     ListExecutionsOptions,
     ListExecutionsResponse,
+    ListUsageRecordsOptions,
     Mode,
     PlanExecutionResponse,
     PlanResponse,
     PlanStep,
     PolicyApprovalResult,
+    PricingInfo,
+    PricingListResponse,
     RateLimitInfo,
     RetryConfig,
     TimelineEntry,
     TokenUsage,
+    UpdateBudgetRequest,
+    UsageBreakdown,
+    UsageRecordsResponse,
+    UsageSummary,
 )
 
 if TYPE_CHECKING:
@@ -1962,7 +1976,7 @@ class AxonFlow:
     # COST CONTROLS - BUDGETS
     # ========================================
 
-    async def create_budget(self, request: "CreateBudgetRequest") -> "Budget":
+    async def create_budget(self, request: CreateBudgetRequest) -> Budget:
         """Create a new budget.
 
         Args:
@@ -1982,14 +1996,13 @@ class AxonFlow:
             ...     alert_thresholds=[50, 80, 100]
             ... ))
         """
-        from axonflow.types import Budget
 
         response = await self._orchestrator_request(
             "POST", "/api/v1/budgets", json_data=request.model_dump(exclude_none=True)
         )
         return Budget.model_validate(response)
 
-    async def get_budget(self, budget_id: str) -> "Budget":
+    async def get_budget(self, budget_id: str) -> Budget:
         """Get a budget by ID.
 
         Args:
@@ -1998,14 +2011,13 @@ class AxonFlow:
         Returns:
             The budget
         """
-        from axonflow.types import Budget
 
         response = await self._orchestrator_request("GET", f"/api/v1/budgets/{budget_id}")
         return Budget.model_validate(response)
 
     async def list_budgets(
-        self, options: "ListBudgetsOptions | None" = None
-    ) -> "BudgetsResponse":
+        self, options: ListBudgetsOptions | None = None
+    ) -> BudgetsResponse:
         """List all budgets.
 
         Args:
@@ -2014,7 +2026,6 @@ class AxonFlow:
         Returns:
             List of budgets
         """
-        from axonflow.types import BudgetsResponse
 
         params: list[str] = []
         if options:
@@ -2033,8 +2044,8 @@ class AxonFlow:
         return BudgetsResponse.model_validate(response)
 
     async def update_budget(
-        self, budget_id: str, request: "UpdateBudgetRequest"
-    ) -> "Budget":
+        self, budget_id: str, request: UpdateBudgetRequest
+    ) -> Budget:
         """Update an existing budget.
 
         Args:
@@ -2044,7 +2055,6 @@ class AxonFlow:
         Returns:
             The updated budget
         """
-        from axonflow.types import Budget
 
         response = await self._orchestrator_request(
             "PUT",
@@ -2065,7 +2075,7 @@ class AxonFlow:
     # COST CONTROLS - BUDGET STATUS & ALERTS
     # ========================================
 
-    async def get_budget_status(self, budget_id: str) -> "BudgetStatus":
+    async def get_budget_status(self, budget_id: str) -> BudgetStatus:
         """Get the current status of a budget.
 
         Args:
@@ -2074,14 +2084,13 @@ class AxonFlow:
         Returns:
             Budget status including usage and remaining amount
         """
-        from axonflow.types import BudgetStatus
 
         response = await self._orchestrator_request(
             "GET", f"/api/v1/budgets/{budget_id}/status"
         )
         return BudgetStatus.model_validate(response)
 
-    async def get_budget_alerts(self, budget_id: str) -> "BudgetAlertsResponse":
+    async def get_budget_alerts(self, budget_id: str) -> BudgetAlertsResponse:
         """Get alerts for a budget.
 
         Args:
@@ -2090,14 +2099,13 @@ class AxonFlow:
         Returns:
             Budget alerts
         """
-        from axonflow.types import BudgetAlertsResponse
 
         response = await self._orchestrator_request(
             "GET", f"/api/v1/budgets/{budget_id}/alerts"
         )
         return BudgetAlertsResponse.model_validate(response)
 
-    async def check_budget(self, request: "BudgetCheckRequest") -> "BudgetDecision":
+    async def check_budget(self, request: BudgetCheckRequest) -> BudgetDecision:
         """Perform a pre-flight budget check.
 
         Args:
@@ -2106,7 +2114,6 @@ class AxonFlow:
         Returns:
             Budget decision
         """
-        from axonflow.types import BudgetDecision
 
         response = await self._orchestrator_request(
             "POST", "/api/v1/budgets/check", json_data=request.model_dump(exclude_none=True)
@@ -2117,7 +2124,7 @@ class AxonFlow:
     # COST CONTROLS - USAGE
     # ========================================
 
-    async def get_usage_summary(self, period: str | None = None) -> "UsageSummary":
+    async def get_usage_summary(self, period: str | None = None) -> UsageSummary:
         """Get usage summary for a period.
 
         Args:
@@ -2126,7 +2133,6 @@ class AxonFlow:
         Returns:
             Usage summary
         """
-        from axonflow.types import UsageSummary
 
         path = "/api/v1/usage"
         if period:
@@ -2137,7 +2143,7 @@ class AxonFlow:
 
     async def get_usage_breakdown(
         self, group_by: str, period: str | None = None
-    ) -> "UsageBreakdown":
+    ) -> UsageBreakdown:
         """Get usage breakdown by a grouping dimension.
 
         Args:
@@ -2147,7 +2153,6 @@ class AxonFlow:
         Returns:
             Usage breakdown
         """
-        from axonflow.types import UsageBreakdown
 
         params: list[str] = [f"group_by={group_by}"]
         if period:
@@ -2158,8 +2163,8 @@ class AxonFlow:
         return UsageBreakdown.model_validate(response)
 
     async def list_usage_records(
-        self, options: "ListUsageRecordsOptions | None" = None
-    ) -> "UsageRecordsResponse":
+        self, options: ListUsageRecordsOptions | None = None
+    ) -> UsageRecordsResponse:
         """List usage records.
 
         Args:
@@ -2168,7 +2173,6 @@ class AxonFlow:
         Returns:
             List of usage records
         """
-        from axonflow.types import UsageRecordsResponse
 
         params: list[str] = []
         if options:
@@ -2194,7 +2198,7 @@ class AxonFlow:
 
     async def get_pricing(
         self, provider: str | None = None, model: str | None = None
-    ) -> "PricingListResponse":
+    ) -> PricingListResponse:
         """Get pricing information for models.
 
         Args:
@@ -2204,7 +2208,6 @@ class AxonFlow:
         Returns:
             Pricing information
         """
-        from axonflow.types import PricingInfo, PricingListResponse
 
         params: list[str] = []
         if provider:
@@ -2594,23 +2597,23 @@ class SyncAxonFlow:
 
     # Cost Controls sync wrappers
 
-    def create_budget(self, request: "CreateBudgetRequest") -> "Budget":
+    def create_budget(self, request: CreateBudgetRequest) -> Budget:
         """Create a new budget."""
         return self._run_sync(self._async_client.create_budget(request))
 
-    def get_budget(self, budget_id: str) -> "Budget":
+    def get_budget(self, budget_id: str) -> Budget:
         """Get a budget by ID."""
         return self._run_sync(self._async_client.get_budget(budget_id))
 
     def list_budgets(
-        self, options: "ListBudgetsOptions | None" = None
-    ) -> "BudgetsResponse":
+        self, options: ListBudgetsOptions | None = None
+    ) -> BudgetsResponse:
         """List all budgets."""
         return self._run_sync(self._async_client.list_budgets(options))
 
     def update_budget(
-        self, budget_id: str, request: "UpdateBudgetRequest"
-    ) -> "Budget":
+        self, budget_id: str, request: UpdateBudgetRequest
+    ) -> Budget:
         """Update an existing budget."""
         return self._run_sync(self._async_client.update_budget(budget_id, request))
 
@@ -2618,36 +2621,36 @@ class SyncAxonFlow:
         """Delete a budget."""
         return self._run_sync(self._async_client.delete_budget(budget_id))
 
-    def get_budget_status(self, budget_id: str) -> "BudgetStatus":
+    def get_budget_status(self, budget_id: str) -> BudgetStatus:
         """Get the current status of a budget."""
         return self._run_sync(self._async_client.get_budget_status(budget_id))
 
-    def get_budget_alerts(self, budget_id: str) -> "BudgetAlertsResponse":
+    def get_budget_alerts(self, budget_id: str) -> BudgetAlertsResponse:
         """Get alerts for a budget."""
         return self._run_sync(self._async_client.get_budget_alerts(budget_id))
 
-    def check_budget(self, request: "BudgetCheckRequest") -> "BudgetDecision":
+    def check_budget(self, request: BudgetCheckRequest) -> BudgetDecision:
         """Perform a pre-flight budget check."""
         return self._run_sync(self._async_client.check_budget(request))
 
-    def get_usage_summary(self, period: str | None = None) -> "UsageSummary":
+    def get_usage_summary(self, period: str | None = None) -> UsageSummary:
         """Get usage summary for a period."""
         return self._run_sync(self._async_client.get_usage_summary(period))
 
     def get_usage_breakdown(
         self, group_by: str, period: str | None = None
-    ) -> "UsageBreakdown":
+    ) -> UsageBreakdown:
         """Get usage breakdown by a grouping dimension."""
         return self._run_sync(self._async_client.get_usage_breakdown(group_by, period))
 
     def list_usage_records(
-        self, options: "ListUsageRecordsOptions | None" = None
-    ) -> "UsageRecordsResponse":
+        self, options: ListUsageRecordsOptions | None = None
+    ) -> UsageRecordsResponse:
         """List usage records."""
         return self._run_sync(self._async_client.list_usage_records(options))
 
     def get_pricing(
         self, provider: str | None = None, model: str | None = None
-    ) -> "PricingListResponse":
+    ) -> PricingListResponse:
         """Get pricing information for models."""
         return self._run_sync(self._async_client.get_pricing(provider, model))
