@@ -87,6 +87,7 @@ from axonflow.types import (
     AxonFlowConfig,
     Budget,
     BudgetAlertsResponse,
+    BudgetCheckRequest,
     BudgetDecision,
     BudgetsResponse,
     BudgetStatus,
