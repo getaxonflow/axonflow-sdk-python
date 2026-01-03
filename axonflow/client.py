@@ -30,6 +30,7 @@ import re
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -93,7 +94,6 @@ from axonflow.types import (
     ExecutionDetail,
     ExecutionExportOptions,
     ExecutionSnapshot,
-    ExecutionSummary,
     ListExecutionsOptions,
     ListExecutionsResponse,
     Mode,
@@ -172,7 +172,8 @@ class AxonFlow:
             agent_url: AxonFlow Agent URL
             client_id: Client ID (optional for community/self-hosted mode)
             client_secret: Client secret (optional for community/self-hosted mode)
-            orchestrator_url: Orchestrator URL for Execution Replay API (optional, defaults to agent URL with port 8081)
+            orchestrator_url: Orchestrator URL for Execution Replay API
+                (optional, defaults to agent URL with port 8081)
             license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
@@ -1756,8 +1757,6 @@ class AxonFlow:
         if self._config.orchestrator_url:
             return self._config.orchestrator_url
         # Default: assume orchestrator is on same host as agent, port 8081
-        from urllib.parse import urlparse
-
         parsed = urlparse(self._config.agent_url)
         return f"{parsed.scheme}://{parsed.hostname}:8081"
 
@@ -1871,7 +1870,8 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting execution steps", execution_id=execution_id)
 
-        response = await self._orchestrator_request("GET", f"/api/v1/executions/{execution_id}/steps")
+        path = f"/api/v1/executions/{execution_id}/steps"
+        response = await self._orchestrator_request("GET", path)
         return [ExecutionSnapshot.model_validate(s) for s in response]
 
     async def get_execution_timeline(self, execution_id: str) -> list[TimelineEntry]:
@@ -1892,7 +1892,8 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting execution timeline", execution_id=execution_id)
 
-        response = await self._orchestrator_request("GET", f"/api/v1/executions/{execution_id}/timeline")
+        path = f"/api/v1/executions/{execution_id}/timeline"
+        response = await self._orchestrator_request("GET", path)
         return [TimelineEntry.model_validate(e) for e in response]
 
     async def export_execution(
@@ -1936,8 +1937,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Exporting execution", execution_id=execution_id)
 
-        response = await self._orchestrator_request("GET", path)
-        return response  # type: ignore[return-value]
+        return await self._orchestrator_request("GET", path)  # type: ignore[return-value]
 
     async def delete_execution(self, execution_id: str) -> None:
         """Delete an execution and all associated step snapshots.
