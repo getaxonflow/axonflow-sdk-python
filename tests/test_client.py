@@ -611,9 +611,7 @@ class TestExecutionReplay:
         )
         from axonflow.types import ListExecutionsOptions
 
-        result = await client.list_executions(
-            ListExecutionsOptions(status="completed", limit=10)
-        )
+        result = await client.list_executions(ListExecutionsOptions(status="completed", limit=10))
         assert result.total == 1
         assert len(result.executions) == 1
         assert result.executions[0].request_id == "exec-123"
@@ -796,9 +794,7 @@ class TestExecutionReplay:
 
         result = await client.export_execution(
             "exec-123",
-            ExecutionExportOptions(
-                include_input=True, include_output=True, include_policies=False
-            ),
+            ExecutionExportOptions(include_input=True, include_output=True, include_policies=False),
         )
         assert result["execution_id"] == "exec-123"
         assert result["workflow_name"] == "test-workflow"
