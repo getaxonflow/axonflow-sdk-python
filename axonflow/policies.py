@@ -196,40 +196,38 @@ class DynamicPolicyCondition(BaseModel):
     value: Any
 
 
-class DynamicPolicyConfig(BaseModel):
-    """Configuration for a dynamic policy."""
+class DynamicPolicyAction(BaseModel):
+    """Action to take when dynamic policy conditions are met."""
 
-    type: str
-    rules: dict[str, Any] = Field(default_factory=dict)
-    conditions: list[DynamicPolicyCondition] | None = None
-    action: PolicyAction
-    parameters: dict[str, Any] | None = None
+    type: str  # "block", "alert", "redact", "log", "route", "modify_risk"
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class DynamicPolicy(BaseModel):
-    """Dynamic policy definition."""
+    """Dynamic policy definition.
+
+    Dynamic policies are LLM-powered policies that can evaluate complex,
+    context-aware rules that can't be expressed with simple regex patterns.
+    """
 
     model_config = ConfigDict(populate_by_name=True)
 
     id: str
     name: str
     description: str | None = None
-    category: PolicyCategory
-    tier: PolicyTier
+    type: str  # "risk", "content", "user", "cost"
+    conditions: list[DynamicPolicyCondition] | None = None
+    actions: list[DynamicPolicyAction] | None = None
+    priority: int = 0
     enabled: bool = True
-    organization_id: str | None = Field(default=None, alias="organizationId")
-    tenant_id: str | None = Field(default=None, alias="tenantId")
-    config: DynamicPolicyConfig
-    created_at: datetime = Field(..., alias="createdAt")
-    updated_at: datetime = Field(..., alias="updatedAt")
-    version: int | None = None
+    created_at: datetime = Field(..., alias="created_at")
+    updated_at: datetime = Field(..., alias="updated_at")
 
 
 class ListDynamicPoliciesOptions(BaseModel):
     """Options for listing dynamic policies."""
 
-    category: PolicyCategory | None = None
-    tier: PolicyTier | None = None
+    type: str | None = None  # Filter by policy type
     enabled: bool | None = None
     limit: int | None = Field(default=None, ge=1)
     offset: int | None = Field(default=None, ge=0)
@@ -243,8 +241,10 @@ class CreateDynamicPolicyRequest(BaseModel):
 
     name: str = Field(..., min_length=1)
     description: str | None = None
-    category: PolicyCategory
-    config: DynamicPolicyConfig
+    type: str  # "risk", "content", "user", "cost"
+    conditions: list[DynamicPolicyCondition] | None = None
+    actions: list[DynamicPolicyAction] | None = None
+    priority: int = 0
     enabled: bool = True
 
 
@@ -253,8 +253,10 @@ class UpdateDynamicPolicyRequest(BaseModel):
 
     name: str | None = None
     description: str | None = None
-    category: PolicyCategory | None = None
-    config: DynamicPolicyConfig | None = None
+    type: str | None = None
+    conditions: list[DynamicPolicyCondition] | None = None
+    actions: list[DynamicPolicyAction] | None = None
+    priority: int | None = None
     enabled: bool | None = None
 
 

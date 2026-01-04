@@ -94,6 +94,7 @@ from axonflow.types import (
     CacheConfig,
     ClientRequest,
     ClientResponse,
+    ConnectorHealthStatus,
     ConnectorInstallRequest,
     ConnectorMetadata,
     ConnectorResponse,
@@ -629,6 +630,50 @@ class AxonFlow:
 
         if self._config.debug:
             self._logger.info("Connector uninstalled", name=connector_name)
+
+    async def get_connector(self, connector_id: str) -> ConnectorMetadata:
+        """Get details for a specific connector.
+
+        Args:
+            connector_id: ID of the connector
+
+        Returns:
+            Connector metadata
+
+        Raises:
+            AxonFlowError: If connector not found
+        """
+        response = await self._orchestrator_request(
+            "GET",
+            f"/api/v1/connectors/{connector_id}",
+        )
+
+        if self._config.debug:
+            self._logger.info("Got connector", id=connector_id)
+
+        return ConnectorMetadata.model_validate(response)
+
+    async def get_connector_health(self, connector_id: str) -> ConnectorHealthStatus:
+        """Get health status of an installed connector.
+
+        Args:
+            connector_id: ID of the connector
+
+        Returns:
+            Connector health status
+
+        Raises:
+            AxonFlowError: If connector not found or not installed
+        """
+        response = await self._orchestrator_request(
+            "GET",
+            f"/api/v1/connectors/{connector_id}/health",
+        )
+
+        if self._config.debug and isinstance(response, dict):
+            self._logger.info("Connector health", id=connector_id, healthy=response.get("healthy"))
+
+        return ConnectorHealthStatus.model_validate(response)
 
     async def query_connector(
         self,
@@ -1352,10 +1397,8 @@ class AxonFlow:
         """
         params: list[str] = []
         if options:
-            if options.category:
-                params.append(f"category={options.category.value}")
-            if options.tier:
-                params.append(f"tier={options.tier.value}")
+            if options.type:
+                params.append(f"type={options.type}")
             if options.enabled is not None:
                 params.append(f"enabled={str(options.enabled).lower()}")
             if options.limit:
@@ -2348,6 +2391,14 @@ class SyncAxonFlow:
     def uninstall_connector(self, connector_name: str) -> None:
         """Uninstall an MCP connector."""
         return self._run_sync(self._async_client.uninstall_connector(connector_name))
+
+    def get_connector(self, connector_id: str) -> ConnectorMetadata:
+        """Get details for a specific connector."""
+        return self._run_sync(self._async_client.get_connector(connector_id))
+
+    def get_connector_health(self, connector_id: str) -> ConnectorHealthStatus:
+        """Get health status of an installed connector."""
+        return self._run_sync(self._async_client.get_connector_health(connector_id))
 
     def query_connector(
         self,

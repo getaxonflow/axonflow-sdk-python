@@ -16,7 +16,8 @@ from axonflow.policies import (
     CreatePolicyOverrideRequest,
     CreateStaticPolicyRequest,
     DynamicPolicy,
-    DynamicPolicyConfig,
+    DynamicPolicyAction,
+    DynamicPolicyCondition,
     ListDynamicPoliciesOptions,
     ListStaticPoliciesOptions,
     OverrideAction,
@@ -52,17 +53,17 @@ SAMPLE_DYNAMIC_POLICY = {
     "id": "dpol_456",
     "name": "Rate Limit API",
     "description": "Rate limit API calls",
-    "category": "dynamic-cost",
-    "tier": "organization",
+    "type": "cost",
+    "conditions": [
+        {"field": "requests_per_minute", "operator": "greater_than", "value": 100}
+    ],
+    "actions": [
+        {"type": "block", "config": {"reason": "Rate limit exceeded"}}
+    ],
+    "priority": 50,
     "enabled": True,
-    "config": {
-        "type": "rate-limit",
-        "rules": {"maxRequestsPerMinute": 100},
-        "action": "block",
-    },
-    "createdAt": "2025-01-01T00:00:00Z",
-    "updatedAt": "2025-01-01T00:00:00Z",
-    "version": 1,
+    "created_at": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z",
 }
 
 SAMPLE_OVERRIDE = {
@@ -348,13 +349,13 @@ class TestDynamicPolicies:
         httpx_mock.add_response(json=[SAMPLE_DYNAMIC_POLICY])
 
         options = ListDynamicPoliciesOptions(
-            category=PolicyCategory.DYNAMIC_COST,
+            type="cost",
             enabled=True,
         )
         await client.list_dynamic_policies(options)
 
         request = httpx_mock.get_request()
-        assert "category=dynamic-cost" in str(request.url)
+        assert "type=cost" in str(request.url)
         assert "enabled=true" in str(request.url)
 
     @pytest.mark.asyncio
@@ -365,7 +366,7 @@ class TestDynamicPolicies:
         policy = await client.get_dynamic_policy("dpol_456")
 
         assert policy.id == "dpol_456"
-        assert policy.config.type == "rate-limit"
+        assert policy.type == "cost"
 
     @pytest.mark.asyncio
     async def test_create_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
@@ -374,12 +375,21 @@ class TestDynamicPolicies:
 
         request = CreateDynamicPolicyRequest(
             name="Rate Limit API",
-            category=PolicyCategory.DYNAMIC_COST,
-            config=DynamicPolicyConfig(
-                type="rate-limit",
-                rules={"maxRequestsPerMinute": 100},
-                action=PolicyAction.BLOCK,
-            ),
+            type="cost",
+            conditions=[
+                DynamicPolicyCondition(
+                    field="requests_per_minute",
+                    operator="greater_than",
+                    value=100
+                )
+            ],
+            actions=[
+                DynamicPolicyAction(
+                    type="block",
+                    config={"reason": "Rate limit exceeded"}
+                )
+            ],
+            priority=50,
         )
         policy = await client.create_dynamic_policy(request)
 
@@ -393,11 +403,13 @@ class TestDynamicPolicies:
         httpx_mock.add_response(json=SAMPLE_DYNAMIC_POLICY)
 
         request = UpdateDynamicPolicyRequest(
-            config=DynamicPolicyConfig(
-                type="rate-limit",
-                rules={"maxRequestsPerMinute": 200},
-                action=PolicyAction.BLOCK,
-            )
+            conditions=[
+                DynamicPolicyCondition(
+                    field="requests_per_minute",
+                    operator="greater_than",
+                    value=200
+                )
+            ],
         )
         policy = await client.update_dynamic_policy("dpol_456", request)
 
@@ -455,8 +467,12 @@ class TestPolicyTypes:
         """Test dynamic policy model validation."""
         policy = DynamicPolicy.model_validate(SAMPLE_DYNAMIC_POLICY)
         assert policy.id == "dpol_456"
-        assert policy.category == PolicyCategory.DYNAMIC_COST
-        assert policy.config.type == "rate-limit"
+        assert policy.type == "cost"
+        assert policy.priority == 50
+        assert policy.conditions is not None
+        assert len(policy.conditions) == 1
+        assert policy.actions is not None
+        assert len(policy.actions) == 1
 
     def test_policy_override_validation(self) -> None:
         """Test policy override model validation."""
@@ -495,12 +511,18 @@ class TestPolicyTypes:
         """Test create dynamic policy request model."""
         request = CreateDynamicPolicyRequest(
             name="Test Dynamic",
-            category=PolicyCategory.DYNAMIC_RISK,
-            config=DynamicPolicyConfig(
-                type="custom",
-                rules={"threshold": 0.8},
-                action=PolicyAction.WARN,
-            ),
+            type="risk",
+            conditions=[
+                DynamicPolicyCondition(
+                    field="risk_score",
+                    operator="greater_than",
+                    value=0.8
+                )
+            ],
+            actions=[
+                DynamicPolicyAction(type="alert", config={"severity": "high"})
+            ],
         )
         assert request.name == "Test Dynamic"
-        assert request.config.action == PolicyAction.WARN
+        assert request.type == "risk"
+        assert len(request.actions) == 1

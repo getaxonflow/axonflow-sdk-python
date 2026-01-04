@@ -146,6 +146,17 @@ class ConnectorMetadata(BaseModel):
     config_schema: dict[str, Any] = Field(default_factory=dict)
     installed: bool = False
     healthy: bool = False
+    last_check: str | None = Field(default=None, description="When last health check was performed")
+
+
+class ConnectorHealthStatus(BaseModel):
+    """Health status of an installed connector."""
+
+    healthy: bool = Field(description="Overall health status")
+    latency: int = Field(default=0, description="Connection latency in nanoseconds")
+    details: dict[str, str] = Field(default_factory=dict, description="Additional diagnostic info")
+    timestamp: str = Field(default="", description="When health check was performed")
+    error: str | None = Field(default=None, description="Error message if unhealthy")
 
 
 class ConnectorInstallRequest(BaseModel):
