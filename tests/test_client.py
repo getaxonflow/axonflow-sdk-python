@@ -1048,7 +1048,7 @@ class TestPortalAuthentication:
     ) -> None:
         """Test portal URL defaults to agent URL with port 8082."""
         # Client has agent_url https://test.axonflow.com
-        url = client._async_client._get_portal_url()
+        url = client._get_portal_url()
         assert url == "https://test.axonflow.com:8082"
 
     @pytest.mark.asyncio
@@ -1060,7 +1060,7 @@ class TestPortalAuthentication:
             client_id="test",
             client_secret="test",
         )
-        url = custom_client._async_client._get_portal_url()
+        url = custom_client._get_portal_url()
         assert url == "https://portal.custom.com"
 
 
@@ -1138,6 +1138,7 @@ class TestCodeGovernance:
         httpx_mock.add_response(
             url="https://test.axonflow.com:8082/api/v1/code-governance/metrics",
             json={
+                "tenant_id": "test-tenant",
                 "total_prs": 42,
                 "open_prs": 5,
                 "merged_prs": 30,
@@ -1148,6 +1149,7 @@ class TestCodeGovernance:
             },
         )
         result = await client.get_code_governance_metrics()
+        assert result.tenant_id == "test-tenant"
         assert result.total_prs == 42
         assert result.merged_prs == 30
 
