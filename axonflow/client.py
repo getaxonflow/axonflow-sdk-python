@@ -506,10 +506,11 @@ class AxonFlow:
         """
         try:
             response = await self._orchestrator_request("GET", "/health")
+        except AxonFlowError:
+            return False
+        else:
             if isinstance(response, dict):
                 return response.get("status") == "healthy"
-            return False
-        except AxonFlowError:
             return False
 
     async def execute_query(
