@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import hashlib
 import re
 from collections.abc import Coroutine
@@ -162,7 +163,14 @@ class AxonFlow:
         config: Client configuration
     """
 
-    __slots__ = ("_config", "_http_client", "_map_http_client", "_cache", "_logger")
+    __slots__ = (
+        "_config",
+        "_http_client",
+        "_map_http_client",
+        "_cache",
+        "_logger",
+        "_session_cookie",
+    )
 
     def __init__(
         self,
@@ -171,6 +179,7 @@ class AxonFlow:
         client_secret: str | None = None,
         *,
         orchestrator_url: str | None = None,
+        portal_url: str | None = None,
         license_key: str | None = None,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
@@ -190,6 +199,8 @@ class AxonFlow:
             client_secret: Client secret (optional for community/self-hosted mode)
             orchestrator_url: Orchestrator URL for Execution Replay API
                 (optional, defaults to agent URL with port 8081)
+            portal_url: Customer Portal URL for enterprise PR workflow features
+                (optional, defaults to agent URL with port 8082)
             license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
@@ -212,6 +223,7 @@ class AxonFlow:
         self._config = AxonFlowConfig(
             agent_url=agent_url.rstrip("/"),
             orchestrator_url=orchestrator_url.rstrip("/") if orchestrator_url else None,
+            portal_url=portal_url.rstrip("/") if portal_url else None,
             client_id=client_id,
             client_secret=client_secret,
             license_key=license_key,
@@ -264,6 +276,9 @@ class AxonFlow:
             client_id=client_id or "community",
             mode=mode.value,
         )
+
+        # Initialize session cookie for portal authentication
+        self._session_cookie: str | None = None
 
         if debug:
             self._logger.info(
@@ -1578,7 +1593,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Validating Git provider", provider_type=request.type.value)
 
-        response = await self._request(
+        response = await self._portal_request(
             "POST",
             "/api/v1/code-governance/git-providers/validate",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
@@ -1619,7 +1634,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Configuring Git provider", provider_type=request.type.value)
 
-        response = await self._request(
+        response = await self._portal_request(
             "POST",
             "/api/v1/code-governance/git-providers",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
@@ -1640,7 +1655,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Listing Git providers")
 
-        response = await self._request("GET", "/api/v1/code-governance/git-providers")
+        response = await self._portal_request("GET", "/api/v1/code-governance/git-providers")
         return ListGitProvidersResponse.model_validate(response)
 
     async def delete_git_provider(self, provider_type: GitProviderType) -> None:
@@ -1653,7 +1668,7 @@ class AxonFlow:
             self._logger.debug("Deleting Git provider", provider_type=provider_type.value)
 
         path = f"/api/v1/code-governance/git-providers/{provider_type.value}"
-        await self._request("DELETE", path)
+        await self._portal_request("DELETE", path)
 
     async def create_pr(self, request: CreatePRRequest) -> CreatePRResponse:
         """Create a Pull Request from LLM-generated code.
@@ -1694,7 +1709,7 @@ class AxonFlow:
                 title=request.title,
             )
 
-        response = await self._request(
+        response = await self._portal_request(
             "POST",
             "/api/v1/code-governance/prs",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
@@ -1734,7 +1749,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Listing PRs", path=path)
 
-        response = await self._request("GET", path)
+        response = await self._portal_request("GET", path)
         return ListPRsResponse.model_validate(response)
 
     async def get_pr(self, pr_id: str) -> PRRecord:
@@ -1749,7 +1764,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting PR", pr_id=pr_id)
 
-        response = await self._request("GET", f"/api/v1/code-governance/prs/{pr_id}")
+        response = await self._portal_request("GET", f"/api/v1/code-governance/prs/{pr_id}")
         return PRRecord.model_validate(response)
 
     async def sync_pr_status(self, pr_id: str) -> PRRecord:
@@ -1767,7 +1782,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Syncing PR status", pr_id=pr_id)
 
-        response = await self._request("POST", f"/api/v1/code-governance/prs/{pr_id}/sync")
+        response = await self._portal_request("POST", f"/api/v1/code-governance/prs/{pr_id}/sync")
         return PRRecord.model_validate(response)
 
     # =========================================================================
@@ -1791,7 +1806,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting code governance metrics")
 
-        response = await self._request("GET", "/api/v1/code-governance/metrics")
+        response = await self._portal_request("GET", "/api/v1/code-governance/metrics")
         return CodeGovernanceMetrics.model_validate(response)
 
     async def export_code_governance_data(
@@ -1836,8 +1851,44 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Exporting code governance data", path=path)
 
-        response = await self._request("GET", path)
+        response = await self._portal_request("GET", path)
         return ExportResponse.model_validate(response)
+
+    async def export_code_governance_data_csv(
+        self,
+        options: ExportOptions | None = None,
+    ) -> str:
+        """Export code governance data as CSV for compliance reporting.
+
+        Returns raw CSV data suitable for saving to file or streaming.
+
+        Args:
+            options: Export options (date filters, state filter)
+
+        Returns:
+            str: CSV formatted data
+
+        Example:
+            >>> csv_data = await client.export_code_governance_data_csv()
+            >>> with open("pr-audit.csv", "w") as f:
+            ...     f.write(csv_data)
+        """
+        query_params: list[str] = ["format=csv"]
+
+        if options:
+            if options.start_date:
+                query_params.append(f"start_date={options.start_date.isoformat()}")
+            if options.end_date:
+                query_params.append(f"end_date={options.end_date.isoformat()}")
+            if options.state:
+                query_params.append(f"state={options.state}")
+
+        path = f"/api/v1/code-governance/export?{'&'.join(query_params)}"
+
+        if self._config.debug:
+            self._logger.debug("Exporting code governance data as CSV", path=path)
+
+        return await self._portal_request_text("GET", path)
 
     # =========================================================================
     # Execution Replay Methods
@@ -1850,6 +1901,169 @@ class AxonFlow:
         # Default: assume orchestrator is on same host as agent, port 8081
         parsed = urlparse(self._config.agent_url)
         return f"{parsed.scheme}://{parsed.hostname}:8081"
+
+    def _get_portal_url(self) -> str:
+        """Get portal URL, defaulting to agent URL with port 8082."""
+        if self._config.portal_url:
+            return self._config.portal_url
+        # Default: assume portal is on same host as agent, port 8082
+        parsed = urlparse(self._config.agent_url)
+        return f"{parsed.scheme}://{parsed.hostname}:8082"
+
+    async def login_to_portal(self, org_id: str, password: str) -> dict[str, Any]:
+        """Login to Customer Portal and store session cookie.
+
+        Required before using Code Governance methods.
+
+        Args:
+            org_id: Organization ID
+            password: Organization password
+
+        Returns:
+            Login response with session info
+
+        Example:
+            >>> login = await client.login_to_portal("test-org-001", "test123")
+            >>> print(f"Logged in as {login['name']}")
+        """
+        base_url = self._get_portal_url()
+        url = f"{base_url}/api/v1/auth/login"
+
+        try:
+            response = await self._http_client.post(
+                url,
+                json={"org_id": org_id, "password": password},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            msg = f"Login failed: HTTP {e.response.status_code}: {e.response.text}"
+            raise AuthenticationError(msg) from e
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to Customer Portal: {e}"
+            raise ConnectionError(msg) from e
+
+        result: dict[str, Any] = response.json()
+
+        # Extract session cookie
+        for cookie in response.cookies.jar:
+            if cookie.name == "axonflow_session":
+                self._session_cookie = cookie.value
+                break
+
+        # Fallback to session_id in response body
+        if not self._session_cookie and "session_id" in result:
+            self._session_cookie = result["session_id"]
+
+        if self._config.debug:
+            self._logger.info("Portal login successful", org_id=org_id)
+
+        return result
+
+    async def logout_from_portal(self) -> None:
+        """Logout from Customer Portal and clear session cookie."""
+        if not self._session_cookie:
+            return
+
+        base_url = self._get_portal_url()
+        url = f"{base_url}/api/v1/auth/logout"
+
+        with contextlib.suppress(httpx.HTTPError):
+            await self._http_client.post(
+                url,
+                cookies={"axonflow_session": self._session_cookie},
+            )
+
+        self._session_cookie = None
+
+        if self._config.debug:
+            self._logger.info("Portal logout successful")
+
+    def is_logged_in(self) -> bool:
+        """Check if logged in to Customer Portal."""
+        return self._session_cookie is not None
+
+    async def _portal_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | list[Any] | None:
+        """Make HTTP request to Customer Portal (for enterprise features).
+
+        Requires prior authentication via login_to_portal().
+        """
+        if not self._session_cookie:
+            msg = "Not logged in to Customer Portal. Call login_to_portal() first."
+            raise AuthenticationError(msg)
+
+        base_url = self._get_portal_url()
+        url = f"{base_url}{path}"
+
+        try:
+            if self._config.debug:
+                self._logger.debug("Portal request", method=method, path=path)
+
+            response = await self._http_client.request(
+                method,
+                url,
+                json=json_data,
+                cookies={"axonflow_session": self._session_cookie},
+            )
+            response.raise_for_status()
+            if response.status_code == 204:  # noqa: PLR2004
+                return None
+            result: dict[str, Any] | list[Any] = response.json()
+            return result  # noqa: TRY300
+
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to Customer Portal: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+        except httpx.HTTPStatusError as e:
+            msg = f"HTTP {e.response.status_code}: {e.response.text}"
+            raise AxonFlowError(msg) from e
+
+    async def _portal_request_text(
+        self,
+        method: str,
+        path: str,
+    ) -> str:
+        """Make HTTP request to Customer Portal and return raw text response.
+
+        Used for CSV exports and other non-JSON responses.
+        Requires prior authentication via login_to_portal().
+        """
+        if not self._session_cookie:
+            msg = "Not logged in to Customer Portal. Call login_to_portal() first."
+            raise AuthenticationError(msg)
+
+        base_url = self._get_portal_url()
+        url = f"{base_url}{path}"
+
+        if self._config.debug:
+            self._logger.debug("Portal request (text)", method=method, path=path)
+
+        try:
+            response = await self._http_client.request(
+                method,
+                url,
+                cookies={"axonflow_session": self._session_cookie},
+            )
+            response.raise_for_status()
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to Customer Portal: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+        except httpx.HTTPStatusError as e:
+            msg = f"HTTP {e.response.status_code}: {e.response.text}"
+            raise AxonFlowError(msg) from e
+
+        return response.text
 
     async def _orchestrator_request(
         self,
@@ -2591,6 +2805,20 @@ class SyncAxonFlow:
         """Get effective dynamic policies with tier inheritance applied."""
         return self._run_sync(self._async_client.get_effective_dynamic_policies(options))
 
+    # Portal Authentication sync wrappers
+
+    def login_to_portal(self, org_id: str, password: str) -> dict[str, Any]:
+        """Login to Customer Portal and store session cookie."""
+        return self._run_sync(self._async_client.login_to_portal(org_id, password))
+
+    def logout_from_portal(self) -> None:
+        """Logout from Customer Portal and clear session cookie."""
+        return self._run_sync(self._async_client.logout_from_portal())
+
+    def is_logged_in(self) -> bool:
+        """Check if logged in to Customer Portal."""
+        return self._async_client.is_logged_in()
+
     # Code Governance sync wrappers
 
     def validate_git_provider(
@@ -2644,6 +2872,13 @@ class SyncAxonFlow:
     ) -> ExportResponse:
         """Export code governance data for compliance reporting."""
         return self._run_sync(self._async_client.export_code_governance_data(options))
+
+    def export_code_governance_data_csv(
+        self,
+        options: ExportOptions | None = None,
+    ) -> str:
+        """Export code governance data as CSV for compliance reporting."""
+        return self._run_sync(self._async_client.export_code_governance_data_csv(options))
 
     # Execution Replay sync wrappers
 

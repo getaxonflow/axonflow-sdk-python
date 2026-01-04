@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class GitProviderType(str, Enum):
@@ -163,6 +163,12 @@ class ListPRsResponse(BaseModel):
     prs: list[PRRecord] = Field(default_factory=list, description="PR records")
     count: int = Field(default=0, description="Total count")
 
+    @field_validator("prs", mode="before")
+    @classmethod
+    def default_prs_to_empty_list(cls, v: list[PRRecord] | None) -> list[PRRecord]:
+        """Convert None to empty list."""
+        return v if v is not None else []
+
 
 # ============================================================================
 # Metrics and Export Types
@@ -199,3 +205,9 @@ class ExportResponse(BaseModel):
     records: list[PRRecord] = Field(default_factory=list, description="PR records")
     count: int = Field(default=0, description="Number of records")
     exported_at: str = Field(..., description="Export timestamp")
+
+    @field_validator("records", mode="before")
+    @classmethod
+    def default_records_to_empty_list(cls, v: list[PRRecord] | None) -> list[PRRecord]:
+        """Convert None to empty list."""
+        return v if v is not None else []
