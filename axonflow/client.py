@@ -977,6 +977,43 @@ class AxonFlow:
             block_reason=response.get("block_reason"),
         )
 
+    async def pre_check(
+        self,
+        user_token: str,
+        query: str,
+        data_sources: list[str] | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> PolicyApprovalResult:
+        """Alias for get_policy_approved_context().
+
+        Perform policy pre-check before making LLM call.
+        This is the first step in Gateway Mode.
+
+        Args:
+            user_token: JWT token for the user making the request
+            query: The query/prompt that will be sent to the LLM
+            data_sources: Optional list of MCP connectors to fetch data from
+            context: Optional additional context for policy evaluation
+
+        Returns:
+            PolicyApprovalResult with context ID and approved data
+
+        Example:
+            >>> result = await client.pre_check(
+            ...     user_token="user-jwt",
+            ...     query="Find patients with diabetes",
+            ...     data_sources=["postgres"]
+            ... )
+            >>> if not result.approved:
+            ...     raise PolicyViolationError(result.block_reason)
+        """
+        return await self.get_policy_approved_context(
+            user_token=user_token,
+            query=query,
+            data_sources=data_sources,
+            context=context,
+        )
+
     async def audit_llm_call(
         self,
         context_id: str,
@@ -2659,6 +2696,21 @@ class SyncAxonFlow:
         """Perform policy pre-check before making LLM call."""
         return self._run_sync(
             self._async_client.get_policy_approved_context(user_token, query, data_sources, context)
+        )
+
+    def pre_check(
+        self,
+        user_token: str,
+        query: str,
+        data_sources: list[str] | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> PolicyApprovalResult:
+        """Alias for get_policy_approved_context().
+
+        Perform policy pre-check before making LLM call.
+        """
+        return self._run_sync(
+            self._async_client.pre_check(user_token, query, data_sources, context)
         )
 
     def audit_llm_call(

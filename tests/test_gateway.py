@@ -302,3 +302,64 @@ class TestSyncGatewayMode:
         )
 
         assert result.success is True
+
+
+class TestPreCheckAlias:
+    """Test pre_check() alias method."""
+
+    @pytest.mark.asyncio
+    async def test_pre_check_alias_async(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+        mock_pre_check_response: dict[str, Any],
+    ) -> None:
+        """Test async pre_check() is an alias for get_policy_approved_context()."""
+        httpx_mock.add_response(json=mock_pre_check_response)
+
+        result = await client.pre_check(
+            user_token="user-jwt",
+            query="Test query",
+            data_sources=["postgres"],
+        )
+
+        assert result.approved is True
+        assert result.context_id == "ctx-123"
+        assert "hipaa" in result.policies
+
+    @pytest.mark.asyncio
+    async def test_pre_check_alias_with_context(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+        mock_pre_check_response: dict[str, Any],
+    ) -> None:
+        """Test pre_check() with context parameter."""
+        httpx_mock.add_response(json=mock_pre_check_response)
+
+        result = await client.pre_check(
+            user_token="user-jwt",
+            query="Test query",
+            context={"department": "engineering"},
+        )
+
+        assert result.approved is True
+        request = httpx_mock.get_request()
+        assert "/api/policy/pre-check" in str(request.url)
+
+    def test_pre_check_alias_sync(
+        self,
+        sync_client,
+        httpx_mock: HTTPXMock,
+        mock_pre_check_response: dict[str, Any],
+    ) -> None:
+        """Test sync pre_check() is an alias for get_policy_approved_context()."""
+        httpx_mock.add_response(json=mock_pre_check_response)
+
+        result = sync_client.pre_check(
+            user_token="user-jwt",
+            query="Test query",
+        )
+
+        assert result.approved is True
+        assert result.context_id == "ctx-123"
