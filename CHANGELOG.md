@@ -5,6 +5,28 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-01-04
+
+### Added
+
+- **Execution Replay API**: Debug governed workflows with step-by-step state capture
+  - `list_executions()` - List executions with filtering (status, time range)
+  - `get_execution()` - Get execution with all step snapshots
+  - `get_execution_steps()` - Get individual step snapshots
+  - `get_execution_timeline()` - Timeline view for visualization
+  - `export_execution()` - Export for compliance/archival
+  - `delete_execution()` - Delete execution records
+
+- **Cost Controls**: Budget management and LLM usage tracking
+  - `create_budget()` / `get_budget()` / `list_budgets()` - Budget CRUD
+  - `update_budget()` / `delete_budget()` - Budget management
+  - `get_budget_status()` - Check current budget usage
+  - `check_budget()` - Pre-request budget validation
+  - `record_usage()` - Record LLM token usage
+  - `get_usage_summary()` - Usage analytics and reporting
+
+---
+
 ## [0.10.1] - 2025-12-31
 
 ### Fixed
