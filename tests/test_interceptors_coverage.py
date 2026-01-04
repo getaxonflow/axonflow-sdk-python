@@ -44,9 +44,7 @@ class TestGeminiInterceptorCoverage:
         mock_model = MagicMock()
         mock_model.generate_content = MagicMock()
 
-        with patch(
-            "axonflow.interceptors.gemini.wrap_gemini_model", return_value=mock_model
-        ):
+        with patch("axonflow.interceptors.gemini.wrap_gemini_model", return_value=mock_model):
             result = interceptor.wrap(mock_model)
             assert result is not None
 
@@ -106,9 +104,7 @@ class TestOllamaInterceptorCoverage:
 
         mock_client = MagicMock()
 
-        with patch(
-            "axonflow.interceptors.ollama.wrap_ollama_client", return_value=mock_client
-        ):
+        with patch("axonflow.interceptors.ollama.wrap_ollama_client", return_value=mock_client):
             result = interceptor.wrap(mock_client)
             assert result is not None
 
@@ -125,9 +121,7 @@ class TestOllamaInterceptorCoverage:
         axonflow = MagicMock()
         interceptor = OllamaInterceptor(axonflow)
 
-        prompt = interceptor.extract_prompt(
-            messages=[{"content": "Hello"}, {"content": "World"}]
-        )
+        prompt = interceptor.extract_prompt(messages=[{"content": "Hello"}, {"content": "World"}])
         assert "Hello" in prompt
         assert "World" in prompt
 
@@ -244,9 +238,7 @@ class TestOpenAIInterceptorCoverage:
 
         mock_client = MagicMock()
 
-        with patch(
-            "axonflow.interceptors.openai.wrap_openai_client", return_value=mock_client
-        ):
+        with patch("axonflow.interceptors.openai.wrap_openai_client", return_value=mock_client):
             result = interceptor.wrap(mock_client)
             assert result is not None
 
@@ -255,9 +247,7 @@ class TestOpenAIInterceptorCoverage:
         axonflow = MagicMock()
         interceptor = OpenAIInterceptor(axonflow)
 
-        prompt = interceptor.extract_prompt(
-            messages=[{"role": "system", "content": "System only"}]
-        )
+        prompt = interceptor.extract_prompt(messages=[{"role": "system", "content": "System only"}])
         assert "System only" in prompt
 
     def test_extract_prompt_multiple_messages(self) -> None:
@@ -314,9 +304,7 @@ class TestAnthropicInterceptorCoverage:
         axonflow = MagicMock()
         interceptor = AnthropicInterceptor(axonflow)
 
-        prompt = interceptor.extract_prompt(
-            messages=[{"role": "user", "content": "Hello string"}]
-        )
+        prompt = interceptor.extract_prompt(messages=[{"role": "user", "content": "Hello string"}])
         assert "Hello string" in prompt
 
     def test_extract_prompt_block_content_text(self) -> None:
@@ -327,9 +315,7 @@ class TestAnthropicInterceptorCoverage:
         # Content blocks are dicts, not objects
         block = {"type": "text", "text": "Block text"}
 
-        prompt = interceptor.extract_prompt(
-            messages=[{"role": "user", "content": [block]}]
-        )
+        prompt = interceptor.extract_prompt(messages=[{"role": "user", "content": [block]}])
         assert "Block text" in prompt
 
     def test_extract_prompt_non_text_block(self) -> None:
@@ -340,9 +326,7 @@ class TestAnthropicInterceptorCoverage:
         # Non-text block should be skipped
         block = {"type": "image", "source": {"data": "..."}}
 
-        prompt = interceptor.extract_prompt(
-            messages=[{"role": "user", "content": [block]}]
-        )
+        prompt = interceptor.extract_prompt(messages=[{"role": "user", "content": [block]}])
         assert prompt == ""
 
     def test_extract_prompt_empty_messages(self) -> None:
@@ -361,9 +345,7 @@ class TestAnthropicInterceptorCoverage:
         mock_client = MagicMock()
         mock_client.messages.create = MagicMock()
 
-        with patch(
-            "axonflow.interceptors.anthropic.wrap_anthropic_client"
-        ) as mock_wrap:
+        with patch("axonflow.interceptors.anthropic.wrap_anthropic_client") as mock_wrap:
             mock_wrap.return_value = mock_client
             result = wrapper(mock_client)
             mock_wrap.assert_called_once()

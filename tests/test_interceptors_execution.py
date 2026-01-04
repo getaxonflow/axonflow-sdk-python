@@ -501,10 +501,7 @@ class TestOllamaWrappedExecution:
 
         wrapped = wrap_ollama_client(mock_ollama, mock_axonflow, user_token="user")
 
-        result = wrapped.chat(
-            model="llama2",
-            messages=[{"role": "user", "content": "Hello"}]
-        )
+        result = wrapped.chat(model="llama2", messages=[{"role": "user", "content": "Hello"}])
         assert result is not None
 
     def test_ollama_chat_blocked(self) -> None:
@@ -604,8 +601,7 @@ class TestOllamaWrappedExecution:
         wrapped = await wrap_ollama_client_async(mock_ollama, mock_axonflow, user_token="user")
 
         result = await wrapped.chat(
-            model="llama2",
-            messages=[{"role": "user", "content": "Hello async"}]
+            model="llama2", messages=[{"role": "user", "content": "Hello async"}]
         )
         assert result is not None
 
@@ -724,8 +720,7 @@ class TestOpenAIWrappedExecution:
         wrapped = wrap_openai_client(mock_openai, mock_axonflow, user_token="user")
 
         result = wrapped.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": "Hello"}]
+            model="gpt-4", messages=[{"role": "user", "content": "Hello"}]
         )
         assert result is not None
 
@@ -743,8 +738,7 @@ class TestOpenAIWrappedExecution:
 
         with pytest.raises(PolicyViolationError) as exc_info:
             wrapped.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Bad"}]
+                model="gpt-4", messages=[{"role": "user", "content": "Bad"}]
             )
 
         assert "OpenAI blocked" in str(exc_info.value)
@@ -763,8 +757,7 @@ class TestOpenAIWrappedExecution:
 
         with pytest.raises(PolicyViolationError) as exc_info:
             wrapped.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Test"}]
+                model="gpt-4", messages=[{"role": "user", "content": "Test"}]
             )
 
         assert "blocked by policy" in str(exc_info.value)
@@ -785,8 +778,7 @@ class TestOpenAIWrappedExecution:
         wrapped = wrap_openai_client(mock_openai, mock_axonflow, user_token="user")
 
         result = await wrapped.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": "Hello async"}]
+            model="gpt-4o", messages=[{"role": "user", "content": "Hello async"}]
         )
         assert result is not None
 
@@ -805,8 +797,7 @@ class TestOpenAIWrappedExecution:
 
         with pytest.raises(PolicyViolationError) as exc_info:
             await wrapped.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Bad async"}]
+                model="gpt-4", messages=[{"role": "user", "content": "Bad async"}]
             )
 
         assert "Async blocked" in str(exc_info.value)
@@ -826,8 +817,7 @@ class TestOpenAIWrappedExecution:
 
         with pytest.raises(PolicyViolationError) as exc_info:
             await wrapped.chat.completions.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Test"}]
+                model="gpt-4", messages=[{"role": "user", "content": "Test"}]
             )
 
         assert "blocked by policy" in str(exc_info.value)
@@ -895,9 +885,7 @@ class TestEventLoopHandling:
 
         wrapped = wrap_openai_client(mock_openai, mock_axonflow)
 
-        result = wrapped.chat.completions.create(
-            model="gpt-4", messages=[{"content": "Hi"}]
-        )
+        result = wrapped.chat.completions.create(model="gpt-4", messages=[{"content": "Hi"}])
         assert result is not None
 
 
