@@ -5,6 +5,21 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-01-04
+
+### Added
+
+- **Portal Authentication**: Added `loginToPortal()` and `logoutFromPortal()` for session-based authentication
+- **Portal URL Configuration**: New `portal_url` config option for Code Governance portal endpoints
+- **CSV Export**: Added `export_code_governance_data_csv()` for CSV format exports
+
+### Fixed
+
+- **Code Governance Authentication**: Changed Code Governance methods to use portal session-based auth instead of API key auth
+- **Null Array Handling**: Added field_validator for null array handling in `ListPRsResponse` and `ExportResponse`
+
+---
+
 ## [0.12.0] - 2026-01-04
 
 ### Added
