@@ -506,7 +506,9 @@ class AxonFlow:
         """
         try:
             response = await self._orchestrator_request("GET", "/health")
-            return response.get("status") == "healthy"
+            if isinstance(response, dict):
+                return response.get("status") == "healthy"
+            return False
         except AxonFlowError:
             return False
 
