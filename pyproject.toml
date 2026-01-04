@@ -140,7 +140,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004", "ARG", "PLC0415", "PT011", "PT012", "TC002", "UP035", "F401", "F841", "EM101", "TRY301"]
+"tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004", "ARG", "PLC0415", "PT011", "PT012", "TC001", "TC002", "UP035", "F401", "F841", "EM101", "TRY301"]
 "examples/**/*.py" = ["T201", "ANN", "S106", "ERA001", "BLE001", "PLC0415", "F541"]
 "scripts/**/*.py" = ["T201", "ANN", "S106", "BLE001", "UP045", "DTZ005", "PTH123"]
 
