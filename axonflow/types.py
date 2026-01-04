@@ -68,6 +68,7 @@ class AxonFlowConfig(BaseModel):
 
     agent_url: str = Field(..., min_length=1, description="AxonFlow Agent URL")
     orchestrator_url: str | None = Field(default=None, description="Orchestrator URL")
+    portal_url: str | None = Field(default=None, description="Customer Portal URL (enterprise)")
     client_id: str | None = Field(default=None, description="Client ID (optional)")
     client_secret: str | None = Field(default=None, description="Client secret (optional)")
     license_key: str | None = Field(default=None, description="License key")
