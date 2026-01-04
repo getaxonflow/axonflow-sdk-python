@@ -5,6 +5,22 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-01-04
+
+### Added
+
+- **Orchestrator Health Check**: `orchestrator_health_check()` to verify Orchestrator service health
+- **Uninstall Connector**: `uninstall_connector()` to remove installed MCP connectors
+
+### Fixed
+
+- **Connector API Endpoints**: Fixed endpoints to use Orchestrator (port 8081) instead of Agent
+  - `list_connectors()` - Changed from Agent `/api/connectors` to Orchestrator `/api/v1/connectors`
+  - `install_connector()` - Fixed path to `/api/v1/connectors/{id}/install`
+- **Dynamic Policies Endpoint**: Changed from Agent `/api/v1/policies` to Orchestrator `/api/v1/policies/dynamic`
+
+---
+
 ## [0.11.0] - 2026-01-04
 
 ### Added
