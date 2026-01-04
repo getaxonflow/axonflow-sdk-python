@@ -498,6 +498,18 @@ class AxonFlow:
         except AxonFlowError:
             return False
 
+    async def orchestrator_health_check(self) -> bool:
+        """Check if AxonFlow Orchestrator is healthy.
+
+        Returns:
+            True if orchestrator is healthy, False otherwise
+        """
+        try:
+            response = await self._orchestrator_request("GET", "/health")
+            return response.get("status") == "healthy"
+        except AxonFlowError:
+            return False
+
     async def execute_query(
         self,
         user_token: str,
@@ -600,6 +612,20 @@ class AxonFlow:
 
         if self._config.debug:
             self._logger.info("Connector installed", name=request.name)
+
+    async def uninstall_connector(self, connector_name: str) -> None:
+        """Uninstall an MCP connector.
+
+        Args:
+            connector_name: Name of the connector to uninstall
+        """
+        await self._orchestrator_request(
+            "DELETE",
+            f"/api/v1/connectors/{connector_name}",
+        )
+
+        if self._config.debug:
+            self._logger.info("Connector uninstalled", name=connector_name)
 
     async def query_connector(
         self,
@@ -2292,6 +2318,10 @@ class SyncAxonFlow:
         """Check if AxonFlow Agent is healthy."""
         return self._run_sync(self._async_client.health_check())
 
+    def orchestrator_health_check(self) -> bool:
+        """Check if AxonFlow Orchestrator is healthy."""
+        return self._run_sync(self._async_client.orchestrator_health_check())
+
     def execute_query(
         self,
         user_token: str,
@@ -2311,6 +2341,10 @@ class SyncAxonFlow:
     def install_connector(self, request: ConnectorInstallRequest) -> None:
         """Install an MCP connector."""
         return self._run_sync(self._async_client.install_connector(request))
+
+    def uninstall_connector(self, connector_name: str) -> None:
+        """Uninstall an MCP connector."""
+        return self._run_sync(self._async_client.uninstall_connector(connector_name))
 
     def query_connector(
         self,
