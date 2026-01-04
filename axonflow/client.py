@@ -1362,9 +1362,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting dynamic policy", policy_id=policy_id)
 
-        response = await self._orchestrator_request(
-            "GET", f"/api/v1/policies/dynamic/{policy_id}"
-        )
+        response = await self._orchestrator_request("GET", f"/api/v1/policies/dynamic/{policy_id}")
         return DynamicPolicy.model_validate(response)
 
     async def create_dynamic_policy(
