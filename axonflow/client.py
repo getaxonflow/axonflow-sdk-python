@@ -2016,9 +2016,7 @@ class AxonFlow:
         response = await self._orchestrator_request("GET", f"/api/v1/budgets/{budget_id}")
         return Budget.model_validate(response)
 
-    async def list_budgets(
-        self, options: ListBudgetsOptions | None = None
-    ) -> BudgetsResponse:
+    async def list_budgets(self, options: ListBudgetsOptions | None = None) -> BudgetsResponse:
         """List all budgets.
 
         Args:
@@ -2044,9 +2042,7 @@ class AxonFlow:
         response = await self._orchestrator_request("GET", path)
         return BudgetsResponse.model_validate(response)
 
-    async def update_budget(
-        self, budget_id: str, request: UpdateBudgetRequest
-    ) -> Budget:
+    async def update_budget(self, budget_id: str, request: UpdateBudgetRequest) -> Budget:
         """Update an existing budget.
 
         Args:
@@ -2086,9 +2082,7 @@ class AxonFlow:
             Budget status including usage and remaining amount
         """
 
-        response = await self._orchestrator_request(
-            "GET", f"/api/v1/budgets/{budget_id}/status"
-        )
+        response = await self._orchestrator_request("GET", f"/api/v1/budgets/{budget_id}/status")
         return BudgetStatus.model_validate(response)
 
     async def get_budget_alerts(self, budget_id: str) -> BudgetAlertsResponse:
@@ -2101,9 +2095,7 @@ class AxonFlow:
             Budget alerts
         """
 
-        response = await self._orchestrator_request(
-            "GET", f"/api/v1/budgets/{budget_id}/alerts"
-        )
+        response = await self._orchestrator_request("GET", f"/api/v1/budgets/{budget_id}/alerts")
         return BudgetAlertsResponse.model_validate(response)
 
     async def check_budget(self, request: BudgetCheckRequest) -> BudgetDecision:
@@ -2142,9 +2134,7 @@ class AxonFlow:
         response = await self._orchestrator_request("GET", path)
         return UsageSummary.model_validate(response)
 
-    async def get_usage_breakdown(
-        self, group_by: str, period: str | None = None
-    ) -> UsageBreakdown:
+    async def get_usage_breakdown(self, group_by: str, period: str | None = None) -> UsageBreakdown:
         """Get usage breakdown by a grouping dimension.
 
         Args:
@@ -2606,15 +2596,11 @@ class SyncAxonFlow:
         """Get a budget by ID."""
         return self._run_sync(self._async_client.get_budget(budget_id))
 
-    def list_budgets(
-        self, options: ListBudgetsOptions | None = None
-    ) -> BudgetsResponse:
+    def list_budgets(self, options: ListBudgetsOptions | None = None) -> BudgetsResponse:
         """List all budgets."""
         return self._run_sync(self._async_client.list_budgets(options))
 
-    def update_budget(
-        self, budget_id: str, request: UpdateBudgetRequest
-    ) -> Budget:
+    def update_budget(self, budget_id: str, request: UpdateBudgetRequest) -> Budget:
         """Update an existing budget."""
         return self._run_sync(self._async_client.update_budget(budget_id, request))
 
@@ -2638,9 +2624,7 @@ class SyncAxonFlow:
         """Get usage summary for a period."""
         return self._run_sync(self._async_client.get_usage_summary(period))
 
-    def get_usage_breakdown(
-        self, group_by: str, period: str | None = None
-    ) -> UsageBreakdown:
+    def get_usage_breakdown(self, group_by: str, period: str | None = None) -> UsageBreakdown:
         """Get usage breakdown by a grouping dimension."""
         return self._run_sync(self._async_client.get_usage_breakdown(group_by, period))
 
