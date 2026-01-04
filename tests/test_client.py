@@ -332,7 +332,7 @@ class TestConnectors:
         )
 
         request = httpx_mock.get_requests()[0]
-        assert "/api/connectors/install" in str(request.url)
+        assert "/api/v1/connectors/salesforce/install" in str(request.url)
 
     @pytest.mark.asyncio
     async def test_query_connector(
