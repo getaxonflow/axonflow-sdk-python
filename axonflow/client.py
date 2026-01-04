@@ -579,8 +579,12 @@ class AxonFlow:
         Returns:
             List of connector metadata
         """
-        response = await self._request("GET", "/api/connectors")
-        return [ConnectorMetadata.model_validate(c) for c in response]
+        response = await self._orchestrator_request("GET", "/api/v1/connectors")
+        # Response is wrapped: {"connectors": [...], "total": N}
+        if isinstance(response, dict) and "connectors" in response:
+            return [ConnectorMetadata.model_validate(c) for c in response["connectors"]]
+        # Fallback for direct list response
+        return [ConnectorMetadata.model_validate(c) for c in response or []]
 
     async def install_connector(self, request: ConnectorInstallRequest) -> None:
         """Install an MCP connector.
@@ -588,10 +592,10 @@ class AxonFlow:
         Args:
             request: Connector installation request
         """
-        await self._request(
+        await self._orchestrator_request(
             "POST",
-            "/api/connectors/install",
-            json_data=request.model_dump(),
+            f"/api/v1/connectors/{request.connector_id}/install",
+            json_data=request.model_dump(exclude={"connector_id"}),
         )
 
         if self._config.debug:
@@ -1336,15 +1340,15 @@ class AxonFlow:
             if options.search:
                 params.append(f"search={options.search}")
 
-        path = "/api/v1/policies"
+        path = "/api/v1/policies/dynamic"
         if params:
             path = f"{path}?{'&'.join(params)}"
 
         if self._config.debug:
             self._logger.debug("Listing dynamic policies", path=path)
 
-        response = await self._request("GET", path)
-        return [DynamicPolicy.model_validate(p) for p in response]
+        response = await self._orchestrator_request("GET", path)
+        return [DynamicPolicy.model_validate(p) for p in response or []]
 
     async def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
         """Get a specific dynamic policy by ID.
@@ -1358,7 +1362,9 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting dynamic policy", policy_id=policy_id)
 
-        response = await self._request("GET", f"/api/v1/policies/{policy_id}")
+        response = await self._orchestrator_request(
+            "GET", f"/api/v1/policies/dynamic/{policy_id}"
+        )
         return DynamicPolicy.model_validate(response)
 
     async def create_dynamic_policy(
@@ -1376,9 +1382,9 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Creating dynamic policy", name=request.name)
 
-        response = await self._request(
+        response = await self._orchestrator_request(
             "POST",
-            "/api/v1/policies",
+            "/api/v1/policies/dynamic",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return DynamicPolicy.model_validate(response)
@@ -1400,9 +1406,9 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Updating dynamic policy", policy_id=policy_id)
 
-        response = await self._request(
+        response = await self._orchestrator_request(
             "PUT",
-            f"/api/v1/policies/{policy_id}",
+            f"/api/v1/policies/dynamic/{policy_id}",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return DynamicPolicy.model_validate(response)
@@ -1416,7 +1422,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Deleting dynamic policy", policy_id=policy_id)
 
-        await self._request("DELETE", f"/api/v1/policies/{policy_id}")
+        await self._orchestrator_request("DELETE", f"/api/v1/policies/dynamic/{policy_id}")
 
     async def toggle_dynamic_policy(
         self,
@@ -1435,9 +1441,9 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Toggling dynamic policy", policy_id=policy_id, enabled=enabled)
 
-        response = await self._request(
+        response = await self._orchestrator_request(
             "PATCH",
-            f"/api/v1/policies/{policy_id}",
+            f"/api/v1/policies/dynamic/{policy_id}",
             json_data={"enabled": enabled},
         )
         return DynamicPolicy.model_validate(response)
@@ -1461,15 +1467,15 @@ class AxonFlow:
             if options.include_disabled:
                 query_params.append("include_disabled=true")
 
-        path = "/api/v1/policies/effective"
+        path = "/api/v1/policies/dynamic/effective"
         if query_params:
             path = f"{path}?{'&'.join(query_params)}"
 
         if self._config.debug:
             self._logger.debug("Getting effective dynamic policies", path=path)
 
-        response = await self._request("GET", path)
-        return [DynamicPolicy.model_validate(p) for p in response]
+        response = await self._orchestrator_request("GET", path)
+        return [DynamicPolicy.model_validate(p) for p in response or []]
 
     # =========================================================================
     # Code Governance Methods (Enterprise)
