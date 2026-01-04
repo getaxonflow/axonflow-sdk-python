@@ -936,3 +936,241 @@ class TestExecutionReplay:
         )
         with pytest.raises(Exception):  # noqa: B017
             await client.get_execution("nonexistent")
+
+
+class TestPortalAuthentication:
+    """Test Customer Portal authentication."""
+
+    @pytest.mark.asyncio
+    async def test_login_to_portal_success(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test successful portal login."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={
+                "session_id": "test-session-123",
+                "org_id": "test-org-001",
+                "name": "Test Org",
+                "expires_at": "2026-01-04T12:00:00Z",
+            },
+        )
+        result = await client.login_to_portal("test-org-001", "test123")
+        assert result["org_id"] == "test-org-001"
+        assert result["name"] == "Test Org"
+        assert client.is_logged_in() is True
+
+    @pytest.mark.asyncio
+    async def test_login_to_portal_failure(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test portal login failure."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            status_code=401,
+            json={"error": "Invalid credentials"},
+        )
+        with pytest.raises(AuthenticationError):
+            await client.login_to_portal("bad-org", "bad-password")
+        assert client.is_logged_in() is False
+
+    @pytest.mark.asyncio
+    async def test_logout_from_portal(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test portal logout."""
+        # First login
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={"session_id": "test-session-123", "org_id": "test-org"},
+        )
+        await client.login_to_portal("test-org", "test123")
+        assert client.is_logged_in() is True
+
+        # Then logout
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/logout",
+            method="POST",
+            status_code=204,
+        )
+        await client.logout_from_portal()
+        assert client.is_logged_in() is False
+
+    @pytest.mark.asyncio
+    async def test_logout_when_not_logged_in(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test logout when not logged in does nothing."""
+        assert client.is_logged_in() is False
+        await client.logout_from_portal()  # Should not raise
+        assert client.is_logged_in() is False
+
+    @pytest.mark.asyncio
+    async def test_portal_request_requires_login(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test portal request without login raises error."""
+        with pytest.raises(AuthenticationError, match="Not logged in"):
+            await client.list_git_providers()
+
+    @pytest.mark.asyncio
+    async def test_is_logged_in(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test is_logged_in returns correct state."""
+        assert client.is_logged_in() is False
+
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={"session_id": "test-session", "org_id": "test"},
+        )
+        await client.login_to_portal("test", "pass")
+        assert client.is_logged_in() is True
+
+    @pytest.mark.asyncio
+    async def test_get_portal_url_default(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test portal URL defaults to agent URL with port 8082."""
+        # Client has agent_url https://test.axonflow.com
+        url = client._async_client._get_portal_url()
+        assert url == "https://test.axonflow.com:8082"
+
+    @pytest.mark.asyncio
+    async def test_get_portal_url_custom(self) -> None:
+        """Test custom portal URL is used."""
+        custom_client = AxonFlow(
+            agent_url="https://test.axonflow.com",
+            portal_url="https://portal.custom.com",
+            client_id="test",
+            client_secret="test",
+        )
+        url = custom_client._async_client._get_portal_url()
+        assert url == "https://portal.custom.com"
+
+
+class TestCodeGovernance:
+    """Test Code Governance methods."""
+
+    @pytest.mark.asyncio
+    async def test_list_git_providers(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing Git providers."""
+        # First login
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={"session_id": "test-session", "org_id": "test"},
+        )
+        await client.login_to_portal("test", "pass")
+
+        # Then list providers
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/code-governance/git-providers",
+            json={"providers": [{"type": "github"}], "count": 1},
+        )
+        result = await client.list_git_providers()
+        assert result.count == 1
+        assert len(result.providers) == 1
+
+    @pytest.mark.asyncio
+    async def test_validate_git_provider(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test validating Git provider credentials."""
+        # First login
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={"session_id": "test-session", "org_id": "test"},
+        )
+        await client.login_to_portal("test", "pass")
+
+        # Validate provider
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/code-governance/git-providers/validate",
+            method="POST",
+            json={"valid": True, "message": "Token validated"},
+        )
+        from axonflow.code_governance import ValidateGitProviderRequest
+
+        result = await client.validate_git_provider(
+            ValidateGitProviderRequest(type="github", token="test-token")
+        )
+        assert result.valid is True
+
+    @pytest.mark.asyncio
+    async def test_get_code_governance_metrics(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting code governance metrics."""
+        # First login
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={"session_id": "test-session", "org_id": "test"},
+        )
+        await client.login_to_portal("test", "pass")
+
+        # Get metrics
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/code-governance/metrics",
+            json={
+                "total_prs": 42,
+                "open_prs": 5,
+                "merged_prs": 30,
+                "closed_prs": 7,
+                "total_files": 156,
+                "total_secrets_detected": 3,
+                "total_unsafe_patterns": 8,
+            },
+        )
+        result = await client.get_code_governance_metrics()
+        assert result.total_prs == 42
+        assert result.merged_prs == 30
+
+    @pytest.mark.asyncio
+    async def test_export_code_governance_data_csv(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test exporting code governance data as CSV."""
+        # First login
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            method="POST",
+            json={"session_id": "test-session", "org_id": "test"},
+        )
+        await client.login_to_portal("test", "pass")
+
+        # Export CSV
+        httpx_mock.add_response(
+            url="https://test.axonflow.com:8082/api/v1/code-governance/export?format=csv",
+            text="id,title,state\npr-1,Test PR,open\n",
+        )
+        result = await client.export_code_governance_data_csv()
+        assert "id,title,state" in result
+        assert "pr-1" in result
