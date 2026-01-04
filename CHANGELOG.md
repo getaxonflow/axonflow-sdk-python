@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Get Connector**: `get_connector(id)` to retrieve details for a specific connector
+- **Connector Health Check**: `get_connector_health(id)` to check health status of an installed connector
+- **ConnectorHealthStatus type**: New type for connector health responses
 - **Orchestrator Health Check**: `orchestrator_health_check()` to verify Orchestrator service health
 - **Uninstall Connector**: `uninstall_connector()` to remove installed MCP connectors
 

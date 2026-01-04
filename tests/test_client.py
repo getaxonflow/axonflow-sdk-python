@@ -358,6 +358,96 @@ class TestConnectors:
         assert result.success is True
         assert result.data["rows"][0]["id"] == 1
 
+    @pytest.mark.asyncio
+    async def test_get_connector(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting a specific connector."""
+        httpx_mock.add_response(
+            json={
+                "id": "postgres",
+                "name": "PostgreSQL",
+                "description": "PostgreSQL connector",
+                "type": "database",
+                "version": "1.0.0",
+                "installed": True,
+                "capabilities": ["query", "list-resources"],
+            }
+        )
+
+        connector = await client.get_connector("postgres")
+
+        assert connector.id == "postgres"
+        assert connector.name == "PostgreSQL"
+        assert connector.installed is True
+        request = httpx_mock.get_requests()[0]
+        assert "/api/v1/connectors/postgres" in str(request.url)
+
+    @pytest.mark.asyncio
+    async def test_get_connector_not_found(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting a connector that doesn't exist."""
+        from axonflow.exceptions import AxonFlowError
+
+        httpx_mock.add_response(
+            status_code=404,
+            json={"error": "connector not found"},
+        )
+
+        with pytest.raises(AxonFlowError, match="HTTP 404"):
+            await client.get_connector("nonexistent")
+
+    @pytest.mark.asyncio
+    async def test_get_connector_health(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting connector health status."""
+        httpx_mock.add_response(
+            json={
+                "healthy": True,
+                "latency": 42000000,
+                "details": {"version": "14.2"},
+                "timestamp": "2026-01-04T12:00:00Z",
+            }
+        )
+
+        health = await client.get_connector_health("postgres")
+
+        assert health.healthy is True
+        assert health.latency == 42000000
+        assert health.details["version"] == "14.2"
+        request = httpx_mock.get_requests()[0]
+        assert "/api/v1/connectors/postgres/health" in str(request.url)
+
+    @pytest.mark.asyncio
+    async def test_get_connector_health_unhealthy(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting health for an unhealthy connector."""
+        httpx_mock.add_response(
+            json={
+                "healthy": False,
+                "latency": 0,
+                "details": {},
+                "timestamp": "2026-01-04T12:00:00Z",
+                "error": "connection refused",
+            }
+        )
+
+        health = await client.get_connector_health("postgres")
+
+        assert health.healthy is False
+        assert health.error == "connection refused"
+
 
 class TestPlanning:
     """Test multi-agent planning."""
