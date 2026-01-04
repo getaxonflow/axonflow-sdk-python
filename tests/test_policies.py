@@ -484,7 +484,7 @@ class TestPolicyTypes:
         """Test create static policy request with organization ID (Enterprise)."""
         request = CreateStaticPolicyRequest(
             name="Org Policy",
-            category=PolicyCategory.CUSTOM,
+            category=PolicyCategory.CODE_SECRETS,
             tier=PolicyTier.ORGANIZATION,
             organization_id="org_12345",
             pattern=r"\bconfidential\b",
