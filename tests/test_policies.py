@@ -54,12 +54,8 @@ SAMPLE_DYNAMIC_POLICY = {
     "name": "Rate Limit API",
     "description": "Rate limit API calls",
     "type": "cost",
-    "conditions": [
-        {"field": "requests_per_minute", "operator": "greater_than", "value": 100}
-    ],
-    "actions": [
-        {"type": "block", "config": {"reason": "Rate limit exceeded"}}
-    ],
+    "conditions": [{"field": "requests_per_minute", "operator": "greater_than", "value": 100}],
+    "actions": [{"type": "block", "config": {"reason": "Rate limit exceeded"}}],
     "priority": 50,
     "enabled": True,
     "created_at": "2025-01-01T00:00:00Z",
@@ -378,17 +374,10 @@ class TestDynamicPolicies:
             type="cost",
             conditions=[
                 DynamicPolicyCondition(
-                    field="requests_per_minute",
-                    operator="greater_than",
-                    value=100
+                    field="requests_per_minute", operator="greater_than", value=100
                 )
             ],
-            actions=[
-                DynamicPolicyAction(
-                    type="block",
-                    config={"reason": "Rate limit exceeded"}
-                )
-            ],
+            actions=[DynamicPolicyAction(type="block", config={"reason": "Rate limit exceeded"})],
             priority=50,
         )
         policy = await client.create_dynamic_policy(request)
@@ -405,9 +394,7 @@ class TestDynamicPolicies:
         request = UpdateDynamicPolicyRequest(
             conditions=[
                 DynamicPolicyCondition(
-                    field="requests_per_minute",
-                    operator="greater_than",
-                    value=200
+                    field="requests_per_minute", operator="greater_than", value=200
                 )
             ],
         )
@@ -513,15 +500,9 @@ class TestPolicyTypes:
             name="Test Dynamic",
             type="risk",
             conditions=[
-                DynamicPolicyCondition(
-                    field="risk_score",
-                    operator="greater_than",
-                    value=0.8
-                )
+                DynamicPolicyCondition(field="risk_score", operator="greater_than", value=0.8)
             ],
-            actions=[
-                DynamicPolicyAction(type="alert", config={"severity": "high"})
-            ],
+            actions=[DynamicPolicyAction(type="alert", config={"severity": "high"})],
         )
         assert request.name == "Test Dynamic"
         assert request.type == "risk"
