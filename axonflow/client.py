@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import hashlib
 import re
 from collections.abc import Coroutine
@@ -162,7 +163,9 @@ class AxonFlow:
         config: Client configuration
     """
 
-    __slots__ = ("_config", "_http_client", "_map_http_client", "_cache", "_logger", "_session_cookie")
+    __slots__ = (
+        "_config", "_http_client", "_map_http_client", "_cache", "_logger", "_session_cookie"
+    )
 
     def __init__(
         self,
@@ -1927,29 +1930,29 @@ class AxonFlow:
                 json={"org_id": org_id, "password": password},
             )
             response.raise_for_status()
-            result: dict[str, Any] = response.json()
-
-            # Extract session cookie
-            for cookie in response.cookies.jar:
-                if cookie.name == "axonflow_session":
-                    self._session_cookie = cookie.value
-                    break
-
-            # Fallback to session_id in response body
-            if not self._session_cookie and "session_id" in result:
-                self._session_cookie = result["session_id"]
-
-            if self._config.debug:
-                self._logger.info("Portal login successful", org_id=org_id)
-
-            return result
-
         except httpx.HTTPStatusError as e:
             msg = f"Login failed: HTTP {e.response.status_code}: {e.response.text}"
             raise AuthenticationError(msg) from e
         except httpx.ConnectError as e:
             msg = f"Failed to connect to Customer Portal: {e}"
             raise ConnectionError(msg) from e
+
+        result: dict[str, Any] = response.json()
+
+        # Extract session cookie
+        for cookie in response.cookies.jar:
+            if cookie.name == "axonflow_session":
+                self._session_cookie = cookie.value
+                break
+
+        # Fallback to session_id in response body
+        if not self._session_cookie and "session_id" in result:
+            self._session_cookie = result["session_id"]
+
+        if self._config.debug:
+            self._logger.info("Portal login successful", org_id=org_id)
+
+        return result
 
     async def logout_from_portal(self) -> None:
         """Logout from Customer Portal and clear session cookie."""
@@ -1959,13 +1962,11 @@ class AxonFlow:
         base_url = self._get_portal_url()
         url = f"{base_url}/api/v1/auth/logout"
 
-        try:
+        with contextlib.suppress(httpx.HTTPError):
             await self._http_client.post(
                 url,
                 cookies={"axonflow_session": self._session_cookie},
             )
-        except Exception:
-            pass  # Ignore logout errors
 
         self._session_cookie = None
 
@@ -2037,18 +2038,16 @@ class AxonFlow:
         base_url = self._get_portal_url()
         url = f"{base_url}{path}"
 
-        try:
-            if self._config.debug:
-                self._logger.debug("Portal request (text)", method=method, path=path)
+        if self._config.debug:
+            self._logger.debug("Portal request (text)", method=method, path=path)
 
+        try:
             response = await self._http_client.request(
                 method,
                 url,
                 cookies={"axonflow_session": self._session_cookie},
             )
             response.raise_for_status()
-            return response.text
-
         except httpx.ConnectError as e:
             msg = f"Failed to connect to Customer Portal: {e}"
             raise ConnectionError(msg) from e
@@ -2058,6 +2057,8 @@ class AxonFlow:
         except httpx.HTTPStatusError as e:
             msg = f"HTTP {e.response.status_code}: {e.response.text}"
             raise AxonFlowError(msg) from e
+
+        return response.text
 
     async def _orchestrator_request(
         self,
