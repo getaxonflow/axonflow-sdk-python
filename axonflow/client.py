@@ -164,7 +164,12 @@ class AxonFlow:
     """
 
     __slots__ = (
-        "_config", "_http_client", "_map_http_client", "_cache", "_logger", "_session_cookie"
+        "_config",
+        "_http_client",
+        "_map_http_client",
+        "_cache",
+        "_logger",
+        "_session_cookie",
     )
 
     def __init__(
