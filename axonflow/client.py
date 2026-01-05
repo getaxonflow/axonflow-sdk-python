@@ -1731,7 +1731,7 @@ class AxonFlow:
             self._logger.debug("Toggling dynamic policy", policy_id=policy_id, enabled=enabled)
 
         response = await self._orchestrator_request(
-            "PATCH",
+            "PUT",
             f"/api/v1/dynamic-policies/{policy_id}",
             json_data={"enabled": enabled},
         )
