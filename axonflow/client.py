@@ -974,6 +974,7 @@ class AxonFlow:
         return PolicyApprovalResult(
             context_id=response["context_id"],
             approved=response["approved"],
+            requires_redaction=response.get("requires_redaction", False),
             approved_data=response.get("approved_data", {}),
             policies=response.get("policies", []),
             rate_limit_info=rate_limit,
