@@ -10,7 +10,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Mode(str, Enum):
@@ -425,6 +425,12 @@ class ListExecutionsResponse(BaseModel):
     total: int = Field(default=0, ge=0, description="Total count")
     limit: int = Field(default=50, ge=1, description="Page size")
     offset: int = Field(default=0, ge=0, description="Offset")
+
+    @field_validator("executions", mode="before")
+    @classmethod
+    def handle_null_executions(cls, v: Any) -> list[Any]:
+        """Handle null executions from API (returns empty list instead)."""
+        return v if v is not None else []
 
 
 class ExecutionDetail(BaseModel):

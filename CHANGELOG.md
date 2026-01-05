@@ -5,6 +5,20 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-05
+
+### Added
+
+- **Sensitive Data Category**: Added `SENSITIVE_DATA` to `PolicyCategory` enum for policies that return `sensitive-data` category
+- **Provider Restrictions for Compliance**: Support for `allowed_providers` in dynamic policy action config
+  - Specify allowed providers via `DynamicPolicyAction(type="route", config={"allowed_providers": [...]})`
+  - Enables GDPR, HIPAA, and RBI compliance by restricting LLM routing to specific providers
+
+### Fixed
+
+- **toggle_dynamic_policy HTTP Method**: Changed from PATCH to PUT to match API specification
+- **ListExecutionsResponse null handling**: Fixed validation error when API returns `null` for executions field (now returns empty list)
+
 ## [1.0.0] - 2026-01-05
 
 ### Breaking Changes

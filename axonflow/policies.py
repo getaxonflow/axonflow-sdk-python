@@ -34,6 +34,9 @@ class PolicyCategory(str, Enum):
     CODE_UNSAFE = "code-unsafe"
     CODE_COMPLIANCE = "code-compliance"
 
+    # Sensitive data category
+    SENSITIVE_DATA = "sensitive-data"
+
     # Dynamic policy categories
     DYNAMIC_RISK = "dynamic-risk"
     DYNAMIC_COMPLIANCE = "dynamic-compliance"
@@ -217,6 +220,10 @@ class DynamicPolicy(BaseModel):
 
     Dynamic policies are LLM-powered policies that can evaluate complex,
     context-aware rules that can't be expressed with simple regex patterns.
+
+    For provider restrictions (GDPR, HIPAA, RBI compliance), use action config:
+        actions=[DynamicPolicyAction(type="route",
+            config={"allowed_providers": ["ollama", "azure-eu"]})]
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -247,7 +254,10 @@ class ListDynamicPoliciesOptions(BaseModel):
 
 
 class CreateDynamicPolicyRequest(BaseModel):
-    """Request to create a dynamic policy."""
+    """Request to create a dynamic policy.
+
+    For provider restrictions, use action config with "allowed_providers" key.
+    """
 
     name: str = Field(..., min_length=1)
     description: str | None = None
@@ -260,7 +270,10 @@ class CreateDynamicPolicyRequest(BaseModel):
 
 
 class UpdateDynamicPolicyRequest(BaseModel):
-    """Request to update a dynamic policy."""
+    """Request to update a dynamic policy.
+
+    For provider restrictions, use action config with "allowed_providers" key.
+    """
 
     name: str | None = None
     description: str | None = None
