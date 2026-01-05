@@ -18,7 +18,7 @@ class TestSyncClientCoverage:
         """Test creating a sync client."""
         client = AxonFlow.sync(**config_dict)
         assert isinstance(client, SyncAxonFlow)
-        assert client.config.agent_url == config_dict["agent_url"]
+        assert client.config.endpoint == config_dict["endpoint"]
         client.close()
 
     def test_sync_client_context_manager(self, config_dict: dict[str, Any]) -> None:

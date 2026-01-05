@@ -75,7 +75,7 @@ SAMPLE_OVERRIDE = {
 def client() -> AxonFlow:
     """Create a test client."""
     return AxonFlow(
-        agent_url="http://localhost:8080",
+        endpoint="http://localhost:8080",
         client_id="test-client",
         client_secret="test-secret",
     )
@@ -413,7 +413,7 @@ class TestDynamicPolicies:
 
         http_request = httpx_mock.get_request()
         assert http_request.method == "DELETE"
-        assert "/api/v1/policies/dynamic/dpol_456" in str(http_request.url)
+        assert "/api/v1/dynamic-policies/dpol_456" in str(http_request.url)
 
     @pytest.mark.asyncio
     async def test_toggle_dynamic_policy(self, client: AxonFlow, httpx_mock: HTTPXMock) -> None:
@@ -436,7 +436,7 @@ class TestDynamicPolicies:
 
         assert len(policies) == 1
         request = httpx_mock.get_request()
-        assert "/api/v1/policies/dynamic/effective" in str(request.url)
+        assert "/api/v1/dynamic-policies/effective" in str(request.url)
 
 
 class TestPolicyTypes:

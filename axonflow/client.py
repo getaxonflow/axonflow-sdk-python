@@ -7,17 +7,17 @@ Example:
     >>> from axonflow import AxonFlow
     >>>
     >>> # Async usage (enterprise with authentication)
-    >>> async with AxonFlow(agent_url="...", client_id="...", client_secret="...") as client:
+    >>> async with AxonFlow(endpoint="...", client_id="...", client_secret="...") as client:
     ...     result = await client.execute_query("user-token", "What is AI?", "chat")
     ...     print(result.data)
     >>>
     >>> # Async usage (community/self-hosted - no auth required)
-    >>> async with AxonFlow(agent_url="http://localhost:8080") as client:
+    >>> async with AxonFlow(endpoint="http://localhost:8080") as client:
     ...     result = await client.execute_query("user-token", "What is AI?", "chat")
     ...     print(result.data)
     >>>
     >>> # Sync usage
-    >>> client = AxonFlow.sync(agent_url="...", client_id="...", client_secret="...")
+    >>> client = AxonFlow.sync(endpoint="...", client_id="...", client_secret="...")
     >>> result = client.execute_query("user-token", "What is AI?", "chat")
 """
 
@@ -31,7 +31,7 @@ import re
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
-from urllib.parse import urlparse
+import os
 
 import httpx
 import structlog
@@ -178,12 +178,10 @@ class AxonFlow:
 
     def __init__(
         self,
-        agent_url: str,
+        endpoint: str | None = None,
         client_id: str | None = None,
         client_secret: str | None = None,
         *,
-        orchestrator_url: str | None = None,
-        portal_url: str | None = None,
         license_key: str | None = None,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
@@ -198,13 +196,9 @@ class AxonFlow:
         """Initialize AxonFlow client.
 
         Args:
-            agent_url: AxonFlow Agent URL
+            endpoint: AxonFlow endpoint URL. Can also be set via AXONFLOW_AGENT_URL env var.
             client_id: Client ID (optional for community/self-hosted mode)
             client_secret: Client secret (optional for community/self-hosted mode)
-            orchestrator_url: Orchestrator URL for Execution Replay API
-                (optional, defaults to agent URL with port 8081)
-            portal_url: Customer Portal URL for enterprise PR workflow features
-                (optional, defaults to agent URL with port 8082)
             license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
@@ -220,14 +214,20 @@ class AxonFlow:
         Note:
             For community/self-hosted deployments, client_id and client_secret can be omitted.
             The SDK will work without authentication headers in this mode.
+
+            As of v1.0.0, all routes go through a single endpoint (Single Entry Point Architecture).
         """
+        # Support AXONFLOW_AGENT_URL env var for backwards compatibility
+        resolved_endpoint = endpoint or os.environ.get("AXONFLOW_AGENT_URL")
+        if not resolved_endpoint:
+            msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
+            raise ValueError(msg)
+
         if isinstance(mode, str):
             mode = Mode(mode)
 
         self._config = AxonFlowConfig(
-            agent_url=agent_url.rstrip("/"),
-            orchestrator_url=orchestrator_url.rstrip("/") if orchestrator_url else None,
-            portal_url=portal_url.rstrip("/") if portal_url else None,
+            endpoint=resolved_endpoint.rstrip("/"),
             client_id=client_id,
             client_secret=client_secret,
             license_key=license_key,
@@ -287,7 +287,7 @@ class AxonFlow:
         if debug:
             self._logger.info(
                 "AxonFlow client initialized",
-                agent_url=agent_url,
+                endpoint=endpoint,
             )
 
     @property
@@ -343,7 +343,7 @@ class AxonFlow:
     @classmethod
     def sync(
         cls,
-        agent_url: str,
+        endpoint: str,
         client_id: str | None = None,
         client_secret: str | None = None,
         **kwargs: Any,
@@ -352,14 +352,14 @@ class AxonFlow:
 
         Example:
             >>> # Enterprise mode with authentication
-            >>> client = AxonFlow.sync(agent_url="...", client_id="...", client_secret="...")
+            >>> client = AxonFlow.sync(endpoint="...", client_id="...", client_secret="...")
             >>> result = client.execute_query("token", "query", "chat")
             >>>
             >>> # Community/self-hosted mode (no auth required)
-            >>> client = AxonFlow.sync(agent_url="http://localhost:8080")
+            >>> client = AxonFlow.sync(endpoint="http://localhost:8080")
             >>> result = client.execute_query("token", "query", "chat")
         """
-        return SyncAxonFlow(cls(agent_url, client_id, client_secret, **kwargs))
+        return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
     @classmethod
     def sandbox(cls, api_key: str = "demo-key") -> AxonFlow:
@@ -372,7 +372,7 @@ class AxonFlow:
             Configured AxonFlow client for sandbox environment
         """
         return cls(
-            agent_url="https://staging-eu.getaxonflow.com",
+            endpoint="https://staging-eu.getaxonflow.com",
             client_id=api_key,
             client_secret=api_key,
             mode=Mode.SANDBOX,
@@ -392,7 +392,7 @@ class AxonFlow:
         json_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Make HTTP request to Agent."""
-        url = f"{self._config.agent_url}{path}"
+        url = f"{self._config.endpoint}{path}"
 
         try:
             if self._config.retry.enabled:
@@ -467,7 +467,7 @@ class AxonFlow:
         This uses the longer map_timeout for MAP operations that involve
         multiple LLM calls and can take 30-60+ seconds.
         """
-        url = f"{self._config.agent_url}{path}"
+        url = f"{self._config.endpoint}{path}"
 
         try:
             if self._config.debug:
@@ -1623,7 +1623,7 @@ class AxonFlow:
             if options.search:
                 params.append(f"search={options.search}")
 
-        path = "/api/v1/policies/dynamic"
+        path = "/api/v1/dynamic-policies"
         if params:
             path = f"{path}?{'&'.join(params)}"
 
@@ -1645,7 +1645,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting dynamic policy", policy_id=policy_id)
 
-        response = await self._orchestrator_request("GET", f"/api/v1/policies/dynamic/{policy_id}")
+        response = await self._orchestrator_request("GET", f"/api/v1/dynamic-policies/{policy_id}")
         return DynamicPolicy.model_validate(response)
 
     async def create_dynamic_policy(
@@ -1665,7 +1665,7 @@ class AxonFlow:
 
         response = await self._orchestrator_request(
             "POST",
-            "/api/v1/policies/dynamic",
+            "/api/v1/dynamic-policies",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return DynamicPolicy.model_validate(response)
@@ -1689,7 +1689,7 @@ class AxonFlow:
 
         response = await self._orchestrator_request(
             "PUT",
-            f"/api/v1/policies/dynamic/{policy_id}",
+            f"/api/v1/dynamic-policies/{policy_id}",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return DynamicPolicy.model_validate(response)
@@ -1703,7 +1703,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Deleting dynamic policy", policy_id=policy_id)
 
-        await self._orchestrator_request("DELETE", f"/api/v1/policies/dynamic/{policy_id}")
+        await self._orchestrator_request("DELETE", f"/api/v1/dynamic-policies/{policy_id}")
 
     async def toggle_dynamic_policy(
         self,
@@ -1724,7 +1724,7 @@ class AxonFlow:
 
         response = await self._orchestrator_request(
             "PATCH",
-            f"/api/v1/policies/dynamic/{policy_id}",
+            f"/api/v1/dynamic-policies/{policy_id}",
             json_data={"enabled": enabled},
         )
         return DynamicPolicy.model_validate(response)
@@ -1748,7 +1748,7 @@ class AxonFlow:
             if options.include_disabled:
                 query_params.append("include_disabled=true")
 
-        path = "/api/v1/policies/dynamic/effective"
+        path = "/api/v1/dynamic-policies/effective"
         if query_params:
             path = f"{path}?{'&'.join(query_params)}"
 
@@ -2091,20 +2091,20 @@ class AxonFlow:
     # =========================================================================
 
     def _get_orchestrator_url(self) -> str:
-        """Get orchestrator URL, defaulting to agent URL with port 8081."""
-        if self._config.orchestrator_url:
-            return self._config.orchestrator_url
-        # Default: assume orchestrator is on same host as agent, port 8081
-        parsed = urlparse(self._config.agent_url)
-        return f"{parsed.scheme}://{parsed.hostname}:8081"
+        """Get orchestrator URL.
+
+        Note: As of v1.0.0 (ADR-026 Single Entry Point), all routes go through
+        the single endpoint. This method now returns the endpoint directly.
+        """
+        return self._config.endpoint
 
     def _get_portal_url(self) -> str:
-        """Get portal URL, defaulting to agent URL with port 8082."""
-        if self._config.portal_url:
-            return self._config.portal_url
-        # Default: assume portal is on same host as agent, port 8082
-        parsed = urlparse(self._config.agent_url)
-        return f"{parsed.scheme}://{parsed.hostname}:8082"
+        """Get portal URL.
+
+        Note: As of v1.0.0 (ADR-026 Single Entry Point), all routes go through
+        the single endpoint. This method now returns the endpoint directly.
+        """
+        return self._config.endpoint
 
     async def login_to_portal(self, org_id: str, password: str) -> dict[str, Any]:
         """Login to Customer Portal and store session cookie.

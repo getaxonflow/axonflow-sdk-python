@@ -9,7 +9,7 @@ Example:
     >>>
     >>> # Async usage
     >>> async with AxonFlow(
-    ...     agent_url="https://your-agent.axonflow.com",
+    ...     endpoint="https://your-agent.axonflow.com",
     ...     client_id="your-client-id",
     ...     client_secret="your-client-secret"
     ... ) as client:
@@ -18,7 +18,7 @@ Example:
     >>>
     >>> # Sync usage
     >>> client = AxonFlow.sync(
-    ...     agent_url="https://your-agent.axonflow.com",
+    ...     endpoint="https://your-agent.axonflow.com",
     ...     client_id="your-client-id",
     ...     client_secret="your-client-secret"
     ... )

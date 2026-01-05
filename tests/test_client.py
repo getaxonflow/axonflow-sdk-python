@@ -21,7 +21,7 @@ class TestClientInitialization:
     def test_creates_with_required_params(self, config_dict: dict[str, Any]) -> None:
         """Test client creates with required parameters."""
         client = AxonFlow(**config_dict)
-        assert client.config.agent_url == config_dict["agent_url"]
+        assert client.config.endpoint == config_dict["endpoint"]
         assert client.config.client_id == config_dict["client_id"]
 
     def test_default_values_applied(self, config_dict: dict[str, Any]) -> None:
@@ -34,7 +34,7 @@ class TestClientInitialization:
     def test_sandbox_mode(self) -> None:
         """Test sandbox client creation."""
         client = AxonFlow.sandbox()
-        assert "staging" in client.config.agent_url
+        assert "staging" in client.config.endpoint
         assert client.config.debug is True
         assert client.config.mode == Mode.SANDBOX
 
@@ -46,11 +46,11 @@ class TestClientInitialization:
     def test_url_trailing_slash_stripped(self) -> None:
         """Test trailing slash is stripped from URL."""
         client = AxonFlow(
-            agent_url="https://test.axonflow.com/",
+            endpoint="https://test.axonflow.com/",
             client_id="test",
             client_secret="test",
         )
-        assert client.config.agent_url == "https://test.axonflow.com"
+        assert client.config.endpoint == "https://test.axonflow.com"
 
     def test_license_key_optional(self, config_dict: dict[str, Any]) -> None:
         """Test license key is optional."""
@@ -662,7 +662,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test listing executions returns empty list."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions",
+            url="https://test.axonflow.com/api/v1/executions",
             json={"executions": [], "total": 0, "limit": 50, "offset": 0},
         )
         result = await client.list_executions()
@@ -678,7 +678,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test listing executions returns data."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions?status=completed&limit=10",
+            url="https://test.axonflow.com/api/v1/executions?status=completed&limit=10",
             json={
                 "executions": [
                     {
@@ -715,7 +715,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test getting a single execution."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/exec-123",
+            url="https://test.axonflow.com/api/v1/executions/exec-123",
             json={
                 "summary": {
                     "request_id": "exec-123",
@@ -776,7 +776,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test getting execution steps."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/steps",
+            url="https://test.axonflow.com/api/v1/executions/exec-123/steps",
             json=[
                 {
                     "request_id": "exec-123",
@@ -819,7 +819,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test getting execution timeline."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/timeline",
+            url="https://test.axonflow.com/api/v1/executions/exec-123/timeline",
             json=[
                 {
                     "step_index": 0,
@@ -871,7 +871,7 @@ class TestExecutionReplay:
         """Test exporting execution with custom options."""
         # Setting include_policies=False to test non-default behavior
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/export?format=json&include_input=true&include_output=true",
+            url="https://test.axonflow.com/api/v1/executions/exec-123/export?format=json&include_input=true&include_output=true",
             json={
                 "execution_id": "exec-123",
                 "workflow_name": "test-workflow",
@@ -898,7 +898,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test exporting execution without options."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/exec-123/export",
+            url="https://test.axonflow.com/api/v1/executions/exec-123/export",
             json={
                 "execution_id": "exec-123",
                 "exported_at": "2026-01-03T12:00:00Z",
@@ -915,7 +915,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test deleting execution."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/exec-123",
+            url="https://test.axonflow.com/api/v1/executions/exec-123",
             method="DELETE",
             status_code=204,
         )
@@ -930,7 +930,7 @@ class TestExecutionReplay:
     ) -> None:
         """Test execution not found returns 404."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8081/api/v1/executions/nonexistent",
+            url="https://test.axonflow.com/api/v1/executions/nonexistent",
             status_code=404,
             json={"error": "execution not found"},
         )
@@ -949,7 +949,7 @@ class TestPortalAuthentication:
     ) -> None:
         """Test successful portal login."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={
                 "session_id": "test-session-123",
@@ -971,7 +971,7 @@ class TestPortalAuthentication:
     ) -> None:
         """Test portal login failure."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             status_code=401,
             json={"error": "Invalid credentials"},
@@ -989,7 +989,7 @@ class TestPortalAuthentication:
         """Test portal logout."""
         # First login
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={"session_id": "test-session-123", "org_id": "test-org"},
         )
@@ -998,7 +998,7 @@ class TestPortalAuthentication:
 
         # Then logout
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/logout",
+            url="https://test.axonflow.com/api/v1/auth/logout",
             method="POST",
             status_code=204,
         )
@@ -1034,7 +1034,7 @@ class TestPortalAuthentication:
         assert client.is_logged_in() is False
 
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={"session_id": "test-session", "org_id": "test"},
         )
@@ -1046,22 +1046,13 @@ class TestPortalAuthentication:
         self,
         client: AxonFlow,
     ) -> None:
-        """Test portal URL defaults to agent URL with port 8082."""
-        # Client has agent_url https://test.axonflow.com
+        """Test portal URL returns the configured endpoint (ADR-026 Single Entry Point)."""
+        # Client has endpoint https://test.axonflow.com
         url = client._get_portal_url()
-        assert url == "https://test.axonflow.com:8082"
+        assert url == "https://test.axonflow.com"
 
-    @pytest.mark.asyncio
-    async def test_get_portal_url_custom(self) -> None:
-        """Test custom portal URL is used."""
-        custom_client = AxonFlow(
-            agent_url="https://test.axonflow.com",
-            portal_url="https://portal.custom.com",
-            client_id="test",
-            client_secret="test",
-        )
-        url = custom_client._get_portal_url()
-        assert url == "https://portal.custom.com"
+    # Note: test_get_portal_url_custom removed in v1.0.0 (ADR-026 Single Entry Point)
+    # All routes now go through a single endpoint
 
 
 class TestCodeGovernance:
@@ -1076,7 +1067,7 @@ class TestCodeGovernance:
         """Test listing Git providers."""
         # First login
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={"session_id": "test-session", "org_id": "test"},
         )
@@ -1084,7 +1075,7 @@ class TestCodeGovernance:
 
         # Then list providers
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/code-governance/git-providers",
+            url="https://test.axonflow.com/api/v1/code-governance/git-providers",
             json={"providers": [{"type": "github"}], "count": 1},
         )
         result = await client.list_git_providers()
@@ -1100,7 +1091,7 @@ class TestCodeGovernance:
         """Test validating Git provider credentials."""
         # First login
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={"session_id": "test-session", "org_id": "test"},
         )
@@ -1108,7 +1099,7 @@ class TestCodeGovernance:
 
         # Validate provider
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/code-governance/git-providers/validate",
+            url="https://test.axonflow.com/api/v1/code-governance/git-providers/validate",
             method="POST",
             json={"valid": True, "message": "Token validated"},
         )
@@ -1128,7 +1119,7 @@ class TestCodeGovernance:
         """Test getting code governance metrics."""
         # First login
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={"session_id": "test-session", "org_id": "test"},
         )
@@ -1136,7 +1127,7 @@ class TestCodeGovernance:
 
         # Get metrics
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/code-governance/metrics",
+            url="https://test.axonflow.com/api/v1/code-governance/metrics",
             json={
                 "tenant_id": "test-tenant",
                 "total_prs": 42,
@@ -1162,7 +1153,7 @@ class TestCodeGovernance:
         """Test exporting code governance data as CSV."""
         # First login
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/auth/login",
+            url="https://test.axonflow.com/api/v1/auth/login",
             method="POST",
             json={"session_id": "test-session", "org_id": "test"},
         )
@@ -1170,7 +1161,7 @@ class TestCodeGovernance:
 
         # Export CSV
         httpx_mock.add_response(
-            url="https://test.axonflow.com:8082/api/v1/code-governance/export?format=csv",
+            url="https://test.axonflow.com/api/v1/code-governance/export?format=csv",
             text="id,title,state\npr-1,Test PR,open\n",
         )
         result = await client.export_code_governance_data_csv()

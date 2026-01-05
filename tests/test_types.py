@@ -114,18 +114,18 @@ class TestAxonFlowConfig:
     def test_minimal_config(self) -> None:
         """Test minimal configuration."""
         config = AxonFlowConfig(
-            agent_url="https://test.com",
+            endpoint="https://test.com",
             client_id="client",
             client_secret="secret",
         )
-        assert config.agent_url == "https://test.com"
+        assert config.endpoint == "https://test.com"
         assert config.mode == Mode.PRODUCTION
         assert config.debug is False
 
     def test_full_config(self) -> None:
         """Test full configuration."""
         config = AxonFlowConfig(
-            agent_url="https://test.com",
+            endpoint="https://test.com",
             client_id="client",
             client_secret="secret",
             license_key="license-123",
@@ -142,7 +142,7 @@ class TestAxonFlowConfig:
         """Test empty URL validation."""
         with pytest.raises(ValidationError):
             AxonFlowConfig(
-                agent_url="",
+                endpoint="",
                 client_id="client",
                 client_secret="secret",
             )

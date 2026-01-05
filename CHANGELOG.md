@@ -5,6 +5,44 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-01-05
+
+### Breaking Changes
+
+- **BREAKING**: Renamed `agent_url` to `endpoint` in `AxonFlowConfig`
+- **BREAKING**: Removed `orchestrator_url` and `portal_url` config options (Agent now proxies all routes per ADR-026)
+- **BREAKING**: Dynamic policy API path changed from `/api/v1/policies/dynamic` to `/api/v1/dynamic-policies`
+
+### Changed
+
+- All SDK methods now route through single Agent endpoint
+- Simplified configuration - only `endpoint` field needed
+- Removed `_get_orchestrator_url()` and `_get_portal_url()` helper methods (now return endpoint directly)
+
+### Migration Guide
+
+**Before (v0.x):**
+```python
+client = AxonFlow(
+    agent_url="http://localhost:8080",
+    orchestrator_url="http://localhost:8081",
+    portal_url="http://localhost:8082",
+    client_id="my-client",
+    client_secret="my-secret",
+)
+```
+
+**After (v1.x):**
+```python
+client = AxonFlow(
+    endpoint="http://localhost:8080",
+    client_id="my-client",
+    client_secret="my-secret",
+)
+```
+
+---
+
 ## [0.15.0] - 2026-01-05
 
 ### Added
