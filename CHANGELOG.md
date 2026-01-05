@@ -5,6 +5,16 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-01-05
+
+### Added
+
+- **Audit Log Reading**: Added `search_audit_logs()` for searching audit logs with filters (user email, client ID, time range, request type)
+- **Tenant Audit Logs**: Added `get_audit_logs_by_tenant()` for retrieving audit logs scoped to a specific tenant
+- **Audit Types**: Added `AuditLogEntry`, `AuditSearchRequest`, `AuditQueryOptions`, and `AuditSearchResponse` types
+
+---
+
 ## [0.14.0] - 2026-01-04
 
 ### Added
