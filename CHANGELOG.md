@@ -5,6 +5,16 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-05
+
+### Added
+
+- **Provider Restrictions for Compliance**: Added `allowed_providers` field to dynamic policy types
+  - `DynamicPolicy.allowed_providers` - List of allowed LLM providers when policy matches
+  - `CreateDynamicPolicyRequest.allowed_providers` - Specify allowed providers when creating policies
+  - `UpdateDynamicPolicyRequest.allowed_providers` - Update allowed providers on existing policies
+  - Enables GDPR, HIPAA, and RBI compliance by restricting data to specific providers/regions
+
 ## [1.0.0] - 2026-01-05
 
 ### Breaking Changes
