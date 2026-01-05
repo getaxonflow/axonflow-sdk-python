@@ -46,9 +46,7 @@ class AxonFlowConfig(BaseModel):
     """Configuration for AxonFlow client.
 
     Attributes:
-        agent_url: AxonFlow Agent URL (required)
-        orchestrator_url: Orchestrator URL for Execution Replay API
-            (optional, defaults to agent URL with port 8081)
+        endpoint: AxonFlow endpoint URL (required) - single entry point for all services
         client_id: Client ID for authentication (optional for community/self-hosted mode)
         client_secret: Client secret for authentication (optional for community/self-hosted mode)
         license_key: Optional license key for organization-level auth
@@ -62,13 +60,13 @@ class AxonFlowConfig(BaseModel):
     Note:
         For community/self-hosted deployments, client_id and client_secret can be omitted.
         The SDK will work without authentication headers in this mode.
+
+        As of v1.0.0, all routes go through a single endpoint (ADR-026).
     """
 
     model_config = ConfigDict(frozen=True)
 
-    agent_url: str = Field(..., min_length=1, description="AxonFlow Agent URL")
-    orchestrator_url: str | None = Field(default=None, description="Orchestrator URL")
-    portal_url: str | None = Field(default=None, description="Customer Portal URL (enterprise)")
+    endpoint: str = Field(..., min_length=1, description="AxonFlow endpoint URL")
     client_id: str | None = Field(default=None, description="Client ID (optional)")
     client_secret: str | None = Field(default=None, description="Client secret (optional)")
     license_key: str | None = Field(default=None, description="License key")

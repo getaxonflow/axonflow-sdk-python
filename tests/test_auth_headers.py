@@ -31,7 +31,7 @@ class TestAuthHeadersWithCredentials:
         )
 
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="test-secret",
             debug=True,
@@ -63,7 +63,7 @@ class TestAuthHeadersWithCredentials:
         )
 
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             license_key="test-license-key",
             debug=True,
         )
@@ -97,7 +97,7 @@ class TestAuthHeadersWithoutCredentials:
         )
 
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             # No client_secret, no license_key - community mode
             debug=True,
@@ -134,7 +134,7 @@ class TestAuthHeadersWithoutCredentials:
         )
 
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             # No credentials
             debug=True,
         )
@@ -163,7 +163,7 @@ class TestEnterpriseFeatureValidation:
         """get_policy_approved_context should fail before making request when no credentials."""
         # Don't mock the endpoint - we should fail before making the request
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             # No credentials
             debug=True,
@@ -190,7 +190,7 @@ class TestEnterpriseFeatureValidation:
         """audit_llm_call should fail before making request when no credentials."""
         # Don't mock the endpoint - we should fail before making the request
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             # No credentials
             debug=True,
@@ -234,7 +234,7 @@ class TestEnterpriseFeatureValidation:
         )
 
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="test-secret",  # With credentials
             debug=True,
@@ -267,7 +267,7 @@ class TestCredentialDetection:
     def test_has_credentials_with_client_secret(self):
         """Should detect credentials when client_secret is set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="test-secret",
         )
@@ -276,7 +276,7 @@ class TestCredentialDetection:
     def test_has_credentials_with_license_key(self):
         """Should detect credentials when license_key is set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             license_key="test-license",
         )
         assert client._has_credentials() is True
@@ -284,7 +284,7 @@ class TestCredentialDetection:
     def test_has_credentials_with_both(self):
         """Should detect credentials when both are set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="test-secret",
             license_key="test-license",
@@ -294,7 +294,7 @@ class TestCredentialDetection:
     def test_no_credentials_with_none(self):
         """Should not detect credentials when nothing is set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             # No client_secret, no license_key
         )
@@ -303,7 +303,7 @@ class TestCredentialDetection:
     def test_no_credentials_with_empty_string(self):
         """Should not detect credentials when empty string is set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="",  # Empty string
         )
@@ -312,7 +312,7 @@ class TestCredentialDetection:
     def test_has_credentials_with_whitespace(self):
         """Whitespace-only string is still considered credentials (non-empty)."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="   ",  # Whitespace only
         )

@@ -40,7 +40,7 @@ def is_localhost() -> bool:
 def get_community_config():
     """Get community/self-hosted configuration (no credentials)."""
     return {
-        "agent_url": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
+        "endpoint": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
         "client_id": "default",  # Can be any value for self-hosted
         # No credentials - community mode
         "debug": True,
@@ -51,7 +51,7 @@ def get_community_config():
 def get_enterprise_config():
     """Get enterprise configuration (with credentials for Gateway Mode)."""
     return {
-        "agent_url": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
+        "endpoint": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
         "client_id": "default",
         "client_secret": "test-secret",  # Enterprise - credentials required
         "debug": True,
@@ -84,7 +84,7 @@ class TestClientInitializationZeroConfig:
     def test_create_client_without_credentials_for_any_endpoint(self):
         """SDK should accept no credentials for any endpoint (community mode)."""
         client = AxonFlow(
-            agent_url="https://my-custom-domain.local",
+            endpoint="https://my-custom-domain.local",
             client_id="default",
             # No credentials - community mode works for any endpoint
             debug=True,
@@ -96,7 +96,7 @@ class TestClientInitializationZeroConfig:
     def test_has_credentials_with_license_key(self):
         """SDK should detect credentials when license_key is set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             license_key="test-license-key",
             debug=True,
         )
@@ -106,7 +106,7 @@ class TestClientInitializationZeroConfig:
     def test_has_credentials_with_client_secret(self):
         """SDK should detect credentials when client_secret is set."""
         client = AxonFlow(
-            agent_url="http://localhost:8080",
+            endpoint="http://localhost:8080",
             client_id="test-client",
             client_secret="test-secret",
             debug=True,
@@ -310,7 +310,7 @@ class TestFirstTimeUserZeroConfig:
         """Simulate a brand new user using community features."""
         # First-time user configuration - minimal setup (no credentials)
         client = AxonFlow(
-            agent_url=os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
+            endpoint=os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
             client_id="first-time-user",
             # No credentials - community mode
             debug=True,
@@ -340,7 +340,7 @@ class TestFirstTimeUserZeroConfig:
         """Verify enterprise features require credentials for first-time users."""
         # First-time user tries Gateway Mode without credentials
         client = AxonFlow(
-            agent_url=os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
+            endpoint=os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
             client_id="first-time-user",
             # No credentials
             debug=True,

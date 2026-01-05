@@ -53,7 +53,7 @@ def fixture_exists(name: str) -> bool:
 def config_dict() -> dict[str, Any]:
     """Base configuration dictionary."""
     return {
-        "agent_url": "https://test.axonflow.com",
+        "endpoint": "https://test.axonflow.com",
         "client_id": "test-client",
         "client_secret": "test-secret",
         "debug": True,

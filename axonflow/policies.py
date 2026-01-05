@@ -224,13 +224,14 @@ class DynamicPolicy(BaseModel):
     id: str
     name: str
     description: str | None = None
-    type: str  # "risk", "content", "user", "cost"
+    type: str | None = None  # "risk", "content", "user", "cost"
+    category: str | None = None  # "dynamic-risk", "dynamic-compliance", etc.
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int = 0
     enabled: bool = True
-    created_at: datetime = Field(..., alias="created_at")
-    updated_at: datetime = Field(..., alias="updated_at")
+    created_at: datetime | None = Field(default=None, alias="created_at")
+    updated_at: datetime | None = Field(default=None, alias="updated_at")
 
 
 class ListDynamicPoliciesOptions(BaseModel):
@@ -250,7 +251,8 @@ class CreateDynamicPolicyRequest(BaseModel):
 
     name: str = Field(..., min_length=1)
     description: str | None = None
-    type: str  # "risk", "content", "user", "cost"
+    type: str = "risk"  # "risk", "content", "user", "cost"
+    category: str = "dynamic-risk"  # Must start with "dynamic-" for dynamic policies
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int = 0
@@ -263,6 +265,7 @@ class UpdateDynamicPolicyRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     type: str | None = None
+    category: str | None = None  # Must start with "dynamic-" if specified
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int | None = None

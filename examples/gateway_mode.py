@@ -37,7 +37,7 @@ MOCK_LLM_RESPONSE = {
 async def main() -> None:
     """Run Gateway Mode example."""
     async with AxonFlow(
-        agent_url=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
+        endpoint=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
         client_id=os.environ.get("AXONFLOW_CLIENT_ID", "demo-client"),
         client_secret=os.environ.get("AXONFLOW_CLIENT_SECRET", "demo-secret"),
         license_key=os.environ.get("AXONFLOW_LICENSE_KEY"),
@@ -145,7 +145,7 @@ Please summarize the patient results."""
 async def blocked_example() -> None:
     """Example showing a blocked request."""
     async with AxonFlow(
-        agent_url=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
+        endpoint=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
         client_id=os.environ.get("AXONFLOW_CLIENT_ID", "demo-client"),
         client_secret=os.environ.get("AXONFLOW_CLIENT_SECRET", "demo-secret"),
         debug=True,
