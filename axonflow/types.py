@@ -61,7 +61,7 @@ class AxonFlowConfig(BaseModel):
         For community/self-hosted deployments, client_id and client_secret can be omitted.
         The SDK will work without authentication headers in this mode.
 
-        As of v1.0.0, all routes go through a single endpoint (no separate orchestrator/portal URLs).
+        As of v1.0.0, all routes go through a single endpoint (ADR-026).
     """
 
     model_config = ConfigDict(frozen=True)

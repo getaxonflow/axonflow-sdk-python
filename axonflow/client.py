@@ -27,11 +27,11 @@ import asyncio
 import concurrent.futures
 import contextlib
 import hashlib
+import os
 import re
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
-import os
 
 import httpx
 import structlog
