@@ -1187,7 +1187,8 @@ class AxonFlow:
                 limit=request.limit,
                 offset=request.offset,
             )
-        # Wrapped response format
+        # Wrapped response format (response is dict at this point)
+        assert isinstance(response, dict)
         entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
         return AuditSearchResponse(
             entries=entries,
@@ -1253,6 +1254,8 @@ class AxonFlow:
                 limit=options.limit,
                 offset=options.offset,
             )
+        # Wrapped response format (response is dict at this point)
+        assert isinstance(response, dict)
         entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
         return AuditSearchResponse(
             entries=entries,
