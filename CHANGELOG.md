@@ -9,9 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Sensitive Data Category**: Added `SENSITIVE_DATA` to `PolicyCategory` enum for policies that return `sensitive-data` category
 - **Provider Restrictions for Compliance**: Support for `allowed_providers` in dynamic policy action config
   - Specify allowed providers via `DynamicPolicyAction(type="route", config={"allowed_providers": [...]})`
   - Enables GDPR, HIPAA, and RBI compliance by restricting LLM routing to specific providers
+
+### Fixed
+
+- **ListExecutionsResponse null handling**: Fixed validation error when API returns `null` for executions field (now returns empty list)
 
 ## [1.0.0] - 2026-01-05
 
