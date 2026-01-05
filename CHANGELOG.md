@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **toggle_dynamic_policy HTTP Method**: Changed from PATCH to PUT to match API specification
 - **ListExecutionsResponse null handling**: Fixed validation error when API returns `null` for executions field (now returns empty list)
 
 ## [1.0.0] - 2026-01-05
