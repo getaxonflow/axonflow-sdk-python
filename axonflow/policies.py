@@ -217,6 +217,9 @@ class DynamicPolicy(BaseModel):
 
     Dynamic policies are LLM-powered policies that can evaluate complex,
     context-aware rules that can't be expressed with simple regex patterns.
+
+    For provider restrictions (GDPR, HIPAA, RBI compliance), use action config:
+        actions=[DynamicPolicyAction(type="route", config={"allowed_providers": ["ollama", "azure-eu"]})]
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -228,11 +231,6 @@ class DynamicPolicy(BaseModel):
     category: str | None = None  # "dynamic-risk", "dynamic-compliance", etc.
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
-    allowed_providers: list[str] | None = Field(
-        default=None,
-        alias="allowed_providers",
-        description="Restrict LLM routing to these providers (GDPR, HIPAA, RBI compliance)",
-    )
     priority: int = 0
     enabled: bool = True
     created_at: datetime | None = Field(default=None, alias="created_at")
@@ -252,7 +250,10 @@ class ListDynamicPoliciesOptions(BaseModel):
 
 
 class CreateDynamicPolicyRequest(BaseModel):
-    """Request to create a dynamic policy."""
+    """Request to create a dynamic policy.
+
+    For provider restrictions, use action config with "allowed_providers" key.
+    """
 
     name: str = Field(..., min_length=1)
     description: str | None = None
@@ -260,16 +261,15 @@ class CreateDynamicPolicyRequest(BaseModel):
     category: str = "dynamic-risk"  # Must start with "dynamic-" for dynamic policies
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
-    allowed_providers: list[str] | None = Field(
-        default=None,
-        description="Restrict LLM routing to these providers when policy matches",
-    )
     priority: int = 0
     enabled: bool = True
 
 
 class UpdateDynamicPolicyRequest(BaseModel):
-    """Request to update a dynamic policy."""
+    """Request to update a dynamic policy.
+
+    For provider restrictions, use action config with "allowed_providers" key.
+    """
 
     name: str | None = None
     description: str | None = None
@@ -277,10 +277,6 @@ class UpdateDynamicPolicyRequest(BaseModel):
     category: str | None = None  # Must start with "dynamic-" if specified
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
-    allowed_providers: list[str] | None = Field(
-        default=None,
-        description="Restrict LLM routing to these providers when policy matches",
-    )
     priority: int | None = None
     enabled: bool | None = None
 
