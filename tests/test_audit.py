@@ -9,6 +9,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from axonflow import AxonFlow
+from axonflow.exceptions import AxonFlowError
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,
@@ -178,7 +179,7 @@ class TestSearchAuditLogs:
             json={"error": "invalid request"},
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(AxonFlowError):
             await client.search_audit_logs()
 
     @pytest.mark.asyncio
@@ -193,7 +194,7 @@ class TestSearchAuditLogs:
             json={"error": "internal server error"},
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(AxonFlowError):
             await client.search_audit_logs()
 
 
@@ -292,7 +293,7 @@ class TestGetAuditLogsByTenant:
             json={"error": "tenant not found"},
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(AxonFlowError):
             await client.get_audit_logs_by_tenant("nonexistent")
 
     @pytest.mark.asyncio
@@ -307,7 +308,7 @@ class TestGetAuditLogsByTenant:
             json={"error": "not authorized for this tenant"},
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(AxonFlowError):
             await client.get_audit_logs_by_tenant("other-tenant")
 
 

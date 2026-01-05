@@ -1187,15 +1187,14 @@ class AxonFlow:
                 limit=request.limit,
                 offset=request.offset,
             )
-        else:
-            # Wrapped response format
-            entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
-            return AuditSearchResponse(
-                entries=entries,
-                total=response.get("total", len(entries)),
-                limit=response.get("limit", request.limit),
-                offset=response.get("offset", request.offset),
-            )
+        # Wrapped response format
+        entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
+        return AuditSearchResponse(
+            entries=entries,
+            total=response.get("total", len(entries)),
+            limit=response.get("limit", request.limit),
+            offset=response.get("offset", request.offset),
+        )
 
     async def get_audit_logs_by_tenant(
         self,
@@ -1253,14 +1252,13 @@ class AxonFlow:
                 limit=options.limit,
                 offset=options.offset,
             )
-        else:
-            entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
-            return AuditSearchResponse(
-                entries=entries,
-                total=response.get("total", len(entries)),
-                limit=response.get("limit", options.limit),
-                offset=response.get("offset", options.offset),
-            )
+        entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
+        return AuditSearchResponse(
+            entries=entries,
+            total=response.get("total", len(entries)),
+            limit=response.get("limit", options.limit),
+            offset=response.get("offset", options.offset),
+        )
 
     # =========================================================================
     # Policy CRUD Methods - Static Policies
