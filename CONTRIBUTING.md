@@ -149,7 +149,7 @@ async def test_execute_query(httpx_mock: HTTPXMock):
     httpx_mock.add_response(json={"success": True, "data": "result"})
 
     async with AxonFlow(
-        agent_url="https://test.example.com",
+        endpoint="https://test.example.com",
         client_id="test",
         client_secret="test",
     ) as client:

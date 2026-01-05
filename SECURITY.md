@@ -61,7 +61,7 @@ When using the AxonFlow Python SDK:
 ```python
 # BAD - Credentials in code
 client = AxonFlow(
-    agent_url="https://staging-eu.getaxonflow.com",
+    endpoint="https://staging-eu.getaxonflow.com",
     client_id="client-id-here",
     client_secret="secret-here",
 )
@@ -70,7 +70,7 @@ client = AxonFlow(
 import os
 
 client = AxonFlow(
-    agent_url=os.environ["AXONFLOW_AGENT_URL"],
+    endpoint=os.environ["AXONFLOW_AGENT_URL"],
     client_id=os.environ["AXONFLOW_CLIENT_ID"],
     client_secret=os.environ["AXONFLOW_CLIENT_SECRET"],
 )
@@ -83,14 +83,14 @@ Always use HTTPS endpoints for production:
 ```python
 # GOOD - HTTPS endpoint
 client = AxonFlow(
-    agent_url="https://api.getaxonflow.com",
+    endpoint="https://api.getaxonflow.com",
     client_id=client_id,
     client_secret=secret,
 )
 
 # WARNING - HTTP should only be used for local development
 client = AxonFlow(
-    agent_url="http://localhost:8080",
+    endpoint="http://localhost:8080",
     client_id=client_id,
     client_secret=secret,
 )
@@ -102,7 +102,7 @@ Set appropriate timeouts to prevent resource exhaustion:
 
 ```python
 client = AxonFlow(
-    agent_url=agent_url,
+    endpoint=agent_url,
     client_id=client_id,
     client_secret=client_secret,
     timeout=30.0,  # Reasonable timeout in seconds
@@ -165,7 +165,7 @@ Use production mode for production deployments to enable fail-open strategy:
 
 ```python
 client = AxonFlow(
-    agent_url=agent_url,
+    endpoint=agent_url,
     client_id=client_id,
     client_secret=client_secret,
     mode="production",  # Fail-open if AxonFlow unavailable
@@ -180,7 +180,7 @@ client = AxonFlow(
 import os
 
 client = AxonFlow(
-    agent_url=agent_url,
+    endpoint=agent_url,
     client_id=client_id,
     client_secret=client_secret,
     debug=os.environ.get("ENV") != "production",  # Only in dev

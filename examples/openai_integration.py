@@ -28,7 +28,7 @@ async def main() -> None:
     openai_client = AsyncOpenAI()
 
     async with AxonFlow(
-        agent_url=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
+        endpoint=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
         client_id=os.environ.get("AXONFLOW_CLIENT_ID", "demo-client"),
         client_secret=os.environ.get("AXONFLOW_CLIENT_SECRET", "demo-secret"),
         debug=True,

@@ -30,7 +30,7 @@ from axonflow import AxonFlow
 
 async def main():
     async with AxonFlow(
-        agent_url="https://your-agent.axonflow.com",
+        endpoint="https://your-agent.axonflow.com",
         client_id="your-client-id",
         client_secret="your-client-secret"
     ) as client:
@@ -51,7 +51,7 @@ asyncio.run(main())
 from axonflow import AxonFlow
 
 with AxonFlow.sync(
-    agent_url="https://your-agent.axonflow.com",
+    endpoint="https://your-agent.axonflow.com",
     client_id="your-client-id",
     client_secret="your-client-secret"
 ) as client:
@@ -167,7 +167,7 @@ print(f"Result: {result.result}")
 from axonflow import AxonFlow, Mode, RetryConfig
 
 client = AxonFlow(
-    agent_url="https://your-agent.axonflow.com",
+    endpoint="https://your-agent.axonflow.com",
     client_id="your-client-id",
     client_secret="your-client-secret",
     license_key="optional-license-key",      # For enterprise features
