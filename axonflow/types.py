@@ -227,6 +227,10 @@ class PolicyApprovalResult(BaseModel):
 
     context_id: str = Field(..., description="Context ID for audit linking")
     approved: bool = Field(..., description="Whether request is approved")
+    requires_redaction: bool = Field(
+        default=False,
+        description="Whether response requires redaction (PII detected with redact action)",
+    )
     approved_data: dict[str, Any] = Field(default_factory=dict)
     policies: list[str] = Field(default_factory=list)
     rate_limit_info: RateLimitInfo | None = None
