@@ -219,7 +219,8 @@ class DynamicPolicy(BaseModel):
     context-aware rules that can't be expressed with simple regex patterns.
 
     For provider restrictions (GDPR, HIPAA, RBI compliance), use action config:
-        actions=[DynamicPolicyAction(type="route", config={"allowed_providers": ["ollama", "azure-eu"]})]
+        actions=[DynamicPolicyAction(type="route",
+            config={"allowed_providers": ["ollama", "azure-eu"]})]
     """
 
     model_config = ConfigDict(populate_by_name=True)
