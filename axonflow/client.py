@@ -1227,7 +1227,8 @@ class AxonFlow:
             >>> result = await client.get_audit_logs_by_tenant("tenant-abc", opts)
         """
         if not tenant_id:
-            raise ValueError("tenant_id is required")
+            msg = "tenant_id is required"
+            raise ValueError(msg)
 
         if options is None:
             options = AuditQueryOptions()
