@@ -1631,7 +1631,8 @@ class AxonFlow:
             self._logger.debug("Listing dynamic policies", path=path)
 
         response = await self._orchestrator_request("GET", path)
-        return [DynamicPolicy.model_validate(p) for p in response or []]
+        policies = response.get("policies") if isinstance(response, dict) else response
+        return [DynamicPolicy.model_validate(p) for p in (policies or [])]
 
     async def get_dynamic_policy(self, policy_id: str) -> DynamicPolicy:
         """Get a specific dynamic policy by ID.
@@ -1646,7 +1647,9 @@ class AxonFlow:
             self._logger.debug("Getting dynamic policy", policy_id=policy_id)
 
         response = await self._orchestrator_request("GET", f"/api/v1/dynamic-policies/{policy_id}")
-        return DynamicPolicy.model_validate(response)
+        # Response may be wrapped in {"policy": {...}}
+        policy_data = response.get("policy", response) if isinstance(response, dict) else response
+        return DynamicPolicy.model_validate(policy_data)
 
     async def create_dynamic_policy(
         self,
@@ -1668,7 +1671,9 @@ class AxonFlow:
             "/api/v1/dynamic-policies",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
-        return DynamicPolicy.model_validate(response)
+        # Response may be wrapped in {"policy": {...}}
+        policy_data = response.get("policy", response) if isinstance(response, dict) else response
+        return DynamicPolicy.model_validate(policy_data)
 
     async def update_dynamic_policy(
         self,
@@ -1692,7 +1697,9 @@ class AxonFlow:
             f"/api/v1/dynamic-policies/{policy_id}",
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
-        return DynamicPolicy.model_validate(response)
+        # Response may be wrapped in {"policy": {...}}
+        policy_data = response.get("policy", response) if isinstance(response, dict) else response
+        return DynamicPolicy.model_validate(policy_data)
 
     async def delete_dynamic_policy(self, policy_id: str) -> None:
         """Delete a dynamic policy.
@@ -1727,7 +1734,9 @@ class AxonFlow:
             f"/api/v1/dynamic-policies/{policy_id}",
             json_data={"enabled": enabled},
         )
-        return DynamicPolicy.model_validate(response)
+        # Response may be wrapped in {"policy": {...}}
+        policy_data = response.get("policy", response) if isinstance(response, dict) else response
+        return DynamicPolicy.model_validate(policy_data)
 
     async def get_effective_dynamic_policies(
         self,
@@ -1756,7 +1765,8 @@ class AxonFlow:
             self._logger.debug("Getting effective dynamic policies", path=path)
 
         response = await self._orchestrator_request("GET", path)
-        return [DynamicPolicy.model_validate(p) for p in response or []]
+        policies = response.get("policies") if isinstance(response, dict) else response
+        return [DynamicPolicy.model_validate(p) for p in (policies or [])]
 
     # =========================================================================
     # Code Governance Methods (Enterprise)
