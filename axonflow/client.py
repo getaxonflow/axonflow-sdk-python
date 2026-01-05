@@ -84,7 +84,11 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.types import (
+    AuditLogEntry,
+    AuditQueryOptions,
     AuditResult,
+    AuditSearchRequest,
+    AuditSearchResponse,
     AxonFlowConfig,
     Budget,
     BudgetAlertsResponse,
@@ -1105,6 +1109,161 @@ class AxonFlow:
         return AuditResult(
             success=response["success"],
             audit_id=response["audit_id"],
+        )
+
+    # =========================================================================
+    # Audit Log Read Methods
+    # =========================================================================
+
+    async def search_audit_logs(
+        self,
+        request: AuditSearchRequest | None = None,
+    ) -> AuditSearchResponse:
+        """Search audit logs with optional filters.
+
+        Query the AxonFlow orchestrator for audit logs matching the specified
+        criteria. Use this for compliance dashboards, security investigations,
+        and operational monitoring.
+
+        Args:
+            request: Search filters and pagination options. If None, returns
+                recent logs with default limit (100).
+
+        Returns:
+            AuditSearchResponse containing matching audit entries.
+
+        Example:
+            >>> from datetime import datetime, timedelta
+            >>> from axonflow.types import AuditSearchRequest
+            >>>
+            >>> # Search for logs from a specific user in the last 24 hours
+            >>> yesterday = datetime.now() - timedelta(days=1)
+            >>> request = AuditSearchRequest(
+            ...     user_email="analyst@company.com",
+            ...     start_time=yesterday,
+            ...     limit=100,
+            ... )
+            >>> result = await client.search_audit_logs(request)
+            >>> for entry in result.entries:
+            ...     print(f"[{entry.timestamp}] {entry.user_email}: {entry.query_summary}")
+        """
+        if request is None:
+            request = AuditSearchRequest()
+
+        # Build request body with only non-None values
+        body: dict[str, Any] = {"limit": request.limit}
+        if request.user_email:
+            body["user_email"] = request.user_email
+        if request.client_id:
+            body["client_id"] = request.client_id
+        if request.start_time:
+            body["start_time"] = request.start_time.isoformat()
+        if request.end_time:
+            body["end_time"] = request.end_time.isoformat()
+        if request.request_type:
+            body["request_type"] = request.request_type
+        if request.offset > 0:
+            body["offset"] = request.offset
+
+        if self._config.debug:
+            self._logger.debug(
+                "Searching audit logs",
+                limit=request.limit,
+                offset=request.offset,
+            )
+
+        response = await self._orchestrator_request(
+            "POST",
+            "/api/v1/audit/search",
+            json_data=body,
+        )
+
+        # API may return array directly or wrapped response
+        if isinstance(response, list):
+            entries = [AuditLogEntry.model_validate(e) for e in response]
+            return AuditSearchResponse(
+                entries=entries,
+                total=len(entries),
+                limit=request.limit,
+                offset=request.offset,
+            )
+        # Wrapped response format (response is dict at this point)
+        if not isinstance(response, dict):
+            response = {}
+        entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
+        return AuditSearchResponse(
+            entries=entries,
+            total=response.get("total", len(entries)),
+            limit=response.get("limit", request.limit),
+            offset=response.get("offset", request.offset),
+        )
+
+    async def get_audit_logs_by_tenant(
+        self,
+        tenant_id: str,
+        options: AuditQueryOptions | None = None,
+    ) -> AuditSearchResponse:
+        """Get recent audit logs for a specific tenant.
+
+        Convenience method for tenant-scoped audit queries. Use this when you
+        need to view all recent activity for a specific tenant.
+
+        Args:
+            tenant_id: The tenant identifier to query
+            options: Pagination options (limit, offset)
+
+        Returns:
+            AuditSearchResponse containing audit entries for the tenant.
+
+        Raises:
+            ValueError: If tenant_id is empty
+
+        Example:
+            >>> # Get the last 50 audit logs for a tenant
+            >>> result = await client.get_audit_logs_by_tenant("tenant-abc")
+            >>> print(f"Found {len(result.entries)} entries")
+            >>>
+            >>> # With custom options
+            >>> from axonflow.types import AuditQueryOptions
+            >>> opts = AuditQueryOptions(limit=100, offset=50)
+            >>> result = await client.get_audit_logs_by_tenant("tenant-abc", opts)
+        """
+        if not tenant_id:
+            msg = "tenant_id is required"
+            raise ValueError(msg)
+
+        if options is None:
+            options = AuditQueryOptions()
+
+        if self._config.debug:
+            self._logger.debug(
+                "Getting audit logs for tenant",
+                tenant_id=tenant_id,
+                limit=options.limit,
+                offset=options.offset,
+            )
+
+        url = f"/api/v1/audit/tenant/{tenant_id}?limit={options.limit}&offset={options.offset}"
+        response = await self._orchestrator_request("GET", url)
+
+        # API may return array directly or wrapped response
+        if isinstance(response, list):
+            entries = [AuditLogEntry.model_validate(e) for e in response]
+            return AuditSearchResponse(
+                entries=entries,
+                total=len(entries),
+                limit=options.limit,
+                offset=options.offset,
+            )
+        # Wrapped response format (response is dict at this point)
+        if not isinstance(response, dict):
+            response = {}
+        entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
+        return AuditSearchResponse(
+            entries=entries,
+            total=response.get("total", len(entries)),
+            limit=response.get("limit", options.limit),
+            offset=response.get("offset", options.offset),
         )
 
     # =========================================================================

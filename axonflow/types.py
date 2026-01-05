@@ -252,6 +252,107 @@ class AuditResult(BaseModel):
 
 
 # =========================================================================
+# Audit Log Read Types
+# =========================================================================
+
+
+class AuditSearchRequest(BaseModel):
+    """Request parameters for searching audit logs.
+
+    All fields are optional - omit to search all logs.
+
+    Attributes:
+        user_email: Filter by user email
+        client_id: Filter by client/application ID
+        start_time: Start of time range to search
+        end_time: End of time range to search
+        request_type: Filter by request type (e.g., "llm_chat", "policy_check")
+        limit: Maximum results to return (default: 100, max: 1000)
+        offset: Pagination offset (default: 0)
+    """
+
+    user_email: str | None = Field(default=None, description="Filter by user email")
+    client_id: str | None = Field(default=None, description="Filter by client ID")
+    start_time: datetime | None = Field(default=None, description="Start of time range")
+    end_time: datetime | None = Field(default=None, description="End of time range")
+    request_type: str | None = Field(default=None, description="Filter by request type")
+    limit: int = Field(default=100, ge=1, le=1000, description="Max results")
+    offset: int = Field(default=0, ge=0, description="Pagination offset")
+
+
+class AuditQueryOptions(BaseModel):
+    """Options for GetAuditLogsByTenant.
+
+    Attributes:
+        limit: Maximum results to return (default: 50)
+        offset: Pagination offset (default: 0)
+    """
+
+    limit: int = Field(default=50, ge=1, le=1000, description="Max results")
+    offset: int = Field(default=0, ge=0, description="Pagination offset")
+
+
+class AuditLogEntry(BaseModel):
+    """A single audit log entry.
+
+    Represents an audited request or event in the AxonFlow platform.
+
+    Attributes:
+        id: Unique audit log ID
+        request_id: Correlation ID for the original request
+        timestamp: When the event occurred
+        user_email: Email of the user who made the request
+        client_id: Client/application that made the request
+        tenant_id: Tenant identifier
+        request_type: Type of request (e.g., "llm_chat", "sql", "mcp-query")
+        query_summary: Summary of the query/request
+        success: Whether the request succeeded
+        blocked: Whether the request was blocked by policy
+        risk_score: Calculated risk score (0.0-1.0)
+        provider: LLM provider used (if applicable)
+        model: Model used (if applicable)
+        tokens_used: Total tokens consumed
+        latency_ms: Request latency in milliseconds
+        policy_violations: List of violated policy IDs (if any)
+        metadata: Additional context
+    """
+
+    id: str = Field(..., description="Unique audit log ID")
+    request_id: str = Field(default="", description="Correlation ID")
+    timestamp: datetime = Field(..., description="When event occurred")
+    user_email: str = Field(default="", description="User email")
+    client_id: str = Field(default="", description="Client ID")
+    tenant_id: str = Field(default="", description="Tenant ID")
+    request_type: str = Field(default="", description="Request type")
+    query_summary: str = Field(default="", description="Query summary")
+    success: bool = Field(default=True, description="Request succeeded")
+    blocked: bool = Field(default=False, description="Request was blocked")
+    risk_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Risk score")
+    provider: str = Field(default="", description="LLM provider")
+    model: str = Field(default="", description="Model used")
+    tokens_used: int = Field(default=0, ge=0, description="Tokens consumed")
+    latency_ms: int = Field(default=0, ge=0, description="Latency in ms")
+    policy_violations: list[str] = Field(default_factory=list, description="Violated policies")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class AuditSearchResponse(BaseModel):
+    """Response from an audit search.
+
+    Attributes:
+        entries: Audit log entries matching the search
+        total: Total number of matching entries (for pagination)
+        limit: Limit that was applied
+        offset: Offset that was applied
+    """
+
+    entries: list[AuditLogEntry] = Field(default_factory=list, description="Audit entries")
+    total: int = Field(default=0, ge=0, description="Total matching entries")
+    limit: int = Field(default=100, ge=1, description="Limit applied")
+    offset: int = Field(default=0, ge=0, description="Offset applied")
+
+
+# =========================================================================
 # Execution Replay Types
 # =========================================================================
 
