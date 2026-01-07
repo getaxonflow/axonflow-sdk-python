@@ -886,7 +886,7 @@ class AxonFlow:
         Returns:
             PlanExecutionResponse with current status
         """
-        response = await self._request("GET", f"/api/plans/{plan_id}")
+        response = await self._request("GET", f"/api/v1/plan/{plan_id}")
         return PlanExecutionResponse.model_validate(response)
 
     # =========================================================================
