@@ -4,10 +4,13 @@ These tests verify that auth headers are correctly handled based on credentials,
 not on localhost vs non-localhost URLs.
 
 Key behavior:
-- When credentials are provided (client_secret or license_key), headers are sent
+- When credentials are provided (client_id + client_secret), OAuth2 Basic auth is used
+- When only license_key is provided, X-License-Key header is used (backward compatibility)
 - When no credentials are provided, headers are not sent
 - This works for any endpoint (localhost or remote)
 """
+
+import base64
 
 import pytest
 
@@ -23,8 +26,8 @@ class TestAuthHeadersWithCredentials:
     """Verify auth headers are sent when credentials are provided."""
 
     @pytest.mark.asyncio
-    async def test_auth_headers_sent_with_client_secret(self, httpx_mock):
-        """Auth headers should be sent when client_secret is provided."""
+    async def test_oauth2_basic_auth_with_client_credentials(self, httpx_mock):
+        """OAuth2 Basic auth should be sent when client_id + client_secret are provided."""
         httpx_mock.add_response(
             url="http://localhost:8080/api/request",
             json={"success": True, "data": {"answer": "4"}, "blocked": False},
@@ -50,9 +53,13 @@ class TestAuthHeadersWithCredentials:
         request = requests[0]
         headers = dict(request.headers)
 
-        assert headers.get("x-client-secret") == "test-secret"
+        # Should use OAuth2 Basic auth format
+        expected_credentials = base64.b64encode(b"test-client:test-secret").decode()
+        assert headers.get("authorization") == f"Basic {expected_credentials}"
         assert headers.get("x-tenant-id") == "test-client"
-        print("✅ Auth headers sent with client_secret")
+        # Should NOT use old X-Client-Secret header
+        assert "x-client-secret" not in headers
+        print("✅ OAuth2 Basic auth sent with client credentials")
 
     @pytest.mark.asyncio
     async def test_auth_headers_sent_with_license_key(self, httpx_mock):
@@ -116,12 +123,12 @@ class TestAuthHeadersWithoutCredentials:
         request = requests[0]
         headers = dict(request.headers)
 
-        # X-Client-Secret should not be in headers
-        assert "x-client-secret" not in headers
+        # Authorization header should not be in headers
+        assert "authorization" not in headers
         # X-License-Key should not be in headers
         assert "x-license-key" not in headers
-        # X-Tenant-ID is set from client_id (optional, not sensitive)
-        assert headers.get("x-tenant-id") == "test-client"
+        # X-Tenant-ID should not be set when not authenticated
+        assert "x-tenant-id" not in headers
 
         print("✅ No auth headers sent without credentials")
 
@@ -149,7 +156,7 @@ class TestAuthHeadersWithoutCredentials:
         headers = dict(request.headers)
 
         # No auth headers for health check without credentials
-        assert "x-client-secret" not in headers
+        assert "authorization" not in headers
         assert "x-license-key" not in headers
 
         print("✅ Health check works without auth headers")
@@ -249,14 +256,15 @@ class TestEnterpriseFeatureValidation:
         assert result.context_id == "ctx_mock_123"
         assert result.approved is True
 
-        # Verify request was made with auth headers
+        # Verify request was made with OAuth2 Basic auth header
         requests = httpx_mock.get_requests()
         assert len(requests) == 1
 
         request = requests[0]
         headers = dict(request.headers)
 
-        assert headers.get("x-client-secret") == "test-secret"
+        expected_credentials = base64.b64encode(b"test-client:test-secret").decode()
+        assert headers.get("authorization") == f"Basic {expected_credentials}"
 
         print("✅ get_policy_approved_context works with credentials")
 

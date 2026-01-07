@@ -24,6 +24,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import base64
 import concurrent.futures
 import contextlib
 import hashlib
@@ -249,11 +250,18 @@ class AxonFlow:
         }
         # Add authentication headers only when credentials are provided
         # For community/self-hosted mode, these can be omitted
-        if client_secret:
-            headers["X-Client-Secret"] = client_secret
-        if client_id:
+        #
+        # Priority:
+        # 1. OAuth2-style Basic auth (client_id + client_secret) - industry standard
+        # 2. X-License-Key header (backward compatibility)
+        if client_id and client_secret:
+            # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
+            credentials = f"{client_id}:{client_secret}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded}"
             headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
-        if license_key:
+        elif license_key:
+            # Fallback: X-License-Key header (backward compatibility)
             headers["X-License-Key"] = license_key
 
         # Initialize HTTP client
