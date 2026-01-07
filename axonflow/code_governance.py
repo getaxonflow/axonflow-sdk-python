@@ -145,6 +145,7 @@ class PRRecord(BaseModel):
     secrets_detected: int = Field(..., description="Secrets detected")
     unsafe_patterns: int = Field(..., description="Unsafe patterns")
     created_at: datetime = Field(..., description="Creation timestamp")
+    closed_at: datetime | None = Field(default=None, description="Closed timestamp")
     created_by: str | None = Field(default=None, description="Creator")
     provider_type: str | None = Field(default=None, description="Provider type")
 

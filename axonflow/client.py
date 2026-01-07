@@ -1992,6 +1992,29 @@ class AxonFlow:
         response = await self._portal_request("POST", f"/api/v1/code-governance/prs/{pr_id}/sync")
         return PRRecord.model_validate(response)
 
+    async def close_pr(self, pr_id: str, delete_branch: bool = True) -> PRRecord:
+        """Close a PR without merging and optionally delete the branch.
+
+        This is an enterprise feature for cleaning up test/demo PRs.
+        Supports all Git providers: GitHub, GitLab, Bitbucket.
+
+        Args:
+            pr_id: PR record ID
+            delete_branch: Whether to delete the source branch (default: True)
+
+        Returns:
+            Closed PR record
+        """
+        if self._config.debug:
+            self._logger.debug("Closing PR", pr_id=pr_id, delete_branch=delete_branch)
+
+        path = f"/api/v1/code-governance/prs/{pr_id}"
+        if delete_branch:
+            path += "?delete_branch=true"
+
+        response = await self._portal_request("DELETE", path)
+        return PRRecord.model_validate(response)
+
     # =========================================================================
     # Code Governance Metrics and Export
     # =========================================================================
@@ -3083,6 +3106,10 @@ class SyncAxonFlow:
     def sync_pr_status(self, pr_id: str) -> PRRecord:
         """Sync PR status with the Git provider."""
         return self._run_sync(self._async_client.sync_pr_status(pr_id))
+
+    def close_pr(self, pr_id: str, delete_branch: bool = True) -> PRRecord:
+        """Close a PR without merging and optionally delete the branch."""
+        return self._run_sync(self._async_client.close_pr(pr_id, delete_branch))
 
     def get_code_governance_metrics(self) -> CodeGovernanceMetrics:
         """Get aggregated code governance metrics."""

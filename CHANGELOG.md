@@ -5,6 +5,16 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Enterprise: Close PR** (`close_pr`): Close a PR without merging and optionally delete the branch
+  - Useful for cleaning up test/demo PRs created by code governance examples
+  - Supports all Git providers: GitHub, GitLab, Bitbucket
+  - Requires enterprise portal authentication
+- **PRRecord.closed_at**: Added optional `closed_at` field to track when a PR was closed
+
 ## [1.1.0] - 2026-01-05
 
 ### Added
