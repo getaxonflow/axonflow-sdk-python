@@ -5,51 +5,39 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-01-08
-
-### Breaking Changes
-
-- **BREAKING**: Removed `license_key` config option - use `client_id` and `client_secret` instead
-- **BREAKING**: Removed `X-License-Key` header support - SDK now uses only OAuth2 Basic auth
-- **BREAKING**: `client_id` and `client_secret` are now required for all enterprise features
+## [1.2.0] - 2026-01-08
 
 ### Added
+
+- **OAuth2-style client credentials**: New `client_id` and `client_secret` configuration options following OAuth2 client credentials pattern.
+  - `client_id` is used for request identification (required for most API calls)
+  - `client_secret` is optional - community/self-hosted deployments work without it
 
 - **Enterprise: Close PR** (`close_pr`): Close a PR without merging and optionally delete the branch
   - Useful for cleaning up test/demo PRs created by code governance examples
   - Supports all Git providers: GitHub, GitLab, Bitbucket
   - Requires enterprise portal authentication
-- **PRRecord.closed_at**: Added optional `closed_at` field to track when a PR was closed
 
 ### Changed
 
-- **OAuth2-Only Authentication**: Simplified authentication to use only OAuth2 Basic auth
-  - Uses `Authorization: Basic base64(client_id:client_secret)` header
-  - Removed `X-License-Key` and non-standard `X-Client-Secret` headers
-  - Aligns with industry-standard OAuth2 client credentials pattern
+- **Simplified authentication**: For community mode, simply provide `client_id` for request identification. No `client_secret` needed.
+
+```python
+# Community mode - no secret needed
+client = AxonFlow(
+    endpoint="http://localhost:8080",
+    client_id="my-app",  # Used for request identification
+)
+```
 
 ### Fixed
 
 - **get_plan_status endpoint**: Fixed endpoint path from `/api/plans/{id}` to `/api/v1/plan/{id}` to match orchestrator API
 
-### Migration Guide
+### Enterprise
 
-**Before (v1.x):**
-```python
-client = AxonFlow(
-    endpoint="http://localhost:8080",
-    license_key="AXON-V2-...",
-)
-```
-
-**After (v2.0.0):**
-```python
-client = AxonFlow(
-    endpoint="http://localhost:8080",
-    client_id="my-client-id",
-    client_secret="my-client-secret",
-)
-```
+- OAuth2 Basic auth: `Authorization: Basic base64(client_id:client_secret)` replaces `X-License-Key` header
+- Removed `license_key` configuration option (use `client_id`/`client_secret`)
 
 ## [1.1.0] - 2026-01-05
 
