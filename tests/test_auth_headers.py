@@ -61,7 +61,6 @@ class TestAuthHeadersWithCredentials:
         print("✅ OAuth2 Basic auth sent with client credentials")
 
 
-
 class TestAuthHeadersWithoutCredentials:
     """Verify auth headers are NOT sent when no credentials are provided."""
 

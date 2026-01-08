@@ -142,6 +142,7 @@ class TestExecuteQuery:
         def capture_request(request: httpx.Request) -> httpx.Response:
             nonlocal received_user_token
             import json
+
             body = json.loads(request.content)
             received_user_token = body.get("user_token")
             return httpx.Response(200, json=mock_query_response)
