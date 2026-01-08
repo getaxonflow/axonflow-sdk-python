@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
 from pytest_httpx import HTTPXMock
 
@@ -52,13 +53,19 @@ class TestClientInitialization:
         )
         assert client.config.endpoint == "https://test.axonflow.com"
 
-    def test_license_key_optional(self, config_dict: dict[str, Any]) -> None:
-        """Test license key is optional."""
-        client = AxonFlow(**config_dict)
-        assert client.config.license_key is None
+    def test_credentials_optional(self) -> None:
+        """Test client credentials are optional for community mode."""
+        client = AxonFlow(endpoint="https://test.axonflow.com")
+        assert client.config.client_id is None
+        assert client.config.client_secret is None
 
-        client_with_license = AxonFlow(**config_dict, license_key="license-123")
-        assert client_with_license.config.license_key == "license-123"
+        client_with_creds = AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        )
+        assert client_with_creds.config.client_id == "test-client"
+        assert client_with_creds.config.client_secret == "test-secret"
 
 
 class TestHealthCheck:
@@ -121,6 +128,34 @@ class TestExecuteQuery:
         assert result.success is True
         assert result.blocked is False
         assert result.data == {"result": "test result"}
+
+    @pytest.mark.asyncio
+    async def test_execute_query_empty_user_token_defaults_to_anonymous(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+        mock_query_response: dict[str, Any],
+    ) -> None:
+        """Test that empty user_token defaults to 'anonymous'."""
+        received_user_token = None
+
+        def capture_request(request: httpx.Request) -> httpx.Response:
+            nonlocal received_user_token
+            import json
+
+            body = json.loads(request.content)
+            received_user_token = body.get("user_token")
+            return httpx.Response(200, json=mock_query_response)
+
+        httpx_mock.add_callback(capture_request)
+
+        await client.execute_query(
+            user_token="",  # Empty token
+            query="What is AI?",
+            request_type="chat",
+        )
+
+        assert received_user_token == "anonymous"
 
     @pytest.mark.asyncio
     async def test_blocked_by_policy(

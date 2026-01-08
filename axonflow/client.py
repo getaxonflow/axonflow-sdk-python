@@ -24,6 +24,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import base64
 import concurrent.futures
 import contextlib
 import hashlib
@@ -182,7 +183,6 @@ class AxonFlow:
         client_id: str | None = None,
         client_secret: str | None = None,
         *,
-        license_key: str | None = None,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
         timeout: float = 60.0,
@@ -199,7 +199,6 @@ class AxonFlow:
             endpoint: AxonFlow endpoint URL. Can also be set via AXONFLOW_AGENT_URL env var.
             client_id: Client ID (optional for community/self-hosted mode)
             client_secret: Client secret (optional for community/self-hosted mode)
-            license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
             timeout: Request timeout in seconds
@@ -230,7 +229,6 @@ class AxonFlow:
             endpoint=resolved_endpoint.rstrip("/"),
             client_id=client_id,
             client_secret=client_secret,
-            license_key=license_key,
             mode=mode,
             debug=debug,
             timeout=timeout,
@@ -247,14 +245,16 @@ class AxonFlow:
         headers: dict[str, str] = {
             "Content-Type": "application/json",
         }
-        # Add authentication headers only when credentials are provided
-        # For community/self-hosted mode, these can be omitted
-        if client_secret:
-            headers["X-Client-Secret"] = client_secret
+        # Add authentication and tenant headers
+        # client_id is always required for policy APIs (sets X-Tenant-ID)
+        # client_secret is optional for community mode but required for enterprise
         if client_id:
             headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
-        if license_key:
-            headers["X-License-Key"] = license_key
+            # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
+            if client_secret:
+                credentials = f"{client_id}:{client_secret}"
+                encoded = base64.b64encode(credentials.encode()).decode()
+                headers["Authorization"] = f"Basic {encoded}"
 
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(
@@ -298,27 +298,28 @@ class AxonFlow:
     def _has_credentials(self) -> bool:
         """Check if credentials are configured.
 
-        Returns True if either a license key or client secret is set.
-        These credentials are optional for community/self-hosted deployments,
-        but required for enterprise features like Gateway Mode.
+        Returns True if client_id is set.
+        client_secret is optional for community mode but required for enterprise.
         """
-        return bool(self._config.client_secret or self._config.license_key)
+        return bool(self._config.client_id)
 
     def _require_credentials(self, feature: str) -> None:
         """Require credentials for enterprise features.
 
-        Raises AuthenticationError if no credentials are configured.
+        Raises AuthenticationError if client_id is not configured.
+        Note: client_secret is optional for community mode.
 
         Args:
             feature: Name of the feature requiring credentials (for error message)
 
         Raises:
-            AuthenticationError: If no credentials are configured
+            AuthenticationError: If client_id is not configured
         """
         if not self._has_credentials():
             msg = (
-                f"{feature} requires credentials. "
-                "Set client_secret or license_key when creating the client."
+                f"{feature} requires client_id. "
+                "Set client_id when creating the client "
+                "(client_secret is optional for community mode)."
             )
             raise AuthenticationError(msg)
 
@@ -362,19 +363,20 @@ class AxonFlow:
         return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
     @classmethod
-    def sandbox(cls, api_key: str = "demo-key") -> AxonFlow:
+    def sandbox(cls, client_id: str = "demo-key", client_secret: str = "demo-key") -> AxonFlow:  # noqa: S107
         """Create a sandbox client for testing.
 
         Args:
-            api_key: Optional API key (defaults to demo-key)
+            client_id: Optional client ID (defaults to demo-key)
+            client_secret: Optional client secret (defaults to demo-key)
 
         Returns:
             Configured AxonFlow client for sandbox environment
         """
         return cls(
             endpoint="https://staging-eu.getaxonflow.com",
-            client_id=api_key,
-            client_secret=api_key,
+            client_id=client_id,
+            client_secret=client_secret,
             mode=Mode.SANDBOX,
             debug=True,
         )
@@ -543,7 +545,8 @@ class AxonFlow:
         """Execute a query through AxonFlow with policy enforcement.
 
         Args:
-            user_token: User authentication token
+            user_token: User authentication token. If empty, defaults to "anonymous"
+                for audit purposes (community mode).
             query: The query or prompt
             request_type: Type of request (chat, sql, mcp-query, multi-agent-plan)
             context: Optional additional context
@@ -556,6 +559,10 @@ class AxonFlow:
             AuthenticationError: If credentials are invalid
             TimeoutError: If request times out
         """
+        # Default to "anonymous" if user_token is empty (community mode)
+        if not user_token:
+            user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
+
         # Check cache
         if self._cache is not None:
             cache_key = self._get_cache_key(request_type, query, user_token)
@@ -886,7 +893,7 @@ class AxonFlow:
         Returns:
             PlanExecutionResponse with current status
         """
-        response = await self._request("GET", f"/api/plans/{plan_id}")
+        response = await self._request("GET", f"/api/v1/plan/{plan_id}")
         return PlanExecutionResponse.model_validate(response)
 
     # =========================================================================
@@ -907,7 +914,7 @@ class AxonFlow:
 
         Note:
             This is an enterprise feature that requires credentials.
-            Set client_secret or license_key when creating the client.
+            Set client_id and client_secret when creating the client.
 
         Args:
             user_token: JWT token for the user making the request
@@ -1036,7 +1043,7 @@ class AxonFlow:
 
         Note:
             This is an enterprise feature that requires credentials.
-            Set client_secret or license_key when creating the client.
+            Set client_id and client_secret when creating the client.
 
         Args:
             context_id: Context ID from get_policy_approved_context()
@@ -1992,6 +1999,29 @@ class AxonFlow:
         response = await self._portal_request("POST", f"/api/v1/code-governance/prs/{pr_id}/sync")
         return PRRecord.model_validate(response)
 
+    async def close_pr(self, pr_id: str, delete_branch: bool = True) -> PRRecord:
+        """Close a PR without merging and optionally delete the branch.
+
+        This is an enterprise feature for cleaning up test/demo PRs.
+        Supports all Git providers: GitHub, GitLab, Bitbucket.
+
+        Args:
+            pr_id: PR record ID
+            delete_branch: Whether to delete the source branch (default: True)
+
+        Returns:
+            Closed PR record
+        """
+        if self._config.debug:
+            self._logger.debug("Closing PR", pr_id=pr_id, delete_branch=delete_branch)
+
+        path = f"/api/v1/code-governance/prs/{pr_id}"
+        if delete_branch:
+            path += "?delete_branch=true"
+
+        response = await self._portal_request("DELETE", path)
+        return PRRecord.model_validate(response)
+
     # =========================================================================
     # Code Governance Metrics and Export
     # =========================================================================
@@ -2796,7 +2826,10 @@ class SyncAxonFlow:
         request_type: str,
         context: dict[str, Any] | None = None,
     ) -> ClientResponse:
-        """Execute a query through AxonFlow."""
+        """Execute a query through AxonFlow.
+
+        If user_token is empty, defaults to "anonymous" for audit purposes.
+        """
         return self._run_sync(
             self._async_client.execute_query(user_token, query, request_type, context)
         )
@@ -3083,6 +3116,10 @@ class SyncAxonFlow:
     def sync_pr_status(self, pr_id: str) -> PRRecord:
         """Sync PR status with the Git provider."""
         return self._run_sync(self._async_client.sync_pr_status(pr_id))
+
+    def close_pr(self, pr_id: str, delete_branch: bool = True) -> PRRecord:
+        """Close a PR without merging and optionally delete the branch."""
+        return self._run_sync(self._async_client.close_pr(pr_id, delete_branch))
 
     def get_code_governance_metrics(self) -> CodeGovernanceMetrics:
         """Get aggregated code governance metrics."""

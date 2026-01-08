@@ -10,6 +10,7 @@ Run: python scripts/record_fixtures.py
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 from datetime import datetime
@@ -148,9 +149,12 @@ async def main() -> None:
     # Ensure fixtures directory exists
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Build OAuth2 Basic auth header
+    credentials = base64.b64encode(f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
     headers = {
         "Content-Type": "application/json",
-        "X-Client-Secret": CLIENT_SECRET,
+        "Authorization": f"Basic {credentials}",
+        "X-Tenant-ID": CLIENT_ID,
     }
 
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:

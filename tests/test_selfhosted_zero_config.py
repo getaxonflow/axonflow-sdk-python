@@ -93,18 +93,8 @@ class TestClientInitializationZeroConfig:
         assert not client._has_credentials()
         print("✅ Client created without credentials for any endpoint (community mode)")
 
-    def test_has_credentials_with_license_key(self):
-        """SDK should detect credentials when license_key is set."""
-        client = AxonFlow(
-            endpoint="http://localhost:8080",
-            license_key="test-license-key",
-            debug=True,
-        )
-        assert client._has_credentials()
-        print("✅ Client detected credentials with license_key")
-
-    def test_has_credentials_with_client_secret(self):
-        """SDK should detect credentials when client_secret is set."""
+    def test_has_credentials_with_client_credentials(self):
+        """SDK should detect credentials when client_id and client_secret are set."""
         client = AxonFlow(
             endpoint="http://localhost:8080",
             client_id="test-client",
@@ -112,7 +102,7 @@ class TestClientInitializationZeroConfig:
             debug=True,
         )
         assert client._has_credentials()
-        print("✅ Client detected credentials with client_secret")
+        print("✅ Client detected credentials with client_id and client_secret")
 
 
 # ============================================================
