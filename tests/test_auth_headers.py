@@ -5,7 +5,6 @@ not on localhost vs non-localhost URLs.
 
 Key behavior:
 - When credentials are provided (client_id + client_secret), OAuth2 Basic auth is used
-- When only license_key is provided, X-License-Key header is used (backward compatibility)
 - When no credentials are provided, headers are not sent
 - This works for any endpoint (localhost or remote)
 """
@@ -61,35 +60,6 @@ class TestAuthHeadersWithCredentials:
         assert "x-client-secret" not in headers
         print("✅ OAuth2 Basic auth sent with client credentials")
 
-    @pytest.mark.asyncio
-    async def test_auth_headers_sent_with_license_key(self, httpx_mock):
-        """Auth headers should be sent when license_key is provided."""
-        httpx_mock.add_response(
-            url="http://localhost:8080/api/request",
-            json={"success": True, "data": {"answer": "4"}, "blocked": False},
-        )
-
-        client = AxonFlow(
-            endpoint="http://localhost:8080",
-            license_key="test-license-key",
-            debug=True,
-        )
-
-        async with client:
-            await client.execute_query(
-                user_token="",
-                query="What is 2+2?",
-                request_type="chat",
-            )
-
-        requests = httpx_mock.get_requests()
-        assert len(requests) == 1
-
-        request = requests[0]
-        headers = dict(request.headers)
-
-        assert headers.get("x-license-key") == "test-license-key"
-        print("✅ Auth headers sent with license_key")
 
 
 class TestAuthHeadersWithoutCredentials:
@@ -106,7 +76,7 @@ class TestAuthHeadersWithoutCredentials:
         client = AxonFlow(
             endpoint="http://localhost:8080",
             client_id="test-client",
-            # No client_secret, no license_key - community mode
+            # No client_secret - community mode
             debug=True,
         )
 
@@ -125,7 +95,7 @@ class TestAuthHeadersWithoutCredentials:
 
         # Authorization header should not be in headers
         assert "authorization" not in headers
-        # X-License-Key should not be in headers
+        # REMOVED-X-LICENSE-KEY should not be in headers
         assert "x-license-key" not in headers
         # X-Tenant-ID should not be set when not authenticated
         assert "x-tenant-id" not in headers
@@ -281,30 +251,12 @@ class TestCredentialDetection:
         )
         assert client._has_credentials() is True
 
-    def test_has_credentials_with_license_key(self):
-        """Should detect credentials when license_key is set."""
-        client = AxonFlow(
-            endpoint="http://localhost:8080",
-            license_key="test-license",
-        )
-        assert client._has_credentials() is True
-
-    def test_has_credentials_with_both(self):
-        """Should detect credentials when both are set."""
-        client = AxonFlow(
-            endpoint="http://localhost:8080",
-            client_id="test-client",
-            client_secret="test-secret",
-            license_key="test-license",
-        )
-        assert client._has_credentials() is True
-
     def test_no_credentials_with_none(self):
-        """Should not detect credentials when nothing is set."""
+        """Should not detect credentials when client_secret is not set."""
         client = AxonFlow(
             endpoint="http://localhost:8080",
             client_id="test-client",
-            # No client_secret, no license_key
+            # No client_secret
         )
         assert client._has_credentials() is False
 

@@ -183,7 +183,6 @@ class AxonFlow:
         client_id: str | None = None,
         client_secret: str | None = None,
         *,
-        license_key: str | None = None,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
         timeout: float = 60.0,
@@ -200,7 +199,6 @@ class AxonFlow:
             endpoint: AxonFlow endpoint URL. Can also be set via AXONFLOW_AGENT_URL env var.
             client_id: Client ID (optional for community/self-hosted mode)
             client_secret: Client secret (optional for community/self-hosted mode)
-            license_key: Optional license key for organization-level auth
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
             timeout: Request timeout in seconds
@@ -231,7 +229,6 @@ class AxonFlow:
             endpoint=resolved_endpoint.rstrip("/"),
             client_id=client_id,
             client_secret=client_secret,
-            license_key=license_key,
             mode=mode,
             debug=debug,
             timeout=timeout,
@@ -250,19 +247,12 @@ class AxonFlow:
         }
         # Add authentication headers only when credentials are provided
         # For community/self-hosted mode, these can be omitted
-        #
-        # Priority:
-        # 1. OAuth2-style Basic auth (client_id + client_secret) - industry standard
-        # 2. X-License-Key header (backward compatibility)
+        # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
         if client_id and client_secret:
-            # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
             credentials = f"{client_id}:{client_secret}"
             encoded = base64.b64encode(credentials.encode()).decode()
             headers["Authorization"] = f"Basic {encoded}"
             headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
-        elif license_key:
-            # Fallback: X-License-Key header (backward compatibility)
-            headers["X-License-Key"] = license_key
 
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(
@@ -306,11 +296,11 @@ class AxonFlow:
     def _has_credentials(self) -> bool:
         """Check if credentials are configured.
 
-        Returns True if either a license key or client secret is set.
+        Returns True if both client_id and client_secret are set.
         These credentials are optional for community/self-hosted deployments,
         but required for enterprise features like Gateway Mode.
         """
-        return bool(self._config.client_secret or self._config.license_key)
+        return bool(self._config.client_id and self._config.client_secret)
 
     def _require_credentials(self, feature: str) -> None:
         """Require credentials for enterprise features.
@@ -326,7 +316,7 @@ class AxonFlow:
         if not self._has_credentials():
             msg = (
                 f"{feature} requires credentials. "
-                "Set client_secret or license_key when creating the client."
+                "Set client_id and client_secret when creating the client."
             )
             raise AuthenticationError(msg)
 
@@ -370,19 +360,20 @@ class AxonFlow:
         return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
     @classmethod
-    def sandbox(cls, api_key: str = "demo-key") -> AxonFlow:
+    def sandbox(cls, client_id: str = "demo-key", client_secret: str = "demo-key") -> AxonFlow:
         """Create a sandbox client for testing.
 
         Args:
-            api_key: Optional API key (defaults to demo-key)
+            client_id: Optional client ID (defaults to demo-key)
+            client_secret: Optional client secret (defaults to demo-key)
 
         Returns:
             Configured AxonFlow client for sandbox environment
         """
         return cls(
             endpoint="https://staging-eu.getaxonflow.com",
-            client_id=api_key,
-            client_secret=api_key,
+            client_id=client_id,
+            client_secret=client_secret,
             mode=Mode.SANDBOX,
             debug=True,
         )
@@ -915,7 +906,7 @@ class AxonFlow:
 
         Note:
             This is an enterprise feature that requires credentials.
-            Set client_secret or license_key when creating the client.
+            Set client_id and client_secret when creating the client.
 
         Args:
             user_token: JWT token for the user making the request
@@ -1044,7 +1035,7 @@ class AxonFlow:
 
         Note:
             This is an enterprise feature that requires credentials.
-            Set client_secret or license_key when creating the client.
+            Set client_id and client_secret when creating the client.
 
         Args:
             context_id: Context ID from get_policy_approved_context()

@@ -40,7 +40,6 @@ async def main() -> None:
         endpoint=os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com"),
         client_id=os.environ.get("AXONFLOW_CLIENT_ID", "demo-client"),
         client_secret=os.environ.get("AXONFLOW_CLIENT_SECRET", "demo-secret"),
-        license_key=os.environ.get("AXONFLOW_LICENSE_KEY"),
         debug=True,
     ) as axonflow:
         print("=== Gateway Mode Example ===\n")

@@ -49,7 +49,6 @@ class AxonFlowConfig(BaseModel):
         endpoint: AxonFlow endpoint URL (required) - single entry point for all services
         client_id: Client ID for authentication (optional for community/self-hosted mode)
         client_secret: Client secret for authentication (optional for community/self-hosted mode)
-        license_key: Optional license key for organization-level auth
         mode: Operation mode (production or sandbox)
         debug: Enable debug logging
         timeout: Request timeout in seconds
@@ -69,7 +68,6 @@ class AxonFlowConfig(BaseModel):
     endpoint: str = Field(..., min_length=1, description="AxonFlow endpoint URL")
     client_id: str | None = Field(default=None, description="Client ID (optional)")
     client_secret: str | None = Field(default=None, description="Client secret (optional)")
-    license_key: str | None = Field(default=None, description="License key")
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
     timeout: float = Field(default=60.0, gt=0, description="Request timeout (seconds)")

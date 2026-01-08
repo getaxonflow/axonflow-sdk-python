@@ -52,13 +52,19 @@ class TestClientInitialization:
         )
         assert client.config.endpoint == "https://test.axonflow.com"
 
-    def test_license_key_optional(self, config_dict: dict[str, Any]) -> None:
-        """Test license key is optional."""
-        client = AxonFlow(**config_dict)
-        assert client.config.license_key is None
+    def test_credentials_optional(self) -> None:
+        """Test client credentials are optional for community mode."""
+        client = AxonFlow(endpoint="https://test.axonflow.com")
+        assert client.config.client_id is None
+        assert client.config.client_secret is None
 
-        client_with_license = AxonFlow(**config_dict, license_key="license-123")
-        assert client_with_license.config.license_key == "license-123"
+        client_with_creds = AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        )
+        assert client_with_creds.config.client_id == "test-client"
+        assert client_with_creds.config.client_secret == "test-secret"
 
 
 class TestHealthCheck:

@@ -168,9 +168,8 @@ from axonflow import AxonFlow, Mode, RetryConfig
 
 client = AxonFlow(
     endpoint="https://your-agent.axonflow.com",
-    client_id="your-client-id",
-    client_secret="your-client-secret",
-    license_key="optional-license-key",      # For enterprise features
+    client_id="your-client-id",               # Required for enterprise features
+    client_secret="your-client-secret",       # Required for enterprise features
     mode=Mode.PRODUCTION,                     # or Mode.SANDBOX
     debug=True,                               # Enable debug logging
     timeout=60.0,                             # Request timeout in seconds

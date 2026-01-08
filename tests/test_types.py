@@ -126,15 +126,15 @@ class TestAxonFlowConfig:
         """Test full configuration."""
         config = AxonFlowConfig(
             endpoint="https://test.com",
-            client_id="client",
-            client_secret="secret",
-            license_key="license-123",
+            client_id="test-client",
+            client_secret="test-secret",
             mode=Mode.SANDBOX,
             debug=True,
             timeout=30.0,
             insecure_skip_verify=True,
         )
-        assert config.license_key == "license-123"
+        assert config.client_id == "test-client"
+        assert config.client_secret == "test-secret"
         assert config.mode == Mode.SANDBOX
         assert config.timeout == 30.0
 
