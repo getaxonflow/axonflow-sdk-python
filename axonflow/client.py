@@ -318,7 +318,8 @@ class AxonFlow:
         if not self._has_credentials():
             msg = (
                 f"{feature} requires client_id. "
-                "Set client_id when creating the client (client_secret is optional for community mode)."
+                "Set client_id when creating the client "
+                "(client_secret is optional for community mode)."
             )
             raise AuthenticationError(msg)
 
@@ -560,7 +561,7 @@ class AxonFlow:
         """
         # Default to "anonymous" if user_token is empty (community mode)
         if not user_token:
-            user_token = "anonymous"
+            user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
 
         # Check cache
         if self._cache is not None:
