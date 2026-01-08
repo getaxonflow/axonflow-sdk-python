@@ -360,7 +360,7 @@ class AxonFlow:
         return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
     @classmethod
-    def sandbox(cls, client_id: str = "demo-key", client_secret: str = "demo-key") -> AxonFlow:
+    def sandbox(cls, client_id: str = "demo-key", client_secret: str = "demo-key") -> AxonFlow:  # noqa: S107
         """Create a sandbox client for testing.
 
         Args:
