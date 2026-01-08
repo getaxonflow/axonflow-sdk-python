@@ -296,27 +296,27 @@ class AxonFlow:
     def _has_credentials(self) -> bool:
         """Check if credentials are configured.
 
-        Returns True if both client_id and client_secret are set.
-        These credentials are optional for community/self-hosted deployments,
-        but required for enterprise features like Gateway Mode.
+        Returns True if client_id is set.
+        client_secret is optional for community mode but required for enterprise.
         """
-        return bool(self._config.client_id and self._config.client_secret)
+        return bool(self._config.client_id)
 
     def _require_credentials(self, feature: str) -> None:
         """Require credentials for enterprise features.
 
-        Raises AuthenticationError if no credentials are configured.
+        Raises AuthenticationError if client_id is not configured.
+        Note: client_secret is optional for community mode.
 
         Args:
             feature: Name of the feature requiring credentials (for error message)
 
         Raises:
-            AuthenticationError: If no credentials are configured
+            AuthenticationError: If client_id is not configured
         """
         if not self._has_credentials():
             msg = (
-                f"{feature} requires credentials. "
-                "Set client_id and client_secret when creating the client."
+                f"{feature} requires client_id. "
+                "Set client_id when creating the client (client_secret is optional for community mode)."
             )
             raise AuthenticationError(msg)
 
