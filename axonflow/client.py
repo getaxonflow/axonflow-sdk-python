@@ -245,14 +245,16 @@ class AxonFlow:
         headers: dict[str, str] = {
             "Content-Type": "application/json",
         }
-        # Add authentication headers only when credentials are provided
-        # For community/self-hosted mode, these can be omitted
-        # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
-        if client_id and client_secret:
-            credentials = f"{client_id}:{client_secret}"
-            encoded = base64.b64encode(credentials.encode()).decode()
-            headers["Authorization"] = f"Basic {encoded}"
+        # Add authentication and tenant headers
+        # client_id is always required for policy APIs (sets X-Tenant-ID)
+        # client_secret is optional for community mode but required for enterprise
+        if client_id:
             headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
+            # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
+            if client_secret:
+                credentials = f"{client_id}:{client_secret}"
+                encoded = base64.b64encode(credentials.encode()).decode()
+                headers["Authorization"] = f"Basic {encoded}"
 
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(
