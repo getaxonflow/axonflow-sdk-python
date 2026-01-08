@@ -129,6 +129,33 @@ class TestExecuteQuery:
         assert result.data == {"result": "test result"}
 
     @pytest.mark.asyncio
+    async def test_execute_query_empty_user_token_defaults_to_anonymous(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+        mock_query_response: dict[str, Any],
+    ) -> None:
+        """Test that empty user_token defaults to 'anonymous'."""
+        received_user_token = None
+
+        def capture_request(request: httpx.Request) -> httpx.Response:
+            nonlocal received_user_token
+            import json
+            body = json.loads(request.content)
+            received_user_token = body.get("user_token")
+            return httpx.Response(200, json=mock_query_response)
+
+        httpx_mock.add_callback(capture_request)
+
+        await client.execute_query(
+            user_token="",  # Empty token
+            query="What is AI?",
+            request_type="chat",
+        )
+
+        assert received_user_token == "anonymous"
+
+    @pytest.mark.asyncio
     async def test_blocked_by_policy(
         self,
         client: AxonFlow,

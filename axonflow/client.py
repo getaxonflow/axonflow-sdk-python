@@ -544,7 +544,8 @@ class AxonFlow:
         """Execute a query through AxonFlow with policy enforcement.
 
         Args:
-            user_token: User authentication token
+            user_token: User authentication token. If empty, defaults to "anonymous"
+                for audit purposes (community mode).
             query: The query or prompt
             request_type: Type of request (chat, sql, mcp-query, multi-agent-plan)
             context: Optional additional context
@@ -557,6 +558,10 @@ class AxonFlow:
             AuthenticationError: If credentials are invalid
             TimeoutError: If request times out
         """
+        # Default to "anonymous" if user_token is empty (community mode)
+        if not user_token:
+            user_token = "anonymous"
+
         # Check cache
         if self._cache is not None:
             cache_key = self._get_cache_key(request_type, query, user_token)
@@ -2820,7 +2825,10 @@ class SyncAxonFlow:
         request_type: str,
         context: dict[str, Any] | None = None,
     ) -> ClientResponse:
-        """Execute a query through AxonFlow."""
+        """Execute a query through AxonFlow.
+
+        If user_token is empty, defaults to "anonymous" for audit purposes.
+        """
         return self._run_sync(
             self._async_client.execute_query(user_token, query, request_type, context)
         )
