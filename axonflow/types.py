@@ -166,6 +166,33 @@ class ConnectorInstallRequest(BaseModel):
     credentials: dict[str, str] = Field(default_factory=dict)
 
 
+class PolicyMatchInfo(BaseModel):
+    """Information about a policy match during evaluation."""
+
+    policy_id: str = Field(..., description="Unique policy identifier")
+    policy_name: str = Field(..., description="Human-readable policy name")
+    category: str = Field(..., description="Policy category")
+    severity: str = Field(..., description="Match severity")
+    action: str = Field(..., description="Action taken")
+
+
+class ConnectorPolicyInfo(BaseModel):
+    """Policy evaluation information included in MCP responses.
+
+    Provides transparency into policy enforcement decisions for
+    request blocking and response redaction.
+    """
+
+    policies_evaluated: int = Field(default=0, ge=0, description="Number of policies evaluated")
+    blocked: bool = Field(default=False, description="Whether request was blocked")
+    block_reason: str | None = Field(default=None, description="Reason if blocked")
+    redactions_applied: int = Field(default=0, ge=0, description="Number of redactions applied")
+    processing_time_ms: int = Field(default=0, ge=0, description="Policy evaluation time in ms")
+    matched_policies: list[PolicyMatchInfo] = Field(
+        default_factory=list, description="Policies that matched"
+    )
+
+
 class ConnectorResponse(BaseModel):
     """Response from MCP connector query."""
 
@@ -173,6 +200,13 @@ class ConnectorResponse(BaseModel):
     data: Any | None = None
     error: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
+    redacted: bool = Field(default=False, description="Whether any fields were redacted")
+    redacted_fields: list[str] = Field(
+        default_factory=list, description="JSON paths of redacted fields"
+    )
+    policy_info: ConnectorPolicyInfo | None = Field(
+        default=None, description="Policy evaluation details"
+    )
 
 
 class PlanStep(BaseModel):
@@ -230,10 +264,16 @@ class PolicyApprovalResult(BaseModel):
         description="Whether response requires redaction (PII detected with redact action)",
     )
     approved_data: dict[str, Any] = Field(default_factory=dict)
-    policies: list[str] = Field(default_factory=list)
+    policies: list[str] | None = Field(default=None)
     rate_limit_info: RateLimitInfo | None = None
     expires_at: datetime
     block_reason: str | None = None
+
+    @field_validator("policies", mode="before")
+    @classmethod
+    def policies_default(cls, v: list[str] | None) -> list[str]:
+        """Convert None to empty list for policies."""
+        return v if v is not None else []
 
 
 class TokenUsage(BaseModel):

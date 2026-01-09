@@ -12,6 +12,7 @@ from axonflow import AxonFlow, Mode
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
+    ConnectorError,
     PolicyViolationError,
 )
 
@@ -969,7 +970,7 @@ class TestExecutionReplay:
             status_code=404,
             json={"error": "execution not found"},
         )
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(AxonFlowError, match="execution not found"):
             await client.get_execution("nonexistent")
 
 
@@ -1202,3 +1203,134 @@ class TestCodeGovernance:
         result = await client.export_code_governance_data_csv()
         assert "id,title,state" in result
         assert "pr-1" in result
+
+
+class TestMCPQueryMethods:
+    """Test MCP Query/Execute methods with policy enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_mcp_query_success(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test successful MCP query with policy info."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/mcp/resources/query",
+            method="POST",
+            json={
+                "success": True,
+                "data": [{"id": 1, "name": "Test"}],
+                "redacted": False,
+                "policy_info": {
+                    "policies_evaluated": 5,
+                    "blocked": False,
+                    "redactions_applied": 0,
+                    "processing_time_ms": 2,
+                },
+            },
+        )
+
+        result = await client.mcp_query("postgres", "SELECT * FROM users")
+        assert result.success is True
+        assert result.redacted is False
+        assert result.policy_info is not None
+        assert result.policy_info.policies_evaluated == 5
+
+    @pytest.mark.asyncio
+    async def test_mcp_query_with_redaction(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test MCP query with PII redaction."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/mcp/resources/query",
+            method="POST",
+            json={
+                "success": True,
+                "data": [{"id": 1, "ssn": "***REDACTED***"}],
+                "redacted": True,
+                "redacted_fields": ["data[0].ssn"],
+                "policy_info": {
+                    "policies_evaluated": 5,
+                    "blocked": False,
+                    "redactions_applied": 1,
+                    "processing_time_ms": 3,
+                },
+            },
+        )
+
+        result = await client.mcp_query("postgres", "SELECT * FROM customers")
+        assert result.redacted is True
+        assert "data[0].ssn" in result.redacted_fields
+        assert result.policy_info is not None
+        assert result.policy_info.redactions_applied == 1
+
+    @pytest.mark.asyncio
+    async def test_mcp_query_blocked(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test MCP query blocked by policy."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/mcp/resources/query",
+            method="POST",
+            status_code=403,
+            json={"error": "Request blocked: SQLi detected"},
+        )
+
+        with pytest.raises(ConnectorError, match="blocked"):
+            await client.mcp_query(
+                "postgres",
+                "SELECT * FROM users; DROP TABLE users;--",
+            )
+
+    @pytest.mark.asyncio
+    async def test_mcp_query_missing_connector(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test MCP query with missing connector."""
+        with pytest.raises(ConnectorError, match="connector"):
+            await client.mcp_query("", "SELECT 1")
+
+    @pytest.mark.asyncio
+    async def test_mcp_query_missing_statement(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test MCP query with missing statement."""
+        with pytest.raises(ConnectorError, match="statement"):
+            await client.mcp_query("postgres", "")
+
+    @pytest.mark.asyncio
+    async def test_mcp_execute(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test MCP execute (alias for mcp_query)."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/mcp/resources/query",
+            method="POST",
+            json={
+                "success": True,
+                "data": {"affected_rows": 1},
+                "policy_info": {
+                    "policies_evaluated": 3,
+                    "blocked": False,
+                    "redactions_applied": 0,
+                    "processing_time_ms": 1,
+                },
+            },
+        )
+
+        result = await client.mcp_execute(
+            "postgres",
+            "UPDATE users SET name = $1 WHERE id = $2",
+        )
+        assert result.success is True
+        assert result.policy_info is not None
+        assert result.policy_info.policies_evaluated == 3

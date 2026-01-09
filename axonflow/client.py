@@ -64,6 +64,7 @@ from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
     ConnectionError,
+    ConnectorError,
     PolicyViolationError,
     TimeoutError,
 )
@@ -103,6 +104,7 @@ from axonflow.types import (
     ConnectorHealthStatus,
     ConnectorInstallRequest,
     ConnectorMetadata,
+    ConnectorPolicyInfo,
     ConnectorResponse,
     CreateBudgetRequest,
     ExecutionDetail,
@@ -749,6 +751,98 @@ class AxonFlow:
                 "policy_info": policy_info,
             },
         )
+
+    async def mcp_query(
+        self,
+        connector: str,
+        statement: str,
+        options: dict[str, Any] | None = None,
+    ) -> ConnectorResponse:
+        """Execute a query directly against the MCP connector endpoint.
+
+        This method calls the agent's /mcp/resources/query endpoint which provides:
+        - Request-phase policy evaluation (SQLi blocking, PII blocking)
+        - Response-phase policy evaluation (PII redaction)
+        - PolicyInfo metadata in responses
+
+        Args:
+            connector: Name of the MCP connector (e.g., "postgres")
+            statement: SQL statement or query to execute
+            options: Optional additional options for the query
+
+        Returns:
+            ConnectorResponse with data, redaction info, and policy_info
+
+        Raises:
+            ConnectorError: If the request is blocked by policy or fails
+
+        Example:
+            response = await client.mcp_query(
+                connector="postgres",
+                statement="SELECT * FROM customers LIMIT 10"
+            )
+            if response.redacted:
+                print(f"Redacted fields: {response.redacted_fields}")
+        """
+        if not connector:
+            msg = "connector name is required"
+            raise ConnectorError(msg, connector=None, operation="mcp_query")
+        if not statement:
+            msg = "statement is required"
+            raise ConnectorError(msg, connector=connector, operation="mcp_query")
+
+        url = f"{self._config.endpoint}/mcp/resources/query"
+        body = {
+            "connector": connector,
+            "statement": statement,
+            "options": options or {},
+        }
+
+        if self._config.debug:
+            self._logger.debug("MCP Query", connector=connector, statement=statement[:50])
+
+        response = await self._http_client.post(url, json=body)
+        response_data = response.json()
+
+        # Handle policy blocks (403 responses)
+        if not response.is_success:
+            error_msg = response_data.get("error", f"MCP query failed: {response.status_code}")
+            raise ConnectorError(error_msg, connector=connector, operation="mcp_query")
+
+        if self._config.debug:
+            self._logger.debug(
+                "MCP Query result",
+                connector=connector,
+                success=response_data.get("success"),
+                redacted=response_data.get("redacted"),
+            )
+
+        # Build policy_info if present
+        policy_info = None
+        if response_data.get("policy_info"):
+            policy_info = ConnectorPolicyInfo.model_validate(response_data["policy_info"])
+
+        return ConnectorResponse(
+            success=response_data.get("success", True),
+            data=response_data.get("data"),
+            error=response_data.get("error"),
+            meta=response_data.get("meta", {}),
+            redacted=response_data.get("redacted", False),
+            redacted_fields=response_data.get("redacted_fields", []),
+            policy_info=policy_info,
+        )
+
+    async def mcp_execute(
+        self,
+        connector: str,
+        statement: str,
+        options: dict[str, Any] | None = None,
+    ) -> ConnectorResponse:
+        """Execute a statement against an MCP connector (alias for mcp_query).
+
+        Same as mcp_query but follows the naming convention of other execute* methods.
+        """
+        return await self.mcp_query(connector, statement, options)
 
     async def generate_plan(
         self,
@@ -2865,6 +2959,30 @@ class SyncAxonFlow:
         return self._run_sync(
             self._async_client.query_connector(user_token, connector_name, operation, params)
         )
+
+    def mcp_query(
+        self,
+        connector: str,
+        statement: str,
+        options: dict[str, Any] | None = None,
+    ) -> ConnectorResponse:
+        """Execute a query directly against the MCP connector endpoint.
+
+        This method calls the agent's /mcp/resources/query endpoint which provides:
+        - Request-phase policy evaluation (SQLi blocking, PII blocking)
+        - Response-phase policy evaluation (PII redaction)
+        - PolicyInfo metadata in responses
+        """
+        return self._run_sync(self._async_client.mcp_query(connector, statement, options))
+
+    def mcp_execute(
+        self,
+        connector: str,
+        statement: str,
+        options: dict[str, Any] | None = None,
+    ) -> ConnectorResponse:
+        """Execute a statement against an MCP connector (alias for mcp_query)."""
+        return self._run_sync(self._async_client.mcp_execute(connector, statement, options))
 
     def generate_plan(
         self,
