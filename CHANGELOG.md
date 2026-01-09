@@ -5,6 +5,26 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-09
+
+### Added
+
+- **MCP Query and Execute methods**: New methods for MCP connector operations with policy enforcement
+  - `mcp_query(request)` - Execute SQL query through MCP connector with policy enforcement
+  - `mcp_execute(request)` - Execute non-query SQL statement through MCP connector
+  - Returns `ConnectorResponse` with `redacted`, `redacted_fields`, and `policy_info` fields
+
+- **PolicyInfo types**: New types for policy enforcement metadata in responses
+  - `PolicyInfo` - Contains `policies_evaluated`, `blocked`, `block_reason`, `redactions_applied`, `processing_time_ms`, `matched_policies`
+  - `PolicyMatchInfo` - Details of matched policies including `policy_id`, `policy_name`, `category`, `severity`, `action`
+
+- **ConnectorResponse fields**: New fields for redaction information
+  - `redacted: bool` - Whether any fields were redacted
+  - `redacted_fields: List[str]` - JSON paths of redacted fields (e.g., `rows[0].ssn`)
+  - `policy_info: PolicyInfo` - Policy enforcement metadata
+
+---
+
 ## [1.2.0] - 2026-01-08
 
 ### Added
