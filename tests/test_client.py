@@ -12,6 +12,7 @@ from axonflow import AxonFlow, Mode
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
+    ConnectorError,
     PolicyViolationError,
 )
 
@@ -969,7 +970,7 @@ class TestExecutionReplay:
             status_code=404,
             json={"error": "execution not found"},
         )
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(AxonFlowError, match="execution not found"):
             await client.get_execution("nonexistent")
 
 
@@ -1280,7 +1281,7 @@ class TestMCPQueryMethods:
             json={"error": "Request blocked: SQLi detected"},
         )
 
-        with pytest.raises(Exception):
+        with pytest.raises(ConnectorError, match="blocked"):
             await client.mcp_query(
                 "postgres",
                 "SELECT * FROM users; DROP TABLE users;--",
@@ -1292,7 +1293,7 @@ class TestMCPQueryMethods:
         client: AxonFlow,
     ) -> None:
         """Test MCP query with missing connector."""
-        with pytest.raises(Exception, match="connector"):
+        with pytest.raises(ConnectorError, match="connector"):
             await client.mcp_query("", "SELECT 1")
 
     @pytest.mark.asyncio
@@ -1301,7 +1302,7 @@ class TestMCPQueryMethods:
         client: AxonFlow,
     ) -> None:
         """Test MCP query with missing statement."""
-        with pytest.raises(Exception, match="statement"):
+        with pytest.raises(ConnectorError, match="statement"):
             await client.mcp_query("postgres", "")
 
     @pytest.mark.asyncio
