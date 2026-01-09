@@ -170,6 +170,7 @@ class PolicyMatchInfo(BaseModel):
     """Information about a policy match during evaluation."""
 
     policy_id: str = Field(..., description="Unique policy identifier")
+    policy_name: str = Field(..., description="Human-readable policy name")
     category: str = Field(..., description="Policy category")
     severity: str = Field(..., description="Match severity")
     action: str = Field(..., description="Action taken")
@@ -263,10 +264,16 @@ class PolicyApprovalResult(BaseModel):
         description="Whether response requires redaction (PII detected with redact action)",
     )
     approved_data: dict[str, Any] = Field(default_factory=dict)
-    policies: list[str] = Field(default_factory=list)
+    policies: list[str] | None = Field(default=None)
     rate_limit_info: RateLimitInfo | None = None
     expires_at: datetime
     block_reason: str | None = None
+
+    @field_validator("policies", mode="before")
+    @classmethod
+    def policies_default(cls, v: list[str] | None) -> list[str]:
+        """Convert None to empty list for policies."""
+        return v if v is not None else []
 
 
 class TokenUsage(BaseModel):
