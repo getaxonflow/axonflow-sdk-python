@@ -785,9 +785,11 @@ class AxonFlow:
                 print(f"Redacted fields: {response.redacted_fields}")
         """
         if not connector:
-            raise ConnectorError("connector name is required", connector=None, operation="mcp_query")
+            msg = "connector name is required"
+            raise ConnectorError(msg, connector=None, operation="mcp_query")
         if not statement:
-            raise ConnectorError("statement is required", connector=connector, operation="mcp_query")
+            msg = "statement is required"
+            raise ConnectorError(msg, connector=connector, operation="mcp_query")
 
         url = f"{self._config.endpoint}/mcp/resources/query"
         body = {
