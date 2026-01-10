@@ -245,11 +245,99 @@ ruff format .
 mypy axonflow
 ```
 
+## Examples
+
+Complete working examples for all features are available in the [examples folder](https://github.com/getaxonflow/axonflow/tree/main/examples).
+
+### Community Features
+
+```python
+# PII Detection - Automatically detect sensitive data
+result = await client.get_policy_approved_context(
+    user_token="user-123",
+    query="My SSN is 123-45-6789"
+)
+# result.approved = True, result.requires_redaction = True (SSN detected)
+
+# SQL Injection Detection - Block malicious queries
+result = await client.get_policy_approved_context(
+    user_token="user-123",
+    query="SELECT * FROM users; DROP TABLE users;"
+)
+# result.approved = False, result.block_reason = "SQL injection detected"
+
+# Static Policies - List and manage built-in policies
+policies = await client.list_policies()
+# Returns: [Policy(name="pii-detection", enabled=True), ...]
+
+# Dynamic Policies - Create runtime policies
+await client.create_dynamic_policy(
+    name="block-competitor-queries",
+    conditions={"contains": ["competitor", "pricing"]},
+    action="block"
+)
+
+# MCP Connectors - Query external data sources
+resp = await client.query_connector(
+    user_token="user-123",
+    connector_name="postgres-db",
+    operation="query",
+    params={"sql": "SELECT name FROM customers"}
+)
+
+# Multi-Agent Planning - Orchestrate complex workflows
+plan = await client.generate_plan(
+    query="Research AI governance regulations",
+    domain="legal"
+)
+result = await client.execute_plan(plan.plan_id)
+
+# Audit Logging - Track all LLM interactions
+await client.audit_llm_call(
+    context_id=ctx.context_id,
+    response_summary="AI response summary",
+    provider="openai",
+    model="gpt-4",
+    token_usage=TokenUsage(prompt_tokens=100, completion_tokens=200, total_tokens=300),
+    latency_ms=450
+)
+```
+
+### Enterprise Features
+
+These features require an AxonFlow Enterprise license:
+
+```python
+# Code Governance - Automated PR reviews with AI
+pr_result = await client.review_pull_request(
+    repo_owner="your-org",
+    repo_name="your-repo",
+    pr_number=123,
+    check_types=["security", "style", "performance"]
+)
+
+# Cost Controls - Budget management for LLM usage
+budget = await client.get_budget("team-engineering")
+# Returns: Budget(limit=1000.00, used=234.56, remaining=765.44)
+
+# MCP Policy Enforcement - Automatic PII redaction in connector responses
+resp = await client.query_connector("user", "postgres", "SELECT * FROM customers", {})
+# resp.policy_info.redacted = True
+# resp.policy_info.redacted_fields = ["ssn", "credit_card"]
+```
+
+For enterprise features, contact [sales@getaxonflow.com](mailto:sales@getaxonflow.com).
+
 ## Documentation
 
 - [Getting Started](https://docs.getaxonflow.com/sdk/python-getting-started)
 - [Gateway Mode Guide](https://docs.getaxonflow.com/sdk/gateway-mode)
-- [Examples](https://github.com/getaxonflow/axonflow/tree/main/examples)
+
+## Support
+
+- **Documentation**: https://docs.getaxonflow.com
+- **Issues**: https://github.com/getaxonflow/axonflow-sdk-python/issues
+- **Email**: dev@getaxonflow.com
 
 ## License
 
