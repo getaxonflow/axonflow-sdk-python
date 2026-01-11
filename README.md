@@ -342,3 +342,5 @@ For enterprise features, contact [sales@getaxonflow.com](mailto:sales@getaxonflo
 ## License
 
 MIT - See [LICENSE](LICENSE) for details.
+
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=fbda6e64-1812-428b-b135-ed2b548ce50d" />
