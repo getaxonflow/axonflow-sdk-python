@@ -176,6 +176,51 @@ class PolicyMatchInfo(BaseModel):
     action: str = Field(..., description="Action taken")
 
 
+class ExfiltrationCheckInfo(BaseModel):
+    """Information about exfiltration limit checks (Issue #966).
+
+    Helps prevent large-scale data extraction via MCP queries.
+    """
+
+    rows_returned: int = Field(default=0, ge=0, description="Number of rows in the response")
+    row_limit: int = Field(default=0, ge=0, description="Configured max rows per query")
+    bytes_returned: int = Field(default=0, ge=0, description="Size of response data in bytes")
+    byte_limit: int = Field(default=0, ge=0, description="Configured max bytes per response")
+    within_limits: bool = Field(default=True, description="Whether response is within limits")
+
+
+class DynamicPolicyMatch(BaseModel):
+    """Details about a matched dynamic policy."""
+
+    policy_id: str = Field(..., description="Unique policy identifier")
+    policy_name: str = Field(default="", description="Human-readable policy name")
+    policy_type: str = Field(
+        default="",
+        description="Type of policy (rate-limit, budget, time-access, role-access, mcp, connector)",
+    )
+    action: str = Field(default="", description="Action taken (allow, block, log, etc.)")
+    reason: str | None = Field(default=None, description="Context for the policy match")
+
+
+class DynamicPolicyInfo(BaseModel):
+    """Information about dynamic policy evaluation (Issue #968).
+
+    Dynamic policies are evaluated by the Orchestrator and can include
+    rate limiting, budget controls, time-based access, and role-based access policies.
+    """
+
+    policies_evaluated: int = Field(default=0, ge=0, description="Number of dynamic policies checked")
+    matched_policies: list[DynamicPolicyMatch] = Field(
+        default_factory=list, description="Policies that matched"
+    )
+    orchestrator_reachable: bool = Field(
+        default=True, description="Whether the Orchestrator was reachable"
+    )
+    processing_time_ms: int = Field(
+        default=0, ge=0, description="Time taken for dynamic policy evaluation"
+    )
+
+
 class ConnectorPolicyInfo(BaseModel):
     """Policy evaluation information included in MCP responses.
 
@@ -190,6 +235,12 @@ class ConnectorPolicyInfo(BaseModel):
     processing_time_ms: int = Field(default=0, ge=0, description="Policy evaluation time in ms")
     matched_policies: list[PolicyMatchInfo] = Field(
         default_factory=list, description="Policies that matched"
+    )
+    exfiltration_check: ExfiltrationCheckInfo | None = Field(
+        default=None, description="Exfiltration check info (Issue #966)"
+    )
+    dynamic_policy_info: DynamicPolicyInfo | None = Field(
+        default=None, description="Dynamic policy evaluation info (Issue #968)"
     )
 
 
