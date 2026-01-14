@@ -5,6 +5,23 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-01-14
+
+### Added
+
+- **MCP Exfiltration Detection** (Issue #966): `ConnectorPolicyInfo` now includes `exfiltration_check` with row/volume limit information
+  - `ExfiltrationCheckInfo` type with `rows_returned`, `row_limit`, `bytes_returned`, `byte_limit`, `within_limits` fields
+  - Prevents large-scale data extraction via MCP queries
+  - Configurable via `MCP_MAX_ROWS_PER_QUERY` and `MCP_MAX_BYTES_PER_QUERY` environment variables
+
+- **MCP Dynamic Policies** (Issue #968): `ConnectorPolicyInfo` now includes `dynamic_policy_info` for Orchestrator-evaluated policies
+  - `DynamicPolicyInfo` type with `policies_evaluated`, `matched_policies`, `orchestrator_reachable`, `processing_time_ms`
+  - `DynamicPolicyMatch` type with `policy_id`, `policy_name`, `policy_type`, `action`, `reason`
+  - Supports rate limiting, budget controls, time-based access, and role-based access policies
+  - Optional feature - enable via `MCP_DYNAMIC_POLICIES_ENABLED=true`
+
+---
+
 ## [1.3.0] - 2026-01-09
 
 ### Added
