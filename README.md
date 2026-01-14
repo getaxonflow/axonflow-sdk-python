@@ -143,6 +143,38 @@ result = await client.query_connector(
 )
 ```
 
+### MCP Policy Features (v3.2.0)
+
+**Exfiltration Detection** - Prevent large-scale data extraction:
+
+```python
+# Query with exfiltration limits (default: 10K rows, 10MB)
+result = await client.query_connector(
+    user_token="user-jwt",
+    connector_name="postgres",
+    operation="query",
+    params={"sql": "SELECT * FROM customers"}
+)
+
+# Check exfiltration info
+if result.policy_info.exfiltration_check.exceeded:
+    print(f"Limit exceeded: {result.policy_info.exfiltration_check.limit_type}")
+
+# Configure: MCP_MAX_ROWS_PER_QUERY=1000, MCP_MAX_BYTES_PER_QUERY=5242880
+```
+
+**Dynamic Policy Evaluation** - Orchestrator-based rate limiting, budget controls:
+
+```python
+# Response includes dynamic policy info when enabled
+if result.policy_info.dynamic_policy_info.orchestrator_reachable:
+    print(f"Policies evaluated: {result.policy_info.dynamic_policy_info.policies_evaluated}")
+    for policy in result.policy_info.dynamic_policy_info.matched_policies:
+        print(f"  {policy.policy_name}: {policy.action}")
+
+# Enable: MCP_DYNAMIC_POLICIES_ENABLED=true
+```
+
 ### Multi-Agent Planning
 
 Generate and execute multi-agent plans:
