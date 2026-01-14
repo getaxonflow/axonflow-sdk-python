@@ -209,7 +209,9 @@ class DynamicPolicyInfo(BaseModel):
     rate limiting, budget controls, time-based access, and role-based access policies.
     """
 
-    policies_evaluated: int = Field(default=0, ge=0, description="Number of dynamic policies checked")
+    policies_evaluated: int = Field(
+        default=0, ge=0, description="Number of dynamic policies checked"
+    )
     matched_policies: list[DynamicPolicyMatch] = Field(
         default_factory=list, description="Policies that matched"
     )
