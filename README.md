@@ -7,6 +7,20 @@ Enterprise AI Governance in 3 Lines of Code.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Type hints](https://img.shields.io/badge/type%20hints-mypy-brightgreen.svg)](http://mypy-lang.org/)
 
+## How This SDK Fits with AxonFlow
+
+This SDK is a client library for interacting with a running AxonFlow control plane. It is used from application or agent code to send execution context, policies, and requests at runtime.
+
+A deployed AxonFlow platform (self-hosted or cloud) is required for end-to-end AI governance. SDKs alone are not sufficient—the platform and SDKs are designed to be used together.
+
+### Architecture Overview (2 min)
+
+If you're new to AxonFlow, this short video shows how the control plane and SDKs work together in a real production setup:
+
+[![AxonFlow Architecture Overview](https://img.youtube.com/vi/WwQXHKuZhxc/maxresdefault.jpg)](https://youtu.be/WwQXHKuZhxc)
+
+▶️ [Watch on YouTube](https://youtu.be/WwQXHKuZhxc)
+
 ## Installation
 
 ```bash
