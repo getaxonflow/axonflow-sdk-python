@@ -167,7 +167,7 @@ def _parse_datetime(value: str) -> datetime:
 
     # Normalize fractional seconds to exactly 6 digits for Python 3.9 compatibility
     # Handles cases like .35012 (5 digits) -> .350120, or .123456789 (9 digits) -> .123456
-    def normalize_fractional_seconds(match: re.Match) -> str:
+    def normalize_fractional_seconds(match: re.Match[str]) -> str:
         frac = match.group(1)
         suffix = match.group(2)
         # Pad with zeros if less than 6 digits, truncate if more than 6
@@ -245,7 +245,7 @@ class AxonFlow:
         resolved_endpoint = endpoint or os.environ.get("AXONFLOW_AGENT_URL")
         if not resolved_endpoint:
             msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         if isinstance(mode, str):
             mode = Mode(mode)
@@ -1355,7 +1355,7 @@ class AxonFlow:
         """
         if not tenant_id:
             msg = "tenant_id is required"
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         if options is None:
             options = AuditQueryOptions()
@@ -2915,6 +2915,9 @@ class AxonFlow:
             self._logger.debug("Creating workflow", workflow_name=request.workflow_name)
 
         response = await self._orchestrator_request("POST", "/api/v1/workflows", json_data=body)
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from workflow creation"
+            raise TypeError(msg)
 
         return CreateWorkflowResponse(
             workflow_id=response["workflow_id"],
@@ -2938,6 +2941,9 @@ class AxonFlow:
             >>> print(f"Status: {status.status}, Step: {status.current_step_index}")
         """
         response = await self._orchestrator_request("GET", f"/api/v1/workflows/{workflow_id}")
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from get workflow"
+            raise TypeError(msg)
         return self._map_workflow_response(response)
 
     async def step_gate(
@@ -2996,6 +3002,9 @@ class AxonFlow:
             f"/api/v1/workflows/{workflow_id}/steps/{step_id}/gate",
             json_data=body,
         )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from step gate"
+            raise TypeError(msg)
 
         return StepGateResponse(
             decision=GateDecision(response["decision"]),
@@ -3142,6 +3151,9 @@ class AxonFlow:
             path = f"{path}?{'&'.join(params)}"
 
         response = await self._orchestrator_request("GET", path)
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from list workflows"
+            raise TypeError(msg)
 
         workflows = [self._map_workflow_response(w) for w in response.get("workflows", [])]
 
