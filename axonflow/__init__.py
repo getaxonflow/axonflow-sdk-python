@@ -127,6 +127,24 @@ from axonflow.types import (
     UsageRecordsResponse,
     UsageSummary,
 )
+from axonflow.workflow import (
+    AbortWorkflowRequest,
+    ApprovalStatus,
+    CreateWorkflowRequest,
+    CreateWorkflowResponse,
+    GateDecision,
+    ListWorkflowsOptions,
+    ListWorkflowsResponse,
+    MarkStepCompletedRequest,
+    PolicyMatch,
+    StepGateRequest,
+    StepGateResponse,
+    StepType,
+    WorkflowSource,
+    WorkflowStatus,
+    WorkflowStatusResponse,
+    WorkflowStepInfo,
+)
 
 __version__ = "1.2.0"
 __all__ = [
@@ -236,4 +254,21 @@ __all__ = [
     "ModelPricing",
     "PricingInfo",
     "PricingListResponse",
+    # Workflow Control Plane types
+    "WorkflowStatus",
+    "WorkflowSource",
+    "GateDecision",
+    "ApprovalStatus",
+    "StepType",
+    "CreateWorkflowRequest",
+    "CreateWorkflowResponse",
+    "StepGateRequest",
+    "StepGateResponse",
+    "WorkflowStepInfo",
+    "WorkflowStatusResponse",
+    "ListWorkflowsOptions",
+    "ListWorkflowsResponse",
+    "MarkStepCompletedRequest",
+    "AbortWorkflowRequest",
+    "PolicyMatch",
 ]

@@ -130,6 +130,23 @@ from axonflow.types import (
     UsageRecordsResponse,
     UsageSummary,
 )
+from axonflow.workflow import (
+    AbortWorkflowRequest,
+    ApprovalStatus,
+    CreateWorkflowRequest,
+    CreateWorkflowResponse,
+    GateDecision,
+    ListWorkflowsOptions,
+    ListWorkflowsResponse,
+    MarkStepCompletedRequest,
+    StepGateRequest,
+    StepGateResponse,
+    StepType,
+    WorkflowSource,
+    WorkflowStatus,
+    WorkflowStatusResponse,
+    WorkflowStepInfo,
+)
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -2838,6 +2855,330 @@ class AxonFlow:
             # Single object response - wrap in list
             return PricingListResponse(pricing=[PricingInfo.model_validate(response)])
         return PricingListResponse.model_validate(response)
+
+    # ========================================
+    # WORKFLOW CONTROL PLANE
+    # ========================================
+    # The Workflow Control Plane provides governance gates for external
+    # orchestrators like LangChain, LangGraph, and CrewAI.
+    #
+    # "LangChain runs the workflow. AxonFlow decides when it's allowed to move forward."
+    #
+    # Usage:
+    #   1. Call create_workflow() to register a new workflow
+    #   2. Before each step, call step_gate() to check if the step is allowed
+    #   3. If decision is 'block', stop the workflow
+    #   4. If decision is 'require_approval', wait for approval
+    #   5. After each step, optionally call mark_step_completed()
+    #   6. Call complete_workflow() or abort_workflow() when done
+
+    async def create_workflow(
+        self,
+        request: CreateWorkflowRequest,
+    ) -> CreateWorkflowResponse:
+        """Create a new workflow for governance tracking.
+
+        Registers a new workflow with AxonFlow. Call this at the start of your
+        external orchestrator workflow (LangChain, LangGraph, CrewAI, etc.).
+
+        Args:
+            request: Workflow creation request
+
+        Returns:
+            Created workflow with ID
+
+        Example:
+            >>> workflow = await client.create_workflow(
+            ...     CreateWorkflowRequest(
+            ...         workflow_name="customer-support-agent",
+            ...         source=WorkflowSource.LANGGRAPH,
+            ...         total_steps=5,
+            ...         metadata={"customer_id": "cust-123"}
+            ...     )
+            ... )
+            >>> print(f"Workflow created: {workflow.workflow_id}")
+        """
+        body = {
+            "workflow_name": request.workflow_name,
+            "source": request.source.value if request.source else "external",
+            "total_steps": request.total_steps,
+            "metadata": request.metadata,
+        }
+
+        if self._config.debug:
+            self._logger.debug("Creating workflow", workflow_name=request.workflow_name)
+
+        response = await self._orchestrator_request("POST", "/api/v1/workflows", json_data=body)
+
+        return CreateWorkflowResponse(
+            workflow_id=response["workflow_id"],
+            workflow_name=response["workflow_name"],
+            source=WorkflowSource(response["source"]),
+            status=WorkflowStatus(response["status"]),
+            created_at=_parse_datetime(response["created_at"]),
+        )
+
+    async def get_workflow(self, workflow_id: str) -> WorkflowStatusResponse:
+        """Get the status of a workflow.
+
+        Args:
+            workflow_id: Workflow ID
+
+        Returns:
+            Workflow status including steps
+
+        Example:
+            >>> status = await client.get_workflow("wf_123")
+            >>> print(f"Status: {status.status}, Step: {status.current_step_index}")
+        """
+        response = await self._orchestrator_request("GET", f"/api/v1/workflows/{workflow_id}")
+        return self._map_workflow_response(response)
+
+    async def step_gate(
+        self,
+        workflow_id: str,
+        step_id: str,
+        request: StepGateRequest,
+    ) -> StepGateResponse:
+        """Check if a workflow step is allowed to proceed (step gate).
+
+        This is the core governance method. Call this before executing each step
+        in your workflow to check if the step is allowed based on policies.
+
+        Args:
+            workflow_id: Workflow ID
+            step_id: Unique step identifier (you provide this)
+            request: Step gate request with step details
+
+        Returns:
+            Gate decision: allow, block, or require_approval
+
+        Example:
+            >>> gate = await client.step_gate(
+            ...     "wf_123",
+            ...     "step-generate-code",
+            ...     StepGateRequest(
+            ...         step_name="Generate Code",
+            ...         step_type=StepType.LLM_CALL,
+            ...         model="gpt-4",
+            ...         provider="openai"
+            ...     )
+            ... )
+            >>> if gate.decision == GateDecision.BLOCK:
+            ...     raise Exception(f"Step blocked: {gate.reason}")
+            >>> elif gate.decision == GateDecision.REQUIRE_APPROVAL:
+            ...     print(f"Waiting for approval: {gate.approval_url}")
+        """
+        body = {
+            "step_name": request.step_name,
+            "step_type": request.step_type.value,
+            "step_input": request.step_input,
+            "model": request.model,
+            "provider": request.provider,
+        }
+
+        if self._config.debug:
+            self._logger.debug(
+                "Checking step gate",
+                workflow_id=workflow_id,
+                step_id=step_id,
+                step_type=request.step_type.value,
+            )
+
+        response = await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/steps/{step_id}/gate",
+            json_data=body,
+        )
+
+        return StepGateResponse(
+            decision=GateDecision(response["decision"]),
+            step_id=response["step_id"],
+            reason=response.get("reason"),
+            policy_ids=response.get("policy_ids", []),
+            approval_url=response.get("approval_url"),
+        )
+
+    async def mark_step_completed(
+        self,
+        workflow_id: str,
+        step_id: str,
+        request: MarkStepCompletedRequest | None = None,
+    ) -> None:
+        """Mark a step as completed.
+
+        Call this after successfully executing a step to record its completion.
+
+        Args:
+            workflow_id: Workflow ID
+            step_id: Step ID
+            request: Optional completion request with output data
+
+        Example:
+            >>> await client.mark_step_completed(
+            ...     "wf_123",
+            ...     "step-1",
+            ...     MarkStepCompletedRequest(output={"result": "Code generated"})
+            ... )
+        """
+        body = {}
+        if request:
+            body = {"output": request.output, "metadata": request.metadata}
+
+        await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/steps/{step_id}/complete",
+            json_data=body,
+        )
+
+        if self._config.debug:
+            self._logger.debug("Step marked completed", workflow_id=workflow_id, step_id=step_id)
+
+    async def complete_workflow(self, workflow_id: str) -> None:
+        """Complete a workflow successfully.
+
+        Call this when your workflow has completed all steps successfully.
+
+        Args:
+            workflow_id: Workflow ID
+
+        Example:
+            >>> await client.complete_workflow("wf_123")
+        """
+        await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/complete",
+            json_data={},
+        )
+
+        if self._config.debug:
+            self._logger.debug("Workflow completed", workflow_id=workflow_id)
+
+    async def abort_workflow(self, workflow_id: str, reason: str | None = None) -> None:
+        """Abort a workflow.
+
+        Call this when you need to stop a workflow due to an error or user request.
+
+        Args:
+            workflow_id: Workflow ID
+            reason: Optional reason for aborting
+
+        Example:
+            >>> await client.abort_workflow("wf_123", "User cancelled the operation")
+        """
+        body = {"reason": reason} if reason else {}
+
+        await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/abort",
+            json_data=body,
+        )
+
+        if self._config.debug:
+            self._logger.debug("Workflow aborted", workflow_id=workflow_id, reason=reason)
+
+    async def resume_workflow(self, workflow_id: str) -> None:
+        """Resume a workflow after approval.
+
+        Call this after a step has been approved to continue the workflow.
+
+        Args:
+            workflow_id: Workflow ID
+
+        Example:
+            >>> # After approval received via webhook or polling
+            >>> await client.resume_workflow("wf_123")
+        """
+        await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/resume",
+            json_data={},
+        )
+
+        if self._config.debug:
+            self._logger.debug("Workflow resumed", workflow_id=workflow_id)
+
+    async def list_workflows(
+        self,
+        options: ListWorkflowsOptions | None = None,
+    ) -> ListWorkflowsResponse:
+        """List workflows with optional filters.
+
+        Args:
+            options: Filter and pagination options
+
+        Returns:
+            List of workflows
+
+        Example:
+            >>> result = await client.list_workflows(
+            ...     ListWorkflowsOptions(
+            ...         status=WorkflowStatus.IN_PROGRESS,
+            ...         source=WorkflowSource.LANGGRAPH,
+            ...         limit=10
+            ...     )
+            ... )
+            >>> print(f"Found {result.total} workflows")
+        """
+        params: list[str] = []
+        if options:
+            if options.status:
+                params.append(f"status={options.status.value}")
+            if options.source:
+                params.append(f"source={options.source.value}")
+            if options.limit:
+                params.append(f"limit={options.limit}")
+            if options.offset:
+                params.append(f"offset={options.offset}")
+
+        path = "/api/v1/workflows"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        response = await self._orchestrator_request("GET", path)
+
+        workflows = [self._map_workflow_response(w) for w in response.get("workflows", [])]
+
+        return ListWorkflowsResponse(
+            workflows=workflows,
+            total=response.get("total", len(workflows)),
+        )
+
+    def _map_workflow_response(self, data: dict[str, Any]) -> WorkflowStatusResponse:
+        """Map API response to WorkflowStatusResponse."""
+        steps = []
+        if data.get("steps"):
+            for s in data["steps"]:
+                steps.append(
+                    WorkflowStepInfo(
+                        step_id=s["step_id"],
+                        step_index=s["step_index"],
+                        step_name=s.get("step_name"),
+                        step_type=StepType(s["step_type"]),
+                        decision=GateDecision(s["decision"]),
+                        decision_reason=s.get("decision_reason"),
+                        approval_status=ApprovalStatus(s["approval_status"])
+                        if s.get("approval_status")
+                        else None,
+                        approved_by=s.get("approved_by"),
+                        gate_checked_at=_parse_datetime(s["gate_checked_at"]),
+                        completed_at=_parse_datetime(s["completed_at"])
+                        if s.get("completed_at")
+                        else None,
+                    )
+                )
+
+        return WorkflowStatusResponse(
+            workflow_id=data["workflow_id"],
+            workflow_name=data["workflow_name"],
+            source=WorkflowSource(data["source"]),
+            status=WorkflowStatus(data["status"]),
+            current_step_index=data.get("current_step_index", 0),
+            total_steps=data.get("total_steps"),
+            started_at=_parse_datetime(data["started_at"]),
+            completed_at=_parse_datetime(data["completed_at"]) if data.get("completed_at") else None,
+            steps=steps,
+        )
 
 
 class SyncAxonFlow:
