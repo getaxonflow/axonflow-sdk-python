@@ -5,6 +5,31 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-01-17
+
+### Added
+
+- **Workflow Control Plane** (Issue #834): Governance gates for external orchestrators
+  - "LangChain runs the workflow. AxonFlow decides when it's allowed to move forward."
+  - `create_workflow()` - Register workflows from LangChain/LangGraph/CrewAI/external
+  - `step_gate()` - Check if step is allowed to proceed (allow/block/require_approval)
+  - `mark_step_completed()` - Mark a step as completed with optional output data
+  - `get_workflow()` - Get workflow status and step history
+  - `list_workflows()` - List workflows with filters (status, source, pagination)
+  - `complete_workflow()` - Mark workflow as completed
+  - `abort_workflow()` - Abort workflow with reason
+  - `resume_workflow()` - Resume after approval
+  - New types: `WorkflowStatus`, `WorkflowSource`, `GateDecision`, `StepType`, `ApprovalStatus`, `MarkStepCompletedRequest`
+  - Helper methods on `StepGateResponse`: `is_allowed()`, `is_blocked()`, `requires_approval()`
+  - Helper methods on `WorkflowStatus` and `WorkflowStatusResponse`: `is_terminal()`
+  - LangGraph adapter: `axonflow.adapters.langgraph.AxonFlowLangGraphAdapter`
+
+### Fixed
+
+- Datetime parsing now handles variable-length fractional seconds (e.g., 5 digits) for Python 3.9 compatibility
+
+---
+
 ## [1.4.0] - 2026-01-14
 
 ### Added

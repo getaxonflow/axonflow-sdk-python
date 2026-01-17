@@ -25,6 +25,10 @@ class WorkflowStatus(str, Enum):
     ABORTED = "aborted"
     FAILED = "failed"
 
+    def is_terminal(self) -> bool:
+        """Check if the workflow status is terminal (completed, aborted, or failed)."""
+        return self in (WorkflowStatus.COMPLETED, WorkflowStatus.ABORTED, WorkflowStatus.FAILED)
+
 
 class WorkflowSource(str, Enum):
     """Source of the workflow (which orchestrator is running it)."""
@@ -65,7 +69,9 @@ class CreateWorkflowRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    workflow_name: str = Field(..., min_length=1, description="Human-readable name for the workflow")
+    workflow_name: str = Field(
+        ..., min_length=1, description="Human-readable name for the workflow"
+    )
     source: WorkflowSource | None = Field(
         default=None, description="Source orchestrator running the workflow"
     )
@@ -104,7 +110,9 @@ class StepGateRequest(BaseModel):
 class StepGateResponse(BaseModel):
     """Response from a step gate check."""
 
-    decision: GateDecision = Field(..., description="The gate decision: allow, block, or require_approval")
+    decision: GateDecision = Field(
+        ..., description="The gate decision: allow, block, or require_approval"
+    )
     step_id: str = Field(..., description="Unique step ID assigned by the system")
     reason: str | None = Field(
         default=None, description="Reason for the decision (especially for block/require_approval)"
@@ -115,6 +123,18 @@ class StepGateResponse(BaseModel):
     approval_url: str | None = Field(
         default=None, description="URL to the approval portal (if decision is require_approval)"
     )
+
+    def is_allowed(self) -> bool:
+        """Check if the step is allowed to proceed."""
+        return self.decision == GateDecision.ALLOW
+
+    def is_blocked(self) -> bool:
+        """Check if the step is blocked by policy."""
+        return self.decision == GateDecision.BLOCK
+
+    def requires_approval(self) -> bool:
+        """Check if the step requires human approval."""
+        return self.decision == GateDecision.REQUIRE_APPROVAL
 
 
 class WorkflowStepInfo(BaseModel):
@@ -151,6 +171,10 @@ class WorkflowStatusResponse(BaseModel):
         default_factory=list, description="List of steps in the workflow"
     )
 
+    def is_terminal(self) -> bool:
+        """Check if the workflow is in a terminal state (completed, aborted, or failed)."""
+        return self.status.is_terminal()
+
 
 class ListWorkflowsOptions(BaseModel):
     """Options for listing workflows."""
@@ -166,7 +190,9 @@ class ListWorkflowsOptions(BaseModel):
 class ListWorkflowsResponse(BaseModel):
     """Response from listing workflows."""
 
-    workflows: list[WorkflowStatusResponse] = Field(default_factory=list, description="List of workflows")
+    workflows: list[WorkflowStatusResponse] = Field(
+        default_factory=list, description="List of workflows"
+    )
     total: int = Field(default=0, ge=0, description="Total count (for pagination)")
 
 

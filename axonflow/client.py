@@ -160,15 +160,22 @@ def _parse_datetime(value: str) -> datetime:
     Python 3.9's fromisoformat() doesn't handle 'Z' suffix for UTC.
     This helper replaces 'Z' with '+00:00' for compatibility.
 
-    Also handles nanosecond precision (9 digits) by truncating to microseconds (6 digits)
-    since Python's fromisoformat() only supports up to 6 fractional digits.
+    Also normalizes fractional seconds to exactly 6 digits (microseconds)
+    since Python 3.9's fromisoformat() requires 0, 3, or 6 fractional digits.
     """
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
 
-    # Python's fromisoformat only supports up to 6 fractional digits (microseconds)
-    # Truncate nanoseconds (9 digits) to microseconds (6 digits) if needed
-    value = re.sub(r"(\.\d{6})\d+", r"\1", value)
+    # Normalize fractional seconds to exactly 6 digits for Python 3.9 compatibility
+    # Handles cases like .35012 (5 digits) -> .350120, or .123456789 (9 digits) -> .123456
+    def normalize_fractional_seconds(match: re.Match) -> str:
+        frac = match.group(1)
+        suffix = match.group(2)
+        # Pad with zeros if less than 6 digits, truncate if more than 6
+        normalized = frac[:6].ljust(6, "0")
+        return f".{normalized}{suffix}"
+
+    value = re.sub(r"\.(\d+)([+-]|$)", normalize_fractional_seconds, value)
 
     return datetime.fromisoformat(value)
 
@@ -3176,7 +3183,9 @@ class AxonFlow:
             current_step_index=data.get("current_step_index", 0),
             total_steps=data.get("total_steps"),
             started_at=_parse_datetime(data["started_at"]),
-            completed_at=_parse_datetime(data["completed_at"]) if data.get("completed_at") else None,
+            completed_at=(
+                _parse_datetime(data["completed_at"]) if data.get("completed_at") else None
+            ),
             steps=steps,
         )
 
