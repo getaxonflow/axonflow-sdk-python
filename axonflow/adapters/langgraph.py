@@ -32,9 +32,11 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from axonflow.workflow import (
+    ApprovalStatus,
     CreateWorkflowRequest,
     GateDecision,
     MarkStepCompletedRequest,
@@ -194,7 +196,8 @@ class AxonFlowLangGraphAdapter:
             ...     result = await generate_code(state)
         """
         if not self.workflow_id:
-            raise ValueError("Workflow not started. Call start_workflow() first.")
+            msg = "Workflow not started. Call start_workflow() first."
+            raise ValueError(msg)
 
         # Convert string to StepType if needed
         if isinstance(step_type, str):
@@ -217,8 +220,9 @@ class AxonFlowLangGraphAdapter:
 
         if response.decision == GateDecision.BLOCK:
             if self._auto_block:
+                msg = f"Step '{step_name}' blocked: {response.reason}"
                 raise WorkflowBlockedError(
-                    f"Step '{step_name}' blocked: {response.reason}",
+                    msg,
                     step_id=response.step_id,
                     reason=response.reason,
                     policy_ids=response.policy_ids,
@@ -226,8 +230,9 @@ class AxonFlowLangGraphAdapter:
             return False
 
         if response.decision == GateDecision.REQUIRE_APPROVAL:
+            msg = f"Step '{step_name}' requires approval"
             raise WorkflowApprovalRequiredError(
-                f"Step '{step_name}' requires approval",
+                msg,
                 step_id=response.step_id,
                 approval_url=response.approval_url,
                 reason=response.reason,
@@ -257,7 +262,8 @@ class AxonFlowLangGraphAdapter:
             >>> await adapter.step_completed("generate", output={"code": result})
         """
         if not self.workflow_id:
-            raise ValueError("Workflow not started. Call start_workflow() first.")
+            msg = "Workflow not started. Call start_workflow() first."
+            raise ValueError(msg)
 
         # Generate step ID if not provided (must match check_gate)
         if step_id is None:
@@ -279,7 +285,8 @@ class AxonFlowLangGraphAdapter:
             >>> await adapter.complete_workflow()
         """
         if not self.workflow_id:
-            raise ValueError("Workflow not started. Call start_workflow() first.")
+            msg = "Workflow not started. Call start_workflow() first."
+            raise ValueError(msg)
 
         await self.client.complete_workflow(self.workflow_id)
 
@@ -295,7 +302,8 @@ class AxonFlowLangGraphAdapter:
             >>> await adapter.abort_workflow("User cancelled the operation")
         """
         if not self.workflow_id:
-            raise ValueError("Workflow not started. Call start_workflow() first.")
+            msg = "Workflow not started. Call start_workflow() first."
+            raise ValueError(msg)
 
         await self.client.abort_workflow(self.workflow_id, reason)
 
@@ -321,10 +329,9 @@ class AxonFlowLangGraphAdapter:
         Raises:
             TimeoutError: If approval not received within timeout
         """
-        import asyncio
-
         if not self.workflow_id:
-            raise ValueError("Workflow not started. Call start_workflow() first.")
+            msg = "Workflow not started. Call start_workflow() first."
+            raise ValueError(msg)
 
         elapsed = 0.0
         while elapsed < timeout:
@@ -334,8 +341,6 @@ class AxonFlowLangGraphAdapter:
             for step in status.steps:
                 if step.step_id == step_id:
                     if step.approval_status:
-                        from axonflow.workflow import ApprovalStatus
-
                         if step.approval_status == ApprovalStatus.APPROVED:
                             return True
                         if step.approval_status == ApprovalStatus.REJECTED:
@@ -345,7 +350,8 @@ class AxonFlowLangGraphAdapter:
             await asyncio.sleep(poll_interval)
             elapsed += poll_interval
 
-        raise TimeoutError(f"Approval timeout after {timeout}s for step {step_id}")
+        msg = f"Approval timeout after {timeout}s for step {step_id}"
+        raise TimeoutError(msg)
 
     async def __aenter__(self) -> AxonFlowLangGraphAdapter:
         """Context manager entry."""
