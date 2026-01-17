@@ -1355,7 +1355,7 @@ class AxonFlow:
         """
         if not tenant_id:
             msg = "tenant_id is required"
-            raise TypeError(msg)
+            raise ValueError(msg)
 
         if options is None:
             options = AuditQueryOptions()
