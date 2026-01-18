@@ -285,6 +285,31 @@ class PlanResponse(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class PolicyEvaluationResult(BaseModel):
+    """Result of policy evaluation for workflow steps and plan executions.
+
+    Used by MAP (Multi-Agent Planning) and WCP (Workflow Control Plane) to provide
+    detailed policy enforcement information (Issues #1019, #1020, #1021).
+    """
+
+    allowed: bool = Field(..., description="Whether the action is allowed by policy")
+    applied_policies: list[str] = Field(
+        default_factory=list, description="List of policy IDs that were applied"
+    )
+    risk_score: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Calculated risk score (0.0-1.0)"
+    )
+    required_actions: list[str] | None = Field(
+        default=None, description="Actions required before proceeding (if any)"
+    )
+    processing_time_ms: int = Field(
+        default=0, ge=0, description="Time taken for policy evaluation in milliseconds"
+    )
+    database_accessed: bool | None = Field(
+        default=None, description="Whether a database was accessed during the operation"
+    )
+
+
 class PlanExecutionResponse(BaseModel):
     """Plan execution result."""
 
@@ -294,6 +319,9 @@ class PlanExecutionResponse(BaseModel):
     step_results: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     duration: str | None = None
+    policy_info: PolicyEvaluationResult | None = Field(
+        default=None, description="Policy evaluation result for the plan execution"
+    )
 
 
 # Gateway Mode Types

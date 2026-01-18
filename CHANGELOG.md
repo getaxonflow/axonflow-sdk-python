@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Helper methods on `WorkflowStatus` and `WorkflowStatusResponse`: `is_terminal()`
   - LangGraph adapter: `axonflow.adapters.langgraph.AxonFlowLangGraphAdapter`
 
+- **Workflow Policy Enforcement** (Issues #1019, #1020, #1021): Policy transparency for workflow operations
+  - `StepGateResponse` now includes `policies_evaluated` and `policies_matched` fields with `PolicyMatch` type
+  - `PolicyMatch` class with `policy_id`, `policy_name`, `action`, `reason` for policy transparency
+  - `PolicyEvaluationResult` class for MAP execution with `allowed`, `applied_policies`, `risk_score`
+  - Workflow operations (`workflow_created`, `workflow_step_gate`, `workflow_completed`) logged to audit trail
+
 ### Fixed
 
 - Datetime parsing now handles variable-length fractional seconds (e.g., 5 digits) for Python 3.9 compatibility
