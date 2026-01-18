@@ -5,6 +5,18 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-01-18
+
+### Added
+
+- **Workflow Policy Enforcement** (Issues #1019, #1020, #1021): Policy transparency for workflow operations
+  - `StepGateResponse` now includes `policies_evaluated` and `policies_matched` fields with `PolicyMatch` type
+  - `PolicyMatch` class with `policy_id`, `policy_name`, `action`, `reason` for policy transparency
+  - `PolicyEvaluationResult` class for MAP execution with `allowed`, `applied_policies`, `risk_score`
+  - Workflow operations (`workflow_created`, `workflow_step_gate`, `workflow_completed`) logged to audit trail
+
+---
+
 ## [1.5.0] - 2026-01-17
 
 ### Added
@@ -23,12 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Helper methods on `StepGateResponse`: `is_allowed()`, `is_blocked()`, `requires_approval()`
   - Helper methods on `WorkflowStatus` and `WorkflowStatusResponse`: `is_terminal()`
   - LangGraph adapter: `axonflow.adapters.langgraph.AxonFlowLangGraphAdapter`
-
-- **Workflow Policy Enforcement** (Issues #1019, #1020, #1021): Policy transparency for workflow operations
-  - `StepGateResponse` now includes `policies_evaluated` and `policies_matched` fields with `PolicyMatch` type
-  - `PolicyMatch` class with `policy_id`, `policy_name`, `action`, `reason` for policy transparency
-  - `PolicyEvaluationResult` class for MAP execution with `allowed`, `applied_policies`, `risk_score`
-  - Workflow operations (`workflow_created`, `workflow_step_gate`, `workflow_completed`) logged to audit trail
 
 ### Fixed
 
