@@ -123,6 +123,14 @@ class StepGateResponse(BaseModel):
     approval_url: str | None = Field(
         default=None, description="URL to the approval portal (if decision is require_approval)"
     )
+    policies_evaluated: list[PolicyMatch] | None = Field(
+        default=None,
+        description="List of all policies that were evaluated during the gate check (Issue #1019)",
+    )
+    policies_matched: list[PolicyMatch] | None = Field(
+        default=None,
+        description="List of policies that matched and influenced the decision (Issue #1019)",
+    )
 
     def is_allowed(self) -> bool:
         """Check if the step is allowed to proceed."""

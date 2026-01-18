@@ -114,6 +114,7 @@ from axonflow.types import (
     PlanStep,
     PolicyApprovalResult,
     PolicyEvaluationInfo,
+    PolicyEvaluationResult,
     PricingInfo,
     PricingListResponse,
     RateLimitInfo,
@@ -168,6 +169,7 @@ __all__ = [
     "PlanStep",
     "PlanResponse",
     "PlanExecutionResponse",
+    "PolicyEvaluationResult",
     # Gateway Mode types
     "RateLimitInfo",
     "PolicyApprovalResult",
