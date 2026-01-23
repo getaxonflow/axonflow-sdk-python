@@ -3382,7 +3382,8 @@ class AxonFlow:
         if metadata is not None:
             body["metadata"] = metadata
 
-        response = await self._request("PUT", f"/api/v1/masfeat/registry/{system_id}", json_data=body)
+        url = f"/api/v1/masfeat/registry/{system_id}"
+        response = await self._request("PUT", url, json_data=body)
         return masfeat.ai_system_registry_from_dict(response)
 
     async def masfeat_list_systems(

@@ -7,10 +7,11 @@ Accountability, Transparency) compliance module.
 Enterprise Feature: Requires AxonFlow Enterprise license.
 """
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 # ===========================================================================
 # Enums
@@ -102,7 +103,7 @@ class AISystemRegistry:
     description: Optional[str] = None
     technical_owner: Optional[str] = None
     business_owner: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
     created_by: Optional[str] = None
 
 
@@ -114,8 +115,8 @@ class RegistrySummary:
     high_materiality_count: int
     medium_materiality_count: int
     low_materiality_count: int
-    by_use_case: Dict[str, int] = field(default_factory=dict)
-    by_status: Dict[str, int] = field(default_factory=dict)
+    by_use_case: dict[str, int] = field(default_factory=dict)
+    by_status: dict[str, int] = field(default_factory=dict)
 
 
 # ===========================================================================
@@ -140,13 +141,13 @@ class FEATAssessment:
     accountability_score: Optional[int] = None
     transparency_score: Optional[int] = None
     overall_score: Optional[int] = None
-    fairness_details: Optional[Dict[str, Any]] = None
-    ethics_details: Optional[Dict[str, Any]] = None
-    accountability_details: Optional[Dict[str, Any]] = None
-    transparency_details: Optional[Dict[str, Any]] = None
-    findings: Optional[List[str]] = None
-    recommendations: Optional[List[str]] = None
-    assessors: Optional[List[str]] = None
+    fairness_details: Optional[dict[str, Any]] = None
+    ethics_details: Optional[dict[str, Any]] = None
+    accountability_details: Optional[dict[str, Any]] = None
+    transparency_details: Optional[dict[str, Any]] = None
+    findings: Optional[list[str]] = None
+    recommendations: Optional[list[str]] = None
+    assessors: Optional[list[str]] = None
     approved_by: Optional[str] = None
     approved_at: Optional[datetime] = None
     created_by: Optional[str] = None
@@ -184,7 +185,7 @@ class KillSwitchEvent:
     kill_switch_id: str
     event_type: KillSwitchEventType
     created_at: datetime
-    event_data: Optional[Dict[str, Any]] = None
+    event_data: Optional[dict[str, Any]] = None
     created_by: Optional[str] = None
 
 
@@ -204,7 +205,6 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
         if value.endswith("Z"):
             value = value[:-1] + "+00:00"
         # Handle nanosecond precision (Go sends 9 digits, Python supports 6)
-        import re
         match = re.match(r"(.+\.\d{6})\d*(\+.*)", value)
         if match:
             value = match.group(1) + match.group(2)
@@ -221,7 +221,7 @@ def _parse_enum(enum_class: type, value: Any) -> Any:
     return enum_class(value)
 
 
-def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
+def ai_system_registry_from_dict(data: dict[str, Any]) -> AISystemRegistry:
     """Create AISystemRegistry from API response dict."""
     return AISystemRegistry(
         id=data["id"],
@@ -236,7 +236,10 @@ def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
         customer_impact=data.get("customer_impact") or data.get("risk_rating_impact"),
         model_complexity=data.get("model_complexity") or data.get("risk_rating_complexity"),
         human_reliance=data.get("human_reliance") or data.get("risk_rating_reliance"),
-        materiality=_parse_enum(MaterialityClassification, data.get("materiality") or data.get("materiality_classification")),
+        materiality=_parse_enum(
+            MaterialityClassification,
+            data.get("materiality") or data.get("materiality_classification"),
+        ),
         status=_parse_enum(SystemStatus, data["status"]),
         metadata=data.get("metadata"),
         created_at=_parse_datetime(data["created_at"]),
@@ -245,20 +248,24 @@ def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
     )
 
 
-def registry_summary_from_dict(data: Dict[str, Any]) -> RegistrySummary:
+def registry_summary_from_dict(data: dict[str, Any]) -> RegistrySummary:
     """Create RegistrySummary from API response dict."""
     return RegistrySummary(
         total_systems=data["total_systems"],
         active_systems=data["active_systems"],
-        high_materiality_count=data.get("high_materiality_count") or data.get("high_materiality", 0),
-        medium_materiality_count=data.get("medium_materiality_count") or data.get("medium_materiality", 0),
+        high_materiality_count=(
+            data.get("high_materiality_count") or data.get("high_materiality", 0)
+        ),
+        medium_materiality_count=(
+            data.get("medium_materiality_count") or data.get("medium_materiality", 0)
+        ),
         low_materiality_count=data.get("low_materiality_count") or data.get("low_materiality", 0),
         by_use_case=data.get("by_use_case", {}),
         by_status=data.get("by_status", {}),
     )
 
 
-def feat_assessment_from_dict(data: Dict[str, Any]) -> FEATAssessment:
+def feat_assessment_from_dict(data: dict[str, Any]) -> FEATAssessment:
     """Create FEATAssessment from API response dict."""
     return FEATAssessment(
         id=data["id"],
@@ -288,7 +295,7 @@ def feat_assessment_from_dict(data: Dict[str, Any]) -> FEATAssessment:
     )
 
 
-def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
+def kill_switch_from_dict(data: dict[str, Any]) -> KillSwitch:
     """Create KillSwitch from API response dict."""
     # Handle nested response format (trigger/restore return {kill_switch: {...}, message: ...})
     if "kill_switch" in data:
@@ -312,7 +319,7 @@ def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
     )
 
 
-def kill_switch_event_from_dict(data: Dict[str, Any]) -> KillSwitchEvent:
+def kill_switch_event_from_dict(data: dict[str, Any]) -> KillSwitchEvent:
     """Create KillSwitchEvent from API response dict."""
     return KillSwitchEvent(
         id=data["id"],
