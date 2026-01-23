@@ -1109,9 +1109,7 @@ class TestMASFEATClientMethods:
             client_id="test-client",
             client_secret="test-secret",
         ) as client:
-            result = await client.masfeat_restore_kill_switch(
-                "sys-123", reason="Issue resolved"
-            )
+            result = await client.masfeat_restore_kill_switch("sys-123", reason="Issue resolved")
             assert result.status == KillSwitchStatus.ENABLED
 
     @pytest.mark.asyncio
