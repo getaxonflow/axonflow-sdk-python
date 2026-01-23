@@ -911,9 +911,10 @@ class TestMASFEATClientMethods:
     @pytest.mark.asyncio
     async def test_activate_system(self, httpx_mock: HTTPXMock) -> None:
         """Test activating an AI system."""
+        # activate_system uses PUT to update status, not POST to /activate
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123/activate",
-            method="POST",
+            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123",
+            method="PUT",
             json={
                 "id": "sys-123",
                 "org_id": "org-456",
@@ -939,9 +940,10 @@ class TestMASFEATClientMethods:
     @pytest.mark.asyncio
     async def test_retire_system(self, httpx_mock: HTTPXMock) -> None:
         """Test retiring an AI system."""
+        # retire_system uses DELETE, not POST to /retire
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123/retire",
-            method="POST",
+            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123",
+            method="DELETE",
             json={
                 "id": "sys-123",
                 "org_id": "org-456",
@@ -1043,7 +1045,9 @@ class TestMASFEATClientMethods:
             client_id="test-client",
             client_secret="test-secret",
         ) as client:
-            result = await client.masfeat_approve_assessment("assess-123")
+            result = await client.masfeat_approve_assessment(
+                "assess-123", approved_by="admin@example.com"
+            )
             assert result.status == FEATAssessmentStatus.APPROVED
             assert result.approved_by == "admin@example.com"
 
@@ -1105,7 +1109,9 @@ class TestMASFEATClientMethods:
             client_id="test-client",
             client_secret="test-secret",
         ) as client:
-            result = await client.masfeat_restore_kill_switch("sys-123")
+            result = await client.masfeat_restore_kill_switch(
+                "sys-123", reason="Issue resolved"
+            )
             assert result.status == KillSwitchStatus.ENABLED
 
     @pytest.mark.asyncio
