@@ -101,13 +101,13 @@ class AISystemRegistry:
     system_name: str
     use_case: AISystemUseCase
     owner_team: str
-    customer_impact: int
-    model_complexity: int
-    human_reliance: int
+    customer_impact: int | None
+    model_complexity: int | None
+    human_reliance: int | None
     materiality: MaterialityClassification
     status: SystemStatus
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
     description: Optional[str] = None
     technical_owner: Optional[str] = None
     business_owner: Optional[str] = None
@@ -142,9 +142,9 @@ class FEATAssessment:
     system_id: str
     assessment_type: str
     status: FEATAssessmentStatus
-    assessment_date: datetime
-    created_at: datetime
-    updated_at: datetime
+    assessment_date: Optional[datetime]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
     valid_until: Optional[datetime] = None
     fairness_score: Optional[int] = None
     ethics_score: Optional[int] = None
@@ -177,8 +177,8 @@ class KillSwitch:
     system_id: str
     status: KillSwitchStatus
     auto_trigger_enabled: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
     accuracy_threshold: Optional[float] = None
     bias_threshold: Optional[float] = None
     error_rate_threshold: Optional[float] = None
@@ -196,7 +196,7 @@ class KillSwitchEvent:
     id: str
     kill_switch_id: str
     event_type: KillSwitchEventType
-    created_at: datetime
+    created_at: Optional[datetime]
     event_data: Optional[dict[str, Any]] = None
     created_by: Optional[str] = None
 
