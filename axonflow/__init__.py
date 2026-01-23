@@ -56,6 +56,22 @@ from axonflow.exceptions import (
     RateLimitError,
     TimeoutError,
 )
+from axonflow.masfeat import (
+    # Types
+    AISystemRegistry,
+    # Enums
+    AISystemUseCase,
+    FEATAssessment,
+    FEATAssessmentStatus,
+    FEATPillar,
+    KillSwitch,
+    KillSwitchEvent,
+    KillSwitchEventType,
+    KillSwitchStatus,
+    MaterialityClassification,
+    RegistrySummary,
+    SystemStatus,
+)
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
     CreatePolicyOverrideRequest,
@@ -273,4 +289,17 @@ __all__ = [
     "MarkStepCompletedRequest",
     "AbortWorkflowRequest",
     "PolicyMatch",
+    # MAS FEAT Compliance types (Enterprise)
+    "MaterialityClassification",
+    "SystemStatus",
+    "FEATAssessmentStatus",
+    "KillSwitchStatus",
+    "FEATPillar",
+    "AISystemUseCase",
+    "KillSwitchEventType",
+    "AISystemRegistry",
+    "RegistrySummary",
+    "FEATAssessment",
+    "KillSwitch",
+    "KillSwitchEvent",
 ]
