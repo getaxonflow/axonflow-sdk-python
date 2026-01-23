@@ -12,7 +12,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-
 # ===========================================================================
 # Enums
 # ===========================================================================
@@ -206,7 +205,7 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
             value = value[:-1] + "+00:00"
         # Handle nanosecond precision (Go sends 9 digits, Python supports 6)
         import re
-        match = re.match(r'(.+\.\d{6})\d*(\+.*)', value)
+        match = re.match(r"(.+\.\d{6})\d*(\+.*)", value)
         if match:
             value = match.group(1) + match.group(2)
         return datetime.fromisoformat(value)

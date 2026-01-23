@@ -45,6 +45,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from axonflow import masfeat
 from axonflow.code_governance import (
     CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
@@ -147,7 +148,6 @@ from axonflow.workflow import (
     WorkflowStatusResponse,
     WorkflowStepInfo,
 )
-from axonflow import masfeat
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -3265,7 +3265,7 @@ class AxonFlow:
         technical_owner: str | None = None,
         business_owner: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Register an AI system in the MAS FEAT registry.
 
         Enterprise Feature: Requires AxonFlow Enterprise license.
@@ -3319,7 +3319,7 @@ class AxonFlow:
         response = await self._request("POST", "/api/v1/masfeat/registry", json_data=body)
         return masfeat.ai_system_registry_from_dict(response)
 
-    async def masfeat_get_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    async def masfeat_get_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Get an AI system from the registry.
 
         Args:
@@ -3344,7 +3344,7 @@ class AxonFlow:
         model_complexity: int | None = None,
         human_reliance: int | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Update an AI system in the registry.
 
         Args:
@@ -3393,7 +3393,7 @@ class AxonFlow:
         materiality: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.AISystemRegistry"]:
+    ) -> list[masfeat.AISystemRegistry]:
         """List AI systems in the registry.
 
         Args:
@@ -3425,7 +3425,7 @@ class AxonFlow:
         response = await self._request("GET", path)
         return [masfeat.ai_system_registry_from_dict(s) for s in (response or [])]
 
-    async def masfeat_activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    async def masfeat_activate_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Activate an AI system (transition from draft to active).
 
         Note: system_id should be the UUID (id field) returned from register_system,
@@ -3442,7 +3442,7 @@ class AxonFlow:
         )
         return masfeat.ai_system_registry_from_dict(response)
 
-    async def masfeat_retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    async def masfeat_retire_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Retire an AI system.
 
         Args:
@@ -3454,7 +3454,7 @@ class AxonFlow:
         response = await self._request("DELETE", f"/api/v1/masfeat/registry/{system_id}")
         return masfeat.ai_system_registry_from_dict(response)
 
-    async def masfeat_get_registry_summary(self) -> "masfeat.RegistrySummary":
+    async def masfeat_get_registry_summary(self) -> masfeat.RegistrySummary:
         """Get a summary of the AI system registry.
 
         Returns:
@@ -3473,7 +3473,7 @@ class AxonFlow:
         *,
         assessment_type: str = "periodic",
         assessors: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Create a FEAT assessment for an AI system.
 
         Args:
@@ -3494,7 +3494,7 @@ class AxonFlow:
         response = await self._request("POST", "/api/v1/masfeat/assessments", json_data=body)
         return masfeat.feat_assessment_from_dict(response)
 
-    async def masfeat_get_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    async def masfeat_get_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Get a FEAT assessment.
 
         Args:
@@ -3521,7 +3521,7 @@ class AxonFlow:
         findings: list[str] | None = None,
         recommendations: list[str] | None = None,
         assessors: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Update a FEAT assessment.
 
         Args:
@@ -3577,7 +3577,7 @@ class AxonFlow:
         status: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.FEATAssessment"]:
+    ) -> list[masfeat.FEATAssessment]:
         """List FEAT assessments.
 
         Args:
@@ -3606,7 +3606,7 @@ class AxonFlow:
         response = await self._request("GET", path)
         return [masfeat.feat_assessment_from_dict(a) for a in (response or [])]
 
-    async def masfeat_submit_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    async def masfeat_submit_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Submit a FEAT assessment for approval.
 
         Args:
@@ -3626,7 +3626,7 @@ class AxonFlow:
         approved_by: str,
         *,
         comments: str | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Approve a FEAT assessment.
 
         Args:
@@ -3651,7 +3651,7 @@ class AxonFlow:
         assessment_id: str,
         rejected_by: str,
         reason: str,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Reject a FEAT assessment.
 
         Args:
@@ -3672,7 +3672,7 @@ class AxonFlow:
     # Kill Switch
     # -------------------------------------------------------------------------
 
-    async def masfeat_get_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    async def masfeat_get_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Get kill switch configuration for an AI system.
 
         Args:
@@ -3692,7 +3692,7 @@ class AxonFlow:
         bias_threshold: float | None = None,
         error_rate_threshold: float | None = None,
         auto_trigger_enabled: bool | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Configure kill switch thresholds for an AI system.
 
         Args:
@@ -3727,7 +3727,7 @@ class AxonFlow:
         *,
         bias_score: float | None = None,
         error_rate: float | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Check current metrics against kill switch thresholds.
 
         If auto-trigger is enabled and thresholds are breached,
@@ -3759,7 +3759,7 @@ class AxonFlow:
         reason: str,
         *,
         triggered_by: str | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Manually trigger the kill switch for an AI system.
 
         Args:
@@ -3785,7 +3785,7 @@ class AxonFlow:
         reason: str,
         *,
         restored_by: str | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Restore (un-trigger) the kill switch for an AI system.
 
         Args:
@@ -3805,7 +3805,7 @@ class AxonFlow:
         )
         return masfeat.kill_switch_from_dict(response)
 
-    async def masfeat_enable_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    async def masfeat_enable_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Enable the kill switch for an AI system.
 
         Args:
@@ -3824,7 +3824,7 @@ class AxonFlow:
         system_id: str,
         *,
         reason: str | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Disable the kill switch for an AI system.
 
         Args:
@@ -3848,7 +3848,7 @@ class AxonFlow:
         system_id: str,
         *,
         limit: int | None = None,
-    ) -> list["masfeat.KillSwitchEvent"]:
+    ) -> list[masfeat.KillSwitchEvent]:
         """Get kill switch event history.
 
         Args:
@@ -3922,7 +3922,7 @@ class MASFEATNamespace:
 
     __slots__ = ("_client",)
 
-    def __init__(self, client: "AxonFlow") -> None:
+    def __init__(self, client: AxonFlow) -> None:
         self._client = client
 
     # Registry methods
@@ -3940,7 +3940,7 @@ class MASFEATNamespace:
         technical_owner: str | None = None,
         business_owner: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Register an AI system in the MAS FEAT registry."""
         return await self._client.masfeat_register_system(
             system_id=system_id,
@@ -3956,7 +3956,7 @@ class MASFEATNamespace:
             metadata=metadata,
         )
 
-    async def get_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    async def get_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Get an AI system from the registry."""
         return await self._client.masfeat_get_system(system_id)
 
@@ -3973,7 +3973,7 @@ class MASFEATNamespace:
         model_complexity: int | None = None,
         human_reliance: int | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Update an AI system in the registry."""
         return await self._client.masfeat_update_system(
             system_id,
@@ -3996,7 +3996,7 @@ class MASFEATNamespace:
         materiality: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.AISystemRegistry"]:
+    ) -> list[masfeat.AISystemRegistry]:
         """List AI systems in the registry."""
         return await self._client.masfeat_list_systems(
             use_case=use_case,
@@ -4006,15 +4006,15 @@ class MASFEATNamespace:
             offset=offset,
         )
 
-    async def activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    async def activate_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Activate an AI system."""
         return await self._client.masfeat_activate_system(system_id)
 
-    async def retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    async def retire_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Retire an AI system."""
         return await self._client.masfeat_retire_system(system_id)
 
-    async def get_registry_summary(self) -> "masfeat.RegistrySummary":
+    async def get_registry_summary(self) -> masfeat.RegistrySummary:
         """Get registry summary statistics."""
         return await self._client.masfeat_get_registry_summary()
 
@@ -4025,7 +4025,7 @@ class MASFEATNamespace:
         assessment_type: str,
         *,
         assessors: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Create a new FEAT assessment."""
         return await self._client.masfeat_create_assessment(
             system_id=system_id,
@@ -4033,7 +4033,7 @@ class MASFEATNamespace:
             assessors=assessors,
         )
 
-    async def get_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    async def get_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Get a FEAT assessment."""
         return await self._client.masfeat_get_assessment(assessment_id)
 
@@ -4051,7 +4051,7 @@ class MASFEATNamespace:
         transparency_details: dict[str, Any] | None = None,
         findings: list[str] | None = None,
         recommendations: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Update a FEAT assessment with scores and details."""
         return await self._client.masfeat_update_assessment(
             assessment_id=assessment_id,
@@ -4074,7 +4074,7 @@ class MASFEATNamespace:
         status: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.FEATAssessment"]:
+    ) -> list[masfeat.FEATAssessment]:
         """List FEAT assessments."""
         return await self._client.masfeat_list_assessments(
             system_id=system_id,
@@ -4083,7 +4083,7 @@ class MASFEATNamespace:
             offset=offset,
         )
 
-    async def submit_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    async def submit_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Submit an assessment for review."""
         return await self._client.masfeat_submit_assessment(assessment_id)
 
@@ -4093,7 +4093,7 @@ class MASFEATNamespace:
         *,
         approved_by: str,
         comments: str | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Approve a FEAT assessment."""
         return await self._client.masfeat_approve_assessment(
             assessment_id=assessment_id,
@@ -4107,7 +4107,7 @@ class MASFEATNamespace:
         *,
         rejected_by: str,
         reason: str,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Reject a FEAT assessment."""
         return await self._client.masfeat_reject_assessment(
             assessment_id=assessment_id,
@@ -4116,7 +4116,7 @@ class MASFEATNamespace:
         )
 
     # Kill switch methods
-    async def get_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    async def get_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Get kill switch status."""
         return await self._client.masfeat_get_kill_switch(system_id)
 
@@ -4128,7 +4128,7 @@ class MASFEATNamespace:
         bias_threshold: float | None = None,
         error_rate_threshold: float | None = None,
         auto_trigger_enabled: bool | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Configure kill switch thresholds."""
         return await self._client.masfeat_configure_kill_switch(
             system_id=system_id,
@@ -4145,7 +4145,7 @@ class MASFEATNamespace:
         accuracy: float | None = None,
         bias_score: float | None = None,
         error_rate: float | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Check metrics against kill switch thresholds."""
         return await self._client.masfeat_check_kill_switch(
             system_id=system_id,
@@ -4160,7 +4160,7 @@ class MASFEATNamespace:
         *,
         reason: str,
         triggered_by: str,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Manually trigger the kill switch."""
         return await self._client.masfeat_trigger_kill_switch(
             system_id=system_id,
@@ -4174,7 +4174,7 @@ class MASFEATNamespace:
         *,
         reason: str,
         restored_by: str,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Restore the kill switch after a trigger."""
         return await self._client.masfeat_restore_kill_switch(
             system_id=system_id,
@@ -4182,7 +4182,7 @@ class MASFEATNamespace:
             restored_by=restored_by,
         )
 
-    async def enable_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    async def enable_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Enable the kill switch."""
         return await self._client.masfeat_enable_kill_switch(system_id)
 
@@ -4192,7 +4192,7 @@ class MASFEATNamespace:
         *,
         reason: str,
         disabled_by: str,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Disable the kill switch."""
         return await self._client.masfeat_disable_kill_switch(
             system_id=system_id,
@@ -4205,7 +4205,7 @@ class MASFEATNamespace:
         system_id: str,
         *,
         limit: int | None = None,
-    ) -> list["masfeat.KillSwitchEvent"]:
+    ) -> list[masfeat.KillSwitchEvent]:
         """Get kill switch event history."""
         return await self._client.masfeat_get_kill_switch_history(
             system_id=system_id,
@@ -4224,7 +4224,7 @@ class SyncMASFEATNamespace:
 
     __slots__ = ("_client",)
 
-    def __init__(self, client: "SyncAxonFlow") -> None:
+    def __init__(self, client: SyncAxonFlow) -> None:
         self._client = client
 
     # Registry methods
@@ -4242,7 +4242,7 @@ class SyncMASFEATNamespace:
         technical_owner: str | None = None,
         business_owner: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Register an AI system in the MAS FEAT registry."""
         return self._client.masfeat_register_system(
             system_id=system_id,
@@ -4258,7 +4258,7 @@ class SyncMASFEATNamespace:
             metadata=metadata,
         )
 
-    def get_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    def get_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Get an AI system from the registry."""
         return self._client.masfeat_get_system(system_id)
 
@@ -4275,7 +4275,7 @@ class SyncMASFEATNamespace:
         model_complexity: int | None = None,
         human_reliance: int | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Update an AI system in the registry."""
         return self._client.masfeat_update_system(
             system_id,
@@ -4298,7 +4298,7 @@ class SyncMASFEATNamespace:
         materiality: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.AISystemRegistry"]:
+    ) -> list[masfeat.AISystemRegistry]:
         """List AI systems in the registry."""
         return self._client.masfeat_list_systems(
             use_case=use_case,
@@ -4308,15 +4308,15 @@ class SyncMASFEATNamespace:
             offset=offset,
         )
 
-    def activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    def activate_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Activate an AI system."""
         return self._client.masfeat_activate_system(system_id)
 
-    def retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    def retire_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Retire an AI system."""
         return self._client.masfeat_retire_system(system_id)
 
-    def get_registry_summary(self) -> "masfeat.RegistrySummary":
+    def get_registry_summary(self) -> masfeat.RegistrySummary:
         """Get registry summary statistics."""
         return self._client.masfeat_get_registry_summary()
 
@@ -4327,7 +4327,7 @@ class SyncMASFEATNamespace:
         assessment_type: str,
         *,
         assessors: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Create a new FEAT assessment."""
         return self._client.masfeat_create_assessment(
             system_id=system_id,
@@ -4335,7 +4335,7 @@ class SyncMASFEATNamespace:
             assessors=assessors,
         )
 
-    def get_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    def get_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Get a FEAT assessment."""
         return self._client.masfeat_get_assessment(assessment_id)
 
@@ -4353,7 +4353,7 @@ class SyncMASFEATNamespace:
         transparency_details: dict[str, Any] | None = None,
         findings: list[str] | None = None,
         recommendations: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Update a FEAT assessment with scores and details."""
         return self._client.masfeat_update_assessment(
             assessment_id=assessment_id,
@@ -4376,7 +4376,7 @@ class SyncMASFEATNamespace:
         status: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.FEATAssessment"]:
+    ) -> list[masfeat.FEATAssessment]:
         """List FEAT assessments."""
         return self._client.masfeat_list_assessments(
             system_id=system_id,
@@ -4385,7 +4385,7 @@ class SyncMASFEATNamespace:
             offset=offset,
         )
 
-    def submit_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    def submit_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Submit an assessment for review."""
         return self._client.masfeat_submit_assessment(assessment_id)
 
@@ -4395,7 +4395,7 @@ class SyncMASFEATNamespace:
         *,
         approved_by: str,
         comments: str | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Approve a FEAT assessment."""
         return self._client.masfeat_approve_assessment(
             assessment_id=assessment_id,
@@ -4409,7 +4409,7 @@ class SyncMASFEATNamespace:
         *,
         rejected_by: str,
         reason: str,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Reject a FEAT assessment."""
         return self._client.masfeat_reject_assessment(
             assessment_id=assessment_id,
@@ -4418,7 +4418,7 @@ class SyncMASFEATNamespace:
         )
 
     # Kill switch methods
-    def get_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    def get_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Get kill switch status."""
         return self._client.masfeat_get_kill_switch(system_id)
 
@@ -4430,7 +4430,7 @@ class SyncMASFEATNamespace:
         bias_threshold: float | None = None,
         error_rate_threshold: float | None = None,
         auto_trigger_enabled: bool | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Configure kill switch thresholds."""
         return self._client.masfeat_configure_kill_switch(
             system_id=system_id,
@@ -4447,7 +4447,7 @@ class SyncMASFEATNamespace:
         accuracy: float | None = None,
         bias_score: float | None = None,
         error_rate: float | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Check metrics against kill switch thresholds."""
         return self._client.masfeat_check_kill_switch(
             system_id=system_id,
@@ -4462,7 +4462,7 @@ class SyncMASFEATNamespace:
         *,
         reason: str,
         triggered_by: str,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Manually trigger the kill switch."""
         return self._client.masfeat_trigger_kill_switch(
             system_id=system_id,
@@ -4476,7 +4476,7 @@ class SyncMASFEATNamespace:
         *,
         reason: str,
         restored_by: str,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Restore the kill switch after a trigger."""
         return self._client.masfeat_restore_kill_switch(
             system_id=system_id,
@@ -4484,7 +4484,7 @@ class SyncMASFEATNamespace:
             restored_by=restored_by,
         )
 
-    def enable_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    def enable_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Enable the kill switch."""
         return self._client.masfeat_enable_kill_switch(system_id)
 
@@ -4494,7 +4494,7 @@ class SyncMASFEATNamespace:
         *,
         reason: str,
         disabled_by: str,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Disable the kill switch."""
         return self._client.masfeat_disable_kill_switch(
             system_id=system_id,
@@ -4507,7 +4507,7 @@ class SyncMASFEATNamespace:
         system_id: str,
         *,
         limit: int | None = None,
-    ) -> list["masfeat.KillSwitchEvent"]:
+    ) -> list[masfeat.KillSwitchEvent]:
         """Get kill switch event history."""
         return self._client.masfeat_get_kill_switch_history(
             system_id=system_id,
@@ -5084,7 +5084,7 @@ class SyncAxonFlow:
         technical_owner: str | None = None,
         business_owner: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Register an AI system in the MAS FEAT registry."""
         return self._run_sync(
             self._async_client.masfeat_register_system(
@@ -5102,7 +5102,7 @@ class SyncAxonFlow:
             )
         )
 
-    def masfeat_get_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    def masfeat_get_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Get an AI system from the registry."""
         return self._run_sync(self._async_client.masfeat_get_system(system_id))
 
@@ -5119,7 +5119,7 @@ class SyncAxonFlow:
         model_complexity: int | None = None,
         human_reliance: int | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> "masfeat.AISystemRegistry":
+    ) -> masfeat.AISystemRegistry:
         """Update an AI system in the registry."""
         return self._run_sync(
             self._async_client.masfeat_update_system(
@@ -5144,7 +5144,7 @@ class SyncAxonFlow:
         materiality: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.AISystemRegistry"]:
+    ) -> list[masfeat.AISystemRegistry]:
         """List AI systems in the registry."""
         return self._run_sync(
             self._async_client.masfeat_list_systems(
@@ -5156,15 +5156,15 @@ class SyncAxonFlow:
             )
         )
 
-    def masfeat_activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    def masfeat_activate_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Activate an AI system."""
         return self._run_sync(self._async_client.masfeat_activate_system(system_id))
 
-    def masfeat_retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+    def masfeat_retire_system(self, system_id: str) -> masfeat.AISystemRegistry:
         """Retire an AI system."""
         return self._run_sync(self._async_client.masfeat_retire_system(system_id))
 
-    def masfeat_get_registry_summary(self) -> "masfeat.RegistrySummary":
+    def masfeat_get_registry_summary(self) -> masfeat.RegistrySummary:
         """Get registry summary."""
         return self._run_sync(self._async_client.masfeat_get_registry_summary())
 
@@ -5174,7 +5174,7 @@ class SyncAxonFlow:
         *,
         assessment_type: str = "periodic",
         assessors: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Create a FEAT assessment."""
         return self._run_sync(
             self._async_client.masfeat_create_assessment(
@@ -5182,7 +5182,7 @@ class SyncAxonFlow:
             )
         )
 
-    def masfeat_get_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    def masfeat_get_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Get a FEAT assessment."""
         return self._run_sync(self._async_client.masfeat_get_assessment(assessment_id))
 
@@ -5201,7 +5201,7 @@ class SyncAxonFlow:
         findings: list[str] | None = None,
         recommendations: list[str] | None = None,
         assessors: list[str] | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Update a FEAT assessment."""
         return self._run_sync(
             self._async_client.masfeat_update_assessment(
@@ -5227,7 +5227,7 @@ class SyncAxonFlow:
         status: str | None = None,
         limit: int | None = None,
         offset: int | None = None,
-    ) -> list["masfeat.FEATAssessment"]:
+    ) -> list[masfeat.FEATAssessment]:
         """List FEAT assessments."""
         return self._run_sync(
             self._async_client.masfeat_list_assessments(
@@ -5235,7 +5235,7 @@ class SyncAxonFlow:
             )
         )
 
-    def masfeat_submit_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+    def masfeat_submit_assessment(self, assessment_id: str) -> masfeat.FEATAssessment:
         """Submit a FEAT assessment for approval."""
         return self._run_sync(self._async_client.masfeat_submit_assessment(assessment_id))
 
@@ -5245,7 +5245,7 @@ class SyncAxonFlow:
         approved_by: str,
         *,
         comments: str | None = None,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Approve a FEAT assessment."""
         return self._run_sync(
             self._async_client.masfeat_approve_assessment(
@@ -5258,13 +5258,13 @@ class SyncAxonFlow:
         assessment_id: str,
         rejected_by: str,
         reason: str,
-    ) -> "masfeat.FEATAssessment":
+    ) -> masfeat.FEATAssessment:
         """Reject a FEAT assessment."""
         return self._run_sync(
             self._async_client.masfeat_reject_assessment(assessment_id, rejected_by, reason)
         )
 
-    def masfeat_get_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    def masfeat_get_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Get kill switch configuration."""
         return self._run_sync(self._async_client.masfeat_get_kill_switch(system_id))
 
@@ -5276,7 +5276,7 @@ class SyncAxonFlow:
         bias_threshold: float | None = None,
         error_rate_threshold: float | None = None,
         auto_trigger_enabled: bool | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Configure kill switch thresholds."""
         return self._run_sync(
             self._async_client.masfeat_configure_kill_switch(
@@ -5295,7 +5295,7 @@ class SyncAxonFlow:
         *,
         bias_score: float | None = None,
         error_rate: float | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Check current metrics against kill switch thresholds."""
         return self._run_sync(
             self._async_client.masfeat_check_kill_switch(
@@ -5309,7 +5309,7 @@ class SyncAxonFlow:
         reason: str,
         *,
         triggered_by: str | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Manually trigger the kill switch."""
         return self._run_sync(
             self._async_client.masfeat_trigger_kill_switch(
@@ -5323,7 +5323,7 @@ class SyncAxonFlow:
         reason: str,
         *,
         restored_by: str | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Restore the kill switch."""
         return self._run_sync(
             self._async_client.masfeat_restore_kill_switch(
@@ -5331,7 +5331,7 @@ class SyncAxonFlow:
             )
         )
 
-    def masfeat_enable_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+    def masfeat_enable_kill_switch(self, system_id: str) -> masfeat.KillSwitch:
         """Enable the kill switch."""
         return self._run_sync(self._async_client.masfeat_enable_kill_switch(system_id))
 
@@ -5340,7 +5340,7 @@ class SyncAxonFlow:
         system_id: str,
         *,
         reason: str | None = None,
-    ) -> "masfeat.KillSwitch":
+    ) -> masfeat.KillSwitch:
         """Disable the kill switch."""
         return self._run_sync(
             self._async_client.masfeat_disable_kill_switch(system_id, reason=reason)
@@ -5351,7 +5351,7 @@ class SyncAxonFlow:
         system_id: str,
         *,
         limit: int | None = None,
-    ) -> list["masfeat.KillSwitchEvent"]:
+    ) -> list[masfeat.KillSwitchEvent]:
         """Get kill switch event history."""
         return self._run_sync(
             self._async_client.masfeat_get_kill_switch_history(system_id, limit=limit)
