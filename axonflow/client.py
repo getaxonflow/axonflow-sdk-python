@@ -3434,7 +3434,9 @@ class AxonFlow:
             path = f"{path}?{'&'.join(params)}"
 
         response = await self._request("GET", path)
-        return [masfeat.ai_system_registry_from_dict(s) for s in (response or [])]
+        # Response is a list of system dicts for this endpoint
+        systems: list[dict[str, Any]] = response or []  # type: ignore[assignment]
+        return [masfeat.ai_system_registry_from_dict(s) for s in systems]
 
     async def masfeat_activate_system(self, system_id: str) -> AISystemRegistry:
         """Activate an AI system (transition from draft to active).
@@ -3615,7 +3617,9 @@ class AxonFlow:
             path = f"{path}?{'&'.join(params)}"
 
         response = await self._request("GET", path)
-        return [masfeat.feat_assessment_from_dict(a) for a in (response or [])]
+        # Response is a list of assessment dicts for this endpoint
+        assessments: list[dict[str, Any]] = response or []  # type: ignore[assignment]
+        return [masfeat.feat_assessment_from_dict(a) for a in assessments]
 
     async def masfeat_submit_assessment(self, assessment_id: str) -> FEATAssessment:
         """Submit a FEAT assessment for approval.
@@ -3877,9 +3881,12 @@ class AxonFlow:
 
         response = await self._request("GET", path)
         # Handle nested response format {history: [], count: 0}
+        events_data: list[dict[str, Any]]
         if isinstance(response, dict) and "history" in response:
-            response = response["history"]
-        return [masfeat.kill_switch_event_from_dict(e) for e in (response or [])]
+            events_data = response["history"]
+        else:
+            events_data = response or []  # type: ignore[assignment]
+        return [masfeat.kill_switch_event_from_dict(e) for e in events_data]
 
     def _map_workflow_response(self, data: dict[str, Any]) -> WorkflowStatusResponse:
         """Map API response to WorkflowStatusResponse."""
