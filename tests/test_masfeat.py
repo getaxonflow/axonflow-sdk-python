@@ -907,3 +907,253 @@ class TestMASFEATClientMethods:
             assert len(results) == 2
             assert results[0].event_type == KillSwitchEventType.ENABLED
             assert results[1].event_type == KillSwitchEventType.TRIGGERED
+
+    @pytest.mark.asyncio
+    async def test_activate_system(self, httpx_mock: HTTPXMock) -> None:
+        """Test activating an AI system."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123/activate",
+            method="POST",
+            json={
+                "id": "sys-123",
+                "org_id": "org-456",
+                "system_id": "test-model",
+                "system_name": "Test Model",
+                "use_case": "credit_scoring",
+                "owner_team": "team",
+                "materiality": "high",
+                "status": "active",
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_activate_system("sys-123")
+            assert result.status == SystemStatus.ACTIVE
+
+    @pytest.mark.asyncio
+    async def test_retire_system(self, httpx_mock: HTTPXMock) -> None:
+        """Test retiring an AI system."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123/retire",
+            method="POST",
+            json={
+                "id": "sys-123",
+                "org_id": "org-456",
+                "system_id": "test-model",
+                "system_name": "Test Model",
+                "use_case": "credit_scoring",
+                "owner_team": "team",
+                "materiality": "high",
+                "status": "retired",
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_retire_system("sys-123")
+            assert result.status == SystemStatus.RETIRED
+
+    @pytest.mark.asyncio
+    async def test_get_assessment(self, httpx_mock: HTTPXMock) -> None:
+        """Test getting a FEAT assessment."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/assessments/assess-123",
+            method="GET",
+            json={
+                "id": "assess-123",
+                "org_id": "org-456",
+                "system_id": "sys-789",
+                "assessment_type": "annual",
+                "status": "completed",
+                "assessment_date": "2026-01-23T12:00:00Z",
+                "overall_score": 85,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_get_assessment("assess-123")
+            assert result.id == "assess-123"
+            assert result.overall_score == 85
+
+    @pytest.mark.asyncio
+    async def test_submit_assessment(self, httpx_mock: HTTPXMock) -> None:
+        """Test submitting a FEAT assessment."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/assessments/assess-123/submit",
+            method="POST",
+            json={
+                "id": "assess-123",
+                "org_id": "org-456",
+                "system_id": "sys-789",
+                "assessment_type": "annual",
+                "status": "completed",
+                "assessment_date": "2026-01-23T12:00:00Z",
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_submit_assessment("assess-123")
+            assert result.status == FEATAssessmentStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_approve_assessment(self, httpx_mock: HTTPXMock) -> None:
+        """Test approving a FEAT assessment."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/assessments/assess-123/approve",
+            method="POST",
+            json={
+                "id": "assess-123",
+                "org_id": "org-456",
+                "system_id": "sys-789",
+                "assessment_type": "annual",
+                "status": "approved",
+                "assessment_date": "2026-01-23T12:00:00Z",
+                "approved_by": "admin@example.com",
+                "approved_at": "2026-01-23T13:00:00Z",
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T13:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_approve_assessment("assess-123")
+            assert result.status == FEATAssessmentStatus.APPROVED
+            assert result.approved_by == "admin@example.com"
+
+    @pytest.mark.asyncio
+    async def test_configure_kill_switch(self, httpx_mock: HTTPXMock) -> None:
+        """Test configuring a kill switch."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/killswitch/sys-123/configure",
+            method="POST",
+            json={
+                "id": "ks-123",
+                "org_id": "org-456",
+                "system_id": "sys-123",
+                "status": "enabled",
+                "auto_trigger_enabled": True,
+                "accuracy_threshold": 0.95,
+                "bias_threshold": 0.1,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_configure_kill_switch(
+                "sys-123",
+                accuracy_threshold=0.95,
+                bias_threshold=0.1,
+                auto_trigger_enabled=True,
+            )
+            assert result.accuracy_threshold == 0.95
+            assert result.auto_trigger_enabled is True
+
+    @pytest.mark.asyncio
+    async def test_restore_kill_switch(self, httpx_mock: HTTPXMock) -> None:
+        """Test restoring a kill switch."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/killswitch/sys-123/restore",
+            method="POST",
+            json={
+                "kill_switch": {
+                    "id": "ks-123",
+                    "org_id": "org-456",
+                    "system_id": "sys-123",
+                    "status": "enabled",
+                    "auto_trigger_enabled": True,
+                    "created_at": "2026-01-23T12:00:00Z",
+                    "updated_at": "2026-01-23T12:00:00Z",
+                },
+                "message": "Kill switch restored",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_restore_kill_switch("sys-123")
+            assert result.status == KillSwitchStatus.ENABLED
+
+    @pytest.mark.asyncio
+    async def test_enable_kill_switch(self, httpx_mock: HTTPXMock) -> None:
+        """Test enabling a kill switch."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/killswitch/sys-123/enable",
+            method="POST",
+            json={
+                "id": "ks-123",
+                "org_id": "org-456",
+                "system_id": "sys-123",
+                "status": "enabled",
+                "auto_trigger_enabled": True,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_enable_kill_switch("sys-123")
+            assert result.status == KillSwitchStatus.ENABLED
+
+    @pytest.mark.asyncio
+    async def test_disable_kill_switch(self, httpx_mock: HTTPXMock) -> None:
+        """Test disabling a kill switch."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/killswitch/sys-123/disable",
+            method="POST",
+            json={
+                "id": "ks-123",
+                "org_id": "org-456",
+                "system_id": "sys-123",
+                "status": "disabled",
+                "auto_trigger_enabled": False,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_disable_kill_switch("sys-123")
+            assert result.status == KillSwitchStatus.DISABLED
