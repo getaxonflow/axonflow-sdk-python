@@ -158,6 +158,18 @@ from axonflow.workflow import (
     WorkflowStatusResponse,
     WorkflowStepInfo,
 )
+from axonflow.execution import (
+    ExecutionStatus,
+    ExecutionStatusValue,
+    ExecutionType,
+    StepStatusValue,
+    UnifiedApprovalStatus,
+    UnifiedGateDecision,
+    UnifiedListExecutionsRequest,
+    UnifiedListExecutionsResponse,
+    UnifiedStepStatus,
+    UnifiedStepType,
+)
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -3887,6 +3899,178 @@ class AxonFlow:
         else:
             events_data = response or []  # type: ignore[assignment]
         return [masfeat.kill_switch_event_from_dict(e) for e in events_data]
+
+    # ============================================================================
+    # Unified Execution Tracking Methods (Issue #1075)
+    # ============================================================================
+
+    async def get_execution_status(self, execution_id: str) -> ExecutionStatus:
+        """Get unified execution status for a MAP plan or WCP workflow.
+
+        This method provides a consistent interface for tracking execution progress
+        regardless of whether the underlying execution is a MAP plan or WCP workflow.
+
+        Args:
+            execution_id: The execution ID (plan ID or workflow ID)
+
+        Returns:
+            Unified execution status
+
+        Example:
+            >>> # Get status for any execution (MAP or WCP)
+            >>> status = await client.get_execution_status('exec_123')
+            >>> print(f"Type: {status.execution_type}")
+            >>> print(f"Status: {status.status}")
+            >>> print(f"Progress: {status.progress_percent}%")
+            >>>
+            >>> # Check steps
+            >>> for step in status.steps:
+            ...     print(f"  Step {step.step_index}: {step.step_name} - {step.status}")
+        """
+        if not execution_id:
+            msg = "Execution ID is required"
+            raise ValueError(msg)
+
+        if self._config.debug:
+            self._logger.debug("Getting execution status", execution_id=execution_id)
+
+        response = await self._orchestrator_request("GET", f"/api/v1/executions/{execution_id}")
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from get execution status"
+            raise TypeError(msg)
+
+        return self._map_execution_status(response)
+
+    async def list_unified_executions(
+        self,
+        options: UnifiedListExecutionsRequest | None = None,
+    ) -> UnifiedListExecutionsResponse:
+        """List unified executions with optional filters.
+
+        Returns a paginated list of executions (both MAP plans and WCP workflows)
+        with optional filtering by type, status, tenant, or organization.
+        This method provides a unified view across all execution types.
+
+        Args:
+            options: Filter and pagination options
+
+        Returns:
+            Paginated list of unified executions
+
+        Example:
+            >>> # List all running executions
+            >>> result = await client.list_unified_executions(
+            ...     UnifiedListExecutionsRequest(
+            ...         status=ExecutionStatusValue.RUNNING,
+            ...         limit=20
+            ...     )
+            ... )
+            >>> print(f"Found {result.total} running executions")
+            >>>
+            >>> # List only MAP plans
+            >>> map_plans = await client.list_unified_executions(
+            ...     UnifiedListExecutionsRequest(
+            ...         execution_type=ExecutionType.MAP_PLAN,
+            ...         limit=50
+            ...     )
+            ... )
+        """
+        params: list[str] = []
+        if options:
+            if options.execution_type:
+                params.append(f"execution_type={options.execution_type.value}")
+            if options.status:
+                params.append(f"status={options.status.value}")
+            if options.tenant_id:
+                params.append(f"tenant_id={options.tenant_id}")
+            if options.org_id:
+                params.append(f"org_id={options.org_id}")
+            if options.limit:
+                params.append(f"limit={options.limit}")
+            if options.offset:
+                params.append(f"offset={options.offset}")
+
+        path = "/api/v1/executions"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        if self._config.debug:
+            self._logger.debug("Listing unified executions", options=options)
+
+        response = await self._orchestrator_request("GET", path)
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from list executions"
+            raise TypeError(msg)
+
+        executions = [self._map_execution_status(e) for e in response.get("executions", [])]
+
+        return UnifiedListExecutionsResponse(
+            executions=executions,
+            total=response.get("total", len(executions)),
+            limit=response.get("limit", 50),
+            offset=response.get("offset", 0),
+            has_more=response.get("has_more", False),
+        )
+
+    def _map_execution_status(self, data: dict[str, Any]) -> ExecutionStatus:
+        """Map API response to ExecutionStatus."""
+        steps = []
+        if data.get("steps"):
+            for s in data["steps"]:
+                steps.append(
+                    UnifiedStepStatus(
+                        step_id=s["step_id"],
+                        step_index=s["step_index"],
+                        step_name=s.get("step_name", ""),
+                        step_type=UnifiedStepType(s["step_type"]),
+                        status=StepStatusValue(s["status"]),
+                        started_at=_parse_datetime(s["started_at"]) if s.get("started_at") else None,
+                        ended_at=_parse_datetime(s["ended_at"]) if s.get("ended_at") else None,
+                        duration=s.get("duration"),
+                        decision=UnifiedGateDecision(s["decision"]) if s.get("decision") else None,
+                        decision_reason=s.get("decision_reason"),
+                        policies_matched=s.get("policies_matched", []),
+                        approval_status=UnifiedApprovalStatus(s["approval_status"])
+                        if s.get("approval_status")
+                        else None,
+                        approved_by=s.get("approved_by"),
+                        approved_at=_parse_datetime(s["approved_at"])
+                        if s.get("approved_at")
+                        else None,
+                        model=s.get("model"),
+                        provider=s.get("provider"),
+                        cost_usd=s.get("cost_usd"),
+                        input=s.get("input"),
+                        output=s.get("output"),
+                        result_summary=s.get("result_summary"),
+                        error=s.get("error"),
+                    )
+                )
+
+        return ExecutionStatus(
+            execution_id=data["execution_id"],
+            execution_type=ExecutionType(data["execution_type"]),
+            name=data["name"],
+            source=data.get("source"),
+            status=ExecutionStatusValue(data["status"]),
+            current_step_index=data.get("current_step_index", 0),
+            total_steps=data.get("total_steps", 0),
+            progress_percent=data.get("progress_percent", 0.0),
+            started_at=_parse_datetime(data["started_at"]),
+            completed_at=_parse_datetime(data["completed_at"]) if data.get("completed_at") else None,
+            duration=data.get("duration"),
+            estimated_cost_usd=data.get("estimated_cost_usd"),
+            actual_cost_usd=data.get("actual_cost_usd"),
+            steps=steps,
+            error=data.get("error"),
+            tenant_id=data.get("tenant_id"),
+            org_id=data.get("org_id"),
+            user_id=data.get("user_id"),
+            client_id=data.get("client_id"),
+            metadata=data.get("metadata", {}),
+            created_at=_parse_datetime(data["created_at"]),
+            updated_at=_parse_datetime(data["updated_at"]),
+        )
 
     def _map_workflow_response(self, data: dict[str, Any]) -> WorkflowStatusResponse:
         """Map API response to WorkflowStatusResponse."""

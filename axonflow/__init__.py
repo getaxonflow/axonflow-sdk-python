@@ -162,6 +162,18 @@ from axonflow.workflow import (
     WorkflowStatusResponse,
     WorkflowStepInfo,
 )
+from axonflow.execution import (
+    ExecutionStatus,
+    ExecutionStatusValue,
+    ExecutionType,
+    StepStatusValue,
+    UnifiedApprovalStatus,
+    UnifiedGateDecision,
+    UnifiedListExecutionsRequest,
+    UnifiedListExecutionsResponse,
+    UnifiedStepStatus,
+    UnifiedStepType,
+)
 
 __version__ = "1.6.0"
 __all__ = [
@@ -302,4 +314,15 @@ __all__ = [
     "FEATAssessment",
     "KillSwitch",
     "KillSwitchEvent",
+    # Unified Execution types (Issue #1075)
+    "ExecutionType",
+    "ExecutionStatusValue",
+    "StepStatusValue",
+    "UnifiedStepType",
+    "UnifiedGateDecision",
+    "UnifiedApprovalStatus",
+    "UnifiedStepStatus",
+    "ExecutionStatus",
+    "UnifiedListExecutionsRequest",
+    "UnifiedListExecutionsResponse",
 ]
