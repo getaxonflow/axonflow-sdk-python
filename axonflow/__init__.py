@@ -147,33 +147,6 @@ from axonflow.workflow import (
     WorkflowStepInfo,
 )
 
-# MAS FEAT Compliance types (Enterprise)
-from axonflow import masfeat
-from axonflow.masfeat import (
-    AISystemRegistry,
-    AISystemUseCase,
-    ApproveAssessmentRequest,
-    CheckKillSwitchRequest,
-    ConfigureKillSwitchRequest,
-    CreateAssessmentRequest,
-    FEATAssessment,
-    FEATAssessmentStatus,
-    KillSwitch,
-    KillSwitchEvent,
-    KillSwitchStatus,
-    ListAssessmentsOptions,
-    ListSystemsOptions,
-    MaterialityClassification,
-    RegisterSystemRequest,
-    RegistrySummary,
-    RejectAssessmentRequest,
-    RestoreKillSwitchRequest,
-    SystemStatus,
-    TriggerKillSwitchRequest,
-    UpdateAssessmentRequest,
-    UpdateSystemRequest,
-)
-
 __version__ = "1.6.0"
 __all__ = [
     # Main client
@@ -300,28 +273,4 @@ __all__ = [
     "MarkStepCompletedRequest",
     "AbortWorkflowRequest",
     "PolicyMatch",
-    # MAS FEAT Compliance types (Enterprise)
-    "masfeat",
-    "MaterialityClassification",
-    "SystemStatus",
-    "FEATAssessmentStatus",
-    "KillSwitchStatus",
-    "AISystemUseCase",
-    "RegisterSystemRequest",
-    "UpdateSystemRequest",
-    "AISystemRegistry",
-    "RegistrySummary",
-    "ListSystemsOptions",
-    "CreateAssessmentRequest",
-    "UpdateAssessmentRequest",
-    "FEATAssessment",
-    "ApproveAssessmentRequest",
-    "RejectAssessmentRequest",
-    "ListAssessmentsOptions",
-    "KillSwitch",
-    "ConfigureKillSwitchRequest",
-    "CheckKillSwitchRequest",
-    "TriggerKillSwitchRequest",
-    "RestoreKillSwitchRequest",
-    "KillSwitchEvent",
 ]
