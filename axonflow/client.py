@@ -3244,6 +3244,497 @@ class AxonFlow:
             steps=steps,
         )
 
+    # =========================================================================
+    # MAS FEAT Compliance Methods (Enterprise)
+    # =========================================================================
+
+    @property
+    def masfeat(self) -> "MASFEATClient":
+        """MAS FEAT compliance client for Singapore regulatory compliance.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Returns:
+            MASFEATClient instance for MAS FEAT operations
+        """
+        if not hasattr(self, "_masfeat_client"):
+            self._masfeat_client = MASFEATClient(self)
+        return self._masfeat_client
+
+
+class MASFEATClient:
+    """MAS FEAT compliance client for Singapore regulatory compliance.
+
+    Provides methods for:
+    - AI System Registry management
+    - FEAT Assessment lifecycle
+    - Kill Switch configuration and monitoring
+
+    Enterprise Feature: Requires AxonFlow Enterprise license.
+    """
+
+    def __init__(self, client: AxonFlow) -> None:
+        self._client = client
+
+    async def register_system(
+        self,
+        system_id: str,
+        system_name: str,
+        use_case: str,
+        owner_team: str,
+        customer_impact: int,
+        model_complexity: int,
+        human_reliance: int,
+        description: str | None = None,
+        technical_owner: str | None = None,
+        business_owner: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> "masfeat.AISystemRegistry":
+        """Register an AI system in the MAS FEAT registry.
+
+        Args:
+            system_id: Unique identifier for the system
+            system_name: Human-readable name
+            use_case: Use case category (credit_scoring, robo_advisory, etc.)
+            owner_team: Team responsible for the system
+            customer_impact: Impact rating (1-5)
+            model_complexity: Complexity rating (1-5)
+            human_reliance: Automation level (1-5)
+            description: Optional description
+            technical_owner: Technical owner email
+            business_owner: Business owner email
+            metadata: Additional metadata
+
+        Returns:
+            AISystemRegistry: Registered system with materiality classification
+        """
+        from axonflow import masfeat
+
+        body = {
+            "system_id": system_id,
+            "system_name": system_name,
+            "use_case": use_case,
+            "owner_team": owner_team,
+            "customer_impact": customer_impact,
+            "model_complexity": model_complexity,
+            "human_reliance": human_reliance,
+        }
+        if description:
+            body["description"] = description
+        if technical_owner:
+            body["technical_owner"] = technical_owner
+        if business_owner:
+            body["business_owner"] = business_owner
+        if metadata:
+            body["metadata"] = metadata
+
+        response = await self._client._request("POST", "/api/v1/masfeat/registry", json_data=body)
+        return masfeat.dict_to_ai_system(response)
+
+    async def get_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+        """Get an AI system from the registry."""
+        from axonflow import masfeat
+
+        response = await self._client._request("GET", f"/api/v1/masfeat/registry/{system_id}")
+        return masfeat.dict_to_ai_system(response)
+
+    async def update_system(
+        self,
+        system_id: str,
+        **kwargs: Any,
+    ) -> "masfeat.AISystemRegistry":
+        """Update an AI system in the registry."""
+        from axonflow import masfeat
+
+        body = {k: v for k, v in kwargs.items() if v is not None}
+        response = await self._client._request(
+            "PUT", f"/api/v1/masfeat/registry/{system_id}", json_data=body
+        )
+        return masfeat.dict_to_ai_system(response)
+
+    async def list_systems(
+        self,
+        status: str | None = None,
+        use_case: str | None = None,
+        materiality: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list["masfeat.AISystemRegistry"]:
+        """List AI systems in the registry."""
+        from axonflow import masfeat
+
+        params = []
+        if status:
+            params.append(f"status={status}")
+        if use_case:
+            params.append(f"use_case={use_case}")
+        if materiality:
+            params.append(f"materiality={materiality}")
+        params.append(f"limit={limit}")
+        params.append(f"offset={offset}")
+
+        path = f"/api/v1/masfeat/registry?{'&'.join(params)}"
+        response = await self._client._request("GET", path)
+        return [masfeat.dict_to_ai_system(s) for s in response]
+
+    async def activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+        """Activate an AI system."""
+        from axonflow import masfeat
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/registry/{system_id}/activate", json_data={}
+        )
+        return masfeat.dict_to_ai_system(response)
+
+    async def retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+        """Retire an AI system."""
+        from axonflow import masfeat
+
+        response = await self._client._request(
+            "DELETE", f"/api/v1/masfeat/registry/{system_id}"
+        )
+        return masfeat.dict_to_ai_system(response)
+
+    async def get_registry_summary(self) -> "masfeat.RegistrySummary":
+        """Get registry summary statistics."""
+        from axonflow import masfeat
+
+        response = await self._client._request("GET", "/api/v1/masfeat/registry/summary")
+        return masfeat.dict_to_registry_summary(response)
+
+    # FEAT Assessment Methods
+
+    async def create_assessment(
+        self,
+        system_id: str,
+        assessment_type: str = "initial",
+        assessors: list[str] | None = None,
+    ) -> "masfeat.FEATAssessment":
+        """Create a FEAT assessment for an AI system."""
+        from axonflow import masfeat
+
+        body = {
+            "system_id": system_id,
+            "assessment_type": assessment_type,
+        }
+        if assessors:
+            body["assessors"] = assessors
+
+        response = await self._client._request(
+            "POST", "/api/v1/masfeat/assessments", json_data=body
+        )
+        return masfeat.dict_to_assessment(response)
+
+    async def get_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+        """Get a FEAT assessment."""
+        from axonflow import masfeat
+
+        response = await self._client._request(
+            "GET", f"/api/v1/masfeat/assessments/{assessment_id}"
+        )
+        return masfeat.dict_to_assessment(response)
+
+    async def update_assessment(
+        self,
+        assessment_id: str,
+        **kwargs: Any,
+    ) -> "masfeat.FEATAssessment":
+        """Update a FEAT assessment with pillar scores and details."""
+        from axonflow import masfeat
+
+        body = {k: v for k, v in kwargs.items() if v is not None}
+        response = await self._client._request(
+            "PUT", f"/api/v1/masfeat/assessments/{assessment_id}", json_data=body
+        )
+        return masfeat.dict_to_assessment(response)
+
+    async def list_assessments(
+        self,
+        system_id: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list["masfeat.FEATAssessment"]:
+        """List FEAT assessments."""
+        from axonflow import masfeat
+
+        params = []
+        if system_id:
+            params.append(f"system_id={system_id}")
+        if status:
+            params.append(f"status={status}")
+        params.append(f"limit={limit}")
+        params.append(f"offset={offset}")
+
+        path = f"/api/v1/masfeat/assessments?{'&'.join(params)}"
+        response = await self._client._request("GET", path)
+        return [masfeat.dict_to_assessment(a) for a in response]
+
+    async def submit_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+        """Submit an assessment for review."""
+        from axonflow import masfeat
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/assessments/{assessment_id}/submit", json_data={}
+        )
+        return masfeat.dict_to_assessment(response)
+
+    async def approve_assessment(
+        self,
+        assessment_id: str,
+        approved_by: str,
+        comments: str | None = None,
+    ) -> "masfeat.FEATAssessment":
+        """Approve a completed assessment."""
+        from axonflow import masfeat
+
+        body = {"approved_by": approved_by}
+        if comments:
+            body["comments"] = comments
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/assessments/{assessment_id}/approve", json_data=body
+        )
+        return masfeat.dict_to_assessment(response)
+
+    async def reject_assessment(
+        self,
+        assessment_id: str,
+        rejected_by: str,
+        reason: str,
+    ) -> "masfeat.FEATAssessment":
+        """Reject an assessment."""
+        from axonflow import masfeat
+
+        body = {"rejected_by": rejected_by, "reason": reason}
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/assessments/{assessment_id}/reject", json_data=body
+        )
+        return masfeat.dict_to_assessment(response)
+
+    # Kill Switch Methods
+
+    async def get_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+        """Get or create a kill switch for an AI system."""
+        from axonflow import masfeat
+
+        response = await self._client._request(
+            "GET", f"/api/v1/masfeat/killswitch/{system_id}"
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def configure_kill_switch(
+        self,
+        system_id: str,
+        accuracy_threshold: float | None = None,
+        bias_threshold: float | None = None,
+        error_rate_threshold: float | None = None,
+        auto_trigger_enabled: bool | None = None,
+    ) -> "masfeat.KillSwitch":
+        """Configure kill switch thresholds."""
+        from axonflow import masfeat
+
+        body = {}
+        if accuracy_threshold is not None:
+            body["accuracy_threshold"] = accuracy_threshold
+        if bias_threshold is not None:
+            body["bias_threshold"] = bias_threshold
+        if error_rate_threshold is not None:
+            body["error_rate_threshold"] = error_rate_threshold
+        if auto_trigger_enabled is not None:
+            body["auto_trigger_enabled"] = auto_trigger_enabled
+
+        response = await self._client._request(
+            "PUT", f"/api/v1/masfeat/killswitch/{system_id}/configure", json_data=body
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def check_kill_switch(
+        self,
+        system_id: str,
+        accuracy: float,
+        bias_score: float | None = None,
+        error_rate: float | None = None,
+    ) -> "masfeat.KillSwitch":
+        """Check metrics and potentially trigger the kill switch."""
+        from axonflow import masfeat
+
+        body = {"accuracy": accuracy}
+        if bias_score is not None:
+            body["bias_score"] = bias_score
+        if error_rate is not None:
+            body["error_rate"] = error_rate
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/killswitch/{system_id}/check", json_data=body
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def trigger_kill_switch(
+        self,
+        system_id: str,
+        reason: str,
+        triggered_by: str | None = None,
+    ) -> "masfeat.KillSwitch":
+        """Manually trigger the kill switch."""
+        from axonflow import masfeat
+
+        body = {"reason": reason}
+        if triggered_by:
+            body["triggered_by"] = triggered_by
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/killswitch/{system_id}/trigger", json_data=body
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def restore_kill_switch(
+        self,
+        system_id: str,
+        reason: str,
+        restored_by: str | None = None,
+    ) -> "masfeat.KillSwitch":
+        """Restore a triggered kill switch."""
+        from axonflow import masfeat
+
+        body = {"reason": reason}
+        if restored_by:
+            body["restored_by"] = restored_by
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/killswitch/{system_id}/restore", json_data=body
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def enable_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+        """Enable a kill switch."""
+        from axonflow import masfeat
+
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/killswitch/{system_id}/enable", json_data={}
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def disable_kill_switch(
+        self, system_id: str, reason: str
+    ) -> "masfeat.KillSwitch":
+        """Disable a kill switch."""
+        from axonflow import masfeat
+
+        body = {"reason": reason}
+        response = await self._client._request(
+            "POST", f"/api/v1/masfeat/killswitch/{system_id}/disable", json_data=body
+        )
+        return masfeat.dict_to_kill_switch(response)
+
+    async def get_kill_switch_history(
+        self, system_id: str, limit: int = 100
+    ) -> list["masfeat.KillSwitchEvent"]:
+        """Get kill switch event history."""
+        from axonflow import masfeat
+
+        path = f"/api/v1/masfeat/killswitch/{system_id}/history?limit={limit}"
+        response = await self._client._request("GET", path)
+        return [masfeat.dict_to_kill_switch_event(e) for e in response]
+
+
+class SyncMASFEATClient:
+    """Synchronous MAS FEAT compliance client."""
+
+    def __init__(self, async_client: MASFEATClient, run_sync: Any) -> None:
+        self._async_client = async_client
+        self._run_sync = run_sync
+
+    def register_system(self, *args: Any, **kwargs: Any) -> "masfeat.AISystemRegistry":
+        """Register an AI system in the MAS FEAT registry."""
+        return self._run_sync(self._async_client.register_system(*args, **kwargs))
+
+    def get_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+        """Get an AI system from the registry."""
+        return self._run_sync(self._async_client.get_system(system_id))
+
+    def update_system(self, system_id: str, **kwargs: Any) -> "masfeat.AISystemRegistry":
+        """Update an AI system in the registry."""
+        return self._run_sync(self._async_client.update_system(system_id, **kwargs))
+
+    def list_systems(self, **kwargs: Any) -> list["masfeat.AISystemRegistry"]:
+        """List AI systems in the registry."""
+        return self._run_sync(self._async_client.list_systems(**kwargs))
+
+    def activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+        """Activate an AI system."""
+        return self._run_sync(self._async_client.activate_system(system_id))
+
+    def retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
+        """Retire an AI system."""
+        return self._run_sync(self._async_client.retire_system(system_id))
+
+    def get_registry_summary(self) -> "masfeat.RegistrySummary":
+        """Get registry summary statistics."""
+        return self._run_sync(self._async_client.get_registry_summary())
+
+    def create_assessment(self, *args: Any, **kwargs: Any) -> "masfeat.FEATAssessment":
+        """Create a FEAT assessment."""
+        return self._run_sync(self._async_client.create_assessment(*args, **kwargs))
+
+    def get_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+        """Get a FEAT assessment."""
+        return self._run_sync(self._async_client.get_assessment(assessment_id))
+
+    def update_assessment(self, assessment_id: str, **kwargs: Any) -> "masfeat.FEATAssessment":
+        """Update a FEAT assessment."""
+        return self._run_sync(self._async_client.update_assessment(assessment_id, **kwargs))
+
+    def list_assessments(self, **kwargs: Any) -> list["masfeat.FEATAssessment"]:
+        """List FEAT assessments."""
+        return self._run_sync(self._async_client.list_assessments(**kwargs))
+
+    def submit_assessment(self, assessment_id: str) -> "masfeat.FEATAssessment":
+        """Submit an assessment for review."""
+        return self._run_sync(self._async_client.submit_assessment(assessment_id))
+
+    def approve_assessment(self, *args: Any, **kwargs: Any) -> "masfeat.FEATAssessment":
+        """Approve an assessment."""
+        return self._run_sync(self._async_client.approve_assessment(*args, **kwargs))
+
+    def reject_assessment(self, *args: Any, **kwargs: Any) -> "masfeat.FEATAssessment":
+        """Reject an assessment."""
+        return self._run_sync(self._async_client.reject_assessment(*args, **kwargs))
+
+    def get_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+        """Get or create a kill switch."""
+        return self._run_sync(self._async_client.get_kill_switch(system_id))
+
+    def configure_kill_switch(self, *args: Any, **kwargs: Any) -> "masfeat.KillSwitch":
+        """Configure kill switch thresholds."""
+        return self._run_sync(self._async_client.configure_kill_switch(*args, **kwargs))
+
+    def check_kill_switch(self, *args: Any, **kwargs: Any) -> "masfeat.KillSwitch":
+        """Check metrics and potentially trigger the kill switch."""
+        return self._run_sync(self._async_client.check_kill_switch(*args, **kwargs))
+
+    def trigger_kill_switch(self, *args: Any, **kwargs: Any) -> "masfeat.KillSwitch":
+        """Manually trigger the kill switch."""
+        return self._run_sync(self._async_client.trigger_kill_switch(*args, **kwargs))
+
+    def restore_kill_switch(self, *args: Any, **kwargs: Any) -> "masfeat.KillSwitch":
+        """Restore a triggered kill switch."""
+        return self._run_sync(self._async_client.restore_kill_switch(*args, **kwargs))
+
+    def enable_kill_switch(self, system_id: str) -> "masfeat.KillSwitch":
+        """Enable a kill switch."""
+        return self._run_sync(self._async_client.enable_kill_switch(system_id))
+
+    def disable_kill_switch(self, system_id: str, reason: str) -> "masfeat.KillSwitch":
+        """Disable a kill switch."""
+        return self._run_sync(self._async_client.disable_kill_switch(system_id, reason))
+
+    def get_kill_switch_history(
+        self, system_id: str, limit: int = 100
+    ) -> list["masfeat.KillSwitchEvent"]:
+        """Get kill switch event history."""
+        return self._run_sync(self._async_client.get_kill_switch_history(system_id, limit))
+
 
 class SyncAxonFlow:
     """Synchronous wrapper for AxonFlow client.
@@ -3251,7 +3742,7 @@ class SyncAxonFlow:
     Wraps all async methods for synchronous usage.
     """
 
-    __slots__ = ("_async_client", "_loop", "_owns_loop")
+    __slots__ = ("_async_client", "_loop", "_owns_loop", "_masfeat_client")
 
     def __init__(self, async_client: AxonFlow) -> None:
         self._async_client = async_client
@@ -3309,6 +3800,21 @@ class SyncAxonFlow:
     def config(self) -> AxonFlowConfig:
         """Get client configuration."""
         return self._async_client.config
+
+    @property
+    def masfeat(self) -> SyncMASFEATClient:
+        """MAS FEAT compliance client for Singapore regulatory compliance.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Returns:
+            SyncMASFEATClient instance for MAS FEAT operations
+        """
+        if not hasattr(self, "_masfeat_client") or self._masfeat_client is None:
+            self._masfeat_client = SyncMASFEATClient(
+                self._async_client.masfeat, self._run_sync
+            )
+        return self._masfeat_client
 
     def health_check(self) -> bool:
         """Check if AxonFlow Agent is healthy."""
