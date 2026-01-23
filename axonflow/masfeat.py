@@ -433,7 +433,8 @@ def kill_switch_event_from_dict(data: dict[str, Any]) -> KillSwitchEvent:
     event_data = data.get("event_data")
     if event_data is None and any(k in data for k in ["previous_status", "new_status", "reason"]):
         event_data = {
-            k: v for k, v in data.items()
+            k: v
+            for k, v in data.items()
             if k in ["previous_status", "new_status", "reason"] and v is not None
         }
 
