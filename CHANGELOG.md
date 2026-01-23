@@ -5,9 +5,21 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.0] - 2026-01-23
+## [1.7.0] - 2026-01-24
 
 ### Added
+
+- **Unified Execution Tracking** (Issue #1075 - EPIC #1074): Consistent status tracking for MAP plans and WCP workflows
+  - `get_execution_status(execution_id)` - Get unified execution status by ID
+  - `list_unified_executions(options)` - List executions with type/status filters
+  - `ExecutionStatus` Pydantic model with unified fields for both MAP and WCP executions
+  - `ExecutionType` enum: `MAP_PLAN`, `WCP_WORKFLOW`
+  - `ExecutionStatusValue` enum: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`, `ABORTED`, `EXPIRED`
+  - `StepStatusValue` enum: `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED`, `BLOCKED`, `APPROVAL`
+  - `UnifiedStepType` enum: `LLM_CALL`, `TOOL_CALL`, `CONNECTOR_CALL`, `HUMAN_TASK`, `SYNTHESIS`, `ACTION`, `GATE`
+  - `UnifiedStepStatus` model with step-level details (duration, cost, policy decisions)
+  - Helper methods on `ExecutionStatus`: `is_terminal()`, `get_current_step()`, `calculate_total_cost()`
+  - Consistent response format across MAP Multi-Agent Planning and WCP Workflow Control Plane
 
 - **MAS FEAT Compliance Module** (Enterprise): Singapore financial services AI governance
   - AI System Registry: `masfeat.register_system()`, `masfeat.get_system()`, `masfeat.update_system()`, `masfeat.list_systems()`, `masfeat.activate_system()`, `masfeat.retire_system()`, `masfeat.get_registry_summary()`
