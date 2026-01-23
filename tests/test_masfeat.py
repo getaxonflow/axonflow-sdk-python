@@ -1163,3 +1163,160 @@ class TestMASFEATClientMethods:
         ) as client:
             result = await client.masfeat_disable_kill_switch("sys-123")
             assert result.status == KillSwitchStatus.DISABLED
+
+    @pytest.mark.asyncio
+    async def test_update_system(self, httpx_mock: HTTPXMock) -> None:
+        """Test updating an AI system."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/registry/sys-123",
+            method="PUT",
+            json={
+                "id": "sys-123",
+                "org_id": "org-456",
+                "system_id": "test-model",
+                "system_name": "Updated Model Name",
+                "use_case": "credit_scoring",
+                "owner_team": "new-team",
+                "materiality": "high",
+                "status": "active",
+                "customer_impact": 4,
+                "model_complexity": 3,
+                "human_reliance": 2,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T13:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_update_system(
+                "sys-123",
+                system_name="Updated Model Name",
+                owner_team="new-team",
+            )
+            assert result.system_name == "Updated Model Name"
+
+    @pytest.mark.asyncio
+    async def test_list_assessments(self, httpx_mock: HTTPXMock) -> None:
+        """Test listing FEAT assessments."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/assessments",
+            method="GET",
+            json=[
+                {
+                    "id": "assess-1",
+                    "org_id": "org-456",
+                    "system_id": "sys-789",
+                    "assessment_type": "annual",
+                    "status": "completed",
+                    "assessment_date": "2026-01-23T12:00:00Z",
+                    "created_at": "2026-01-23T12:00:00Z",
+                    "updated_at": "2026-01-23T12:00:00Z",
+                },
+            ],
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            results = await client.masfeat_list_assessments()
+            assert len(results) == 1
+            assert results[0].id == "assess-1"
+
+    @pytest.mark.asyncio
+    async def test_update_assessment(self, httpx_mock: HTTPXMock) -> None:
+        """Test updating a FEAT assessment."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/assessments/assess-123",
+            method="PUT",
+            json={
+                "id": "assess-123",
+                "org_id": "org-456",
+                "system_id": "sys-789",
+                "assessment_type": "annual",
+                "status": "in_progress",
+                "assessment_date": "2026-01-23T12:00:00Z",
+                "fairness_score": 85,
+                "ethics_score": 90,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T13:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_update_assessment(
+                "assess-123",
+                fairness_score=85,
+                ethics_score=90,
+            )
+            assert result.fairness_score == 85
+            assert result.ethics_score == 90
+
+    @pytest.mark.asyncio
+    async def test_check_kill_switch(self, httpx_mock: HTTPXMock) -> None:
+        """Test checking a kill switch with metrics."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/killswitch/sys-123/check",
+            method="POST",
+            json={
+                "id": "ks-123",
+                "org_id": "org-456",
+                "system_id": "sys-123",
+                "status": "enabled",
+                "auto_trigger_enabled": True,
+                "accuracy_threshold": 0.95,
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T12:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_check_kill_switch(
+                "sys-123",
+                accuracy=0.92,
+                bias_score=0.08,
+            )
+            assert result.status == KillSwitchStatus.ENABLED
+
+    @pytest.mark.asyncio
+    async def test_reject_assessment(self, httpx_mock: HTTPXMock) -> None:
+        """Test rejecting a FEAT assessment."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/masfeat/assessments/assess-123/reject",
+            method="POST",
+            json={
+                "id": "assess-123",
+                "org_id": "org-456",
+                "system_id": "sys-789",
+                "assessment_type": "annual",
+                "status": "rejected",
+                "assessment_date": "2026-01-23T12:00:00Z",
+                "created_at": "2026-01-23T12:00:00Z",
+                "updated_at": "2026-01-23T13:00:00Z",
+            },
+        )
+
+        async with AxonFlow(
+            endpoint="https://test.axonflow.com",
+            client_id="test-client",
+            client_secret="test-secret",
+        ) as client:
+            result = await client.masfeat_reject_assessment(
+                "assess-123",
+                rejected_by="reviewer@example.com",
+                reason="Insufficient documentation",
+            )
+            assert result.status == FEATAssessmentStatus.REJECTED
