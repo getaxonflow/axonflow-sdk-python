@@ -3303,16 +3303,16 @@ class AxonFlow:
             "system_name": system_name,
             "use_case": use_case,
             "owner_team": owner_team,
-            "customer_impact": customer_impact,
-            "model_complexity": model_complexity,
-            "human_reliance": human_reliance,
+            "risk_rating_impact": customer_impact,
+            "risk_rating_complexity": model_complexity,
+            "risk_rating_reliance": human_reliance,
         }
         if description is not None:
             body["description"] = description
         if technical_owner is not None:
             body["technical_owner"] = technical_owner
         if business_owner is not None:
-            body["business_owner"] = business_owner
+            body["owner_email"] = business_owner
         if metadata is not None:
             body["metadata"] = metadata
 
@@ -3428,13 +3428,18 @@ class AxonFlow:
     async def masfeat_activate_system(self, system_id: str) -> "masfeat.AISystemRegistry":
         """Activate an AI system (transition from draft to active).
 
+        Note: system_id should be the UUID (id field) returned from register_system,
+        not the user-provided system_id field.
+
         Args:
-            system_id: System identifier
+            system_id: System UUID (the 'id' field from registration response)
 
         Returns:
             Activated AI system
         """
-        response = await self._request("POST", f"/api/v1/masfeat/registry/{system_id}/activate")
+        response = await self._request(
+            "PUT", f"/api/v1/masfeat/registry/{system_id}", json_data={"status": "active"}
+        )
         return masfeat.ai_system_registry_from_dict(response)
 
     async def masfeat_retire_system(self, system_id: str) -> "masfeat.AISystemRegistry":
@@ -3711,7 +3716,7 @@ class AxonFlow:
             body["auto_trigger_enabled"] = auto_trigger_enabled
 
         response = await self._request(
-            "PUT", f"/api/v1/masfeat/killswitch/{system_id}/configure", json_data=body
+            "POST", f"/api/v1/masfeat/killswitch/{system_id}/configure", json_data=body
         )
         return masfeat.kill_switch_from_dict(response)
 
@@ -3862,6 +3867,9 @@ class AxonFlow:
             path = f"{path}?{'&'.join(params)}"
 
         response = await self._request("GET", path)
+        # Handle nested response format {history: [], count: 0}
+        if isinstance(response, dict) and "history" in response:
+            response = response["history"]
         return [masfeat.kill_switch_event_from_dict(e) for e in (response or [])]
 
     def _map_workflow_response(self, data: dict[str, Any]) -> WorkflowStatusResponse:

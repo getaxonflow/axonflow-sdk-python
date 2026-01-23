@@ -204,6 +204,11 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
         # Handle ISO format with Z suffix
         if value.endswith("Z"):
             value = value[:-1] + "+00:00"
+        # Handle nanosecond precision (Go sends 9 digits, Python supports 6)
+        import re
+        match = re.match(r'(.+\.\d{6})\d*(\+.*)', value)
+        if match:
+            value = match.group(1) + match.group(2)
         return datetime.fromisoformat(value)
     return None
 
@@ -228,11 +233,11 @@ def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
         use_case=_parse_enum(AISystemUseCase, data["use_case"]),
         owner_team=data["owner_team"],
         technical_owner=data.get("technical_owner"),
-        business_owner=data.get("business_owner"),
-        customer_impact=data["customer_impact"],
-        model_complexity=data["model_complexity"],
-        human_reliance=data["human_reliance"],
-        materiality=_parse_enum(MaterialityClassification, data["materiality"]),
+        business_owner=data.get("business_owner") or data.get("owner_email"),
+        customer_impact=data.get("customer_impact") or data.get("risk_rating_impact"),
+        model_complexity=data.get("model_complexity") or data.get("risk_rating_complexity"),
+        human_reliance=data.get("human_reliance") or data.get("risk_rating_reliance"),
+        materiality=_parse_enum(MaterialityClassification, data.get("materiality") or data.get("materiality_classification")),
         status=_parse_enum(SystemStatus, data["status"]),
         metadata=data.get("metadata"),
         created_at=_parse_datetime(data["created_at"]),
@@ -246,9 +251,9 @@ def registry_summary_from_dict(data: Dict[str, Any]) -> RegistrySummary:
     return RegistrySummary(
         total_systems=data["total_systems"],
         active_systems=data["active_systems"],
-        high_materiality_count=data["high_materiality_count"],
-        medium_materiality_count=data["medium_materiality_count"],
-        low_materiality_count=data["low_materiality_count"],
+        high_materiality_count=data.get("high_materiality_count") or data.get("high_materiality", 0),
+        medium_materiality_count=data.get("medium_materiality_count") or data.get("medium_materiality", 0),
+        low_materiality_count=data.get("low_materiality_count") or data.get("low_materiality", 0),
         by_use_case=data.get("by_use_case", {}),
         by_status=data.get("by_status", {}),
     )
@@ -286,6 +291,9 @@ def feat_assessment_from_dict(data: Dict[str, Any]) -> FEATAssessment:
 
 def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
     """Create KillSwitch from API response dict."""
+    # Handle nested response format (trigger/restore return {kill_switch: {...}, message: ...})
+    if "kill_switch" in data:
+        data = data["kill_switch"]
     return KillSwitch(
         id=data["id"],
         org_id=data["org_id"],
@@ -297,7 +305,7 @@ def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
         auto_trigger_enabled=data.get("auto_trigger_enabled", False),
         triggered_at=_parse_datetime(data.get("triggered_at")),
         triggered_by=data.get("triggered_by"),
-        triggered_reason=data.get("triggered_reason"),
+        triggered_reason=data.get("triggered_reason") or data.get("trigger_reason"),
         restored_at=_parse_datetime(data.get("restored_at")),
         restored_by=data.get("restored_by"),
         created_at=_parse_datetime(data["created_at"]),
