@@ -3519,7 +3519,7 @@ class AxonFlow:
         ethics_details: dict[str, Any] | None = None,
         accountability_details: dict[str, Any] | None = None,
         transparency_details: dict[str, Any] | None = None,
-        findings: list[str] | None = None,
+        findings: list[masfeat.Finding] | None = None,
         recommendations: list[str] | None = None,
         assessors: list[str] | None = None,
     ) -> masfeat.FEATAssessment:
@@ -3560,7 +3560,7 @@ class AxonFlow:
         if transparency_details is not None:
             body["transparency_details"] = transparency_details
         if findings is not None:
-            body["findings"] = findings
+            body["findings"] = [masfeat.finding_to_dict(f) for f in findings]
         if recommendations is not None:
             body["recommendations"] = recommendations
         if assessors is not None:
@@ -4048,7 +4048,7 @@ class MASFEATNamespace:
         ethics_details: dict[str, Any] | None = None,
         accountability_details: dict[str, Any] | None = None,
         transparency_details: dict[str, Any] | None = None,
-        findings: list[str] | None = None,
+        findings: list[masfeat.Finding] | None = None,
         recommendations: list[str] | None = None,
     ) -> masfeat.FEATAssessment:
         """Update a FEAT assessment with scores and details."""
@@ -4350,7 +4350,7 @@ class SyncMASFEATNamespace:
         ethics_details: dict[str, Any] | None = None,
         accountability_details: dict[str, Any] | None = None,
         transparency_details: dict[str, Any] | None = None,
-        findings: list[str] | None = None,
+        findings: list[masfeat.Finding] | None = None,
         recommendations: list[str] | None = None,
     ) -> masfeat.FEATAssessment:
         """Update a FEAT assessment with scores and details."""
@@ -5197,7 +5197,7 @@ class SyncAxonFlow:
         ethics_details: dict[str, Any] | None = None,
         accountability_details: dict[str, Any] | None = None,
         transparency_details: dict[str, Any] | None = None,
-        findings: list[str] | None = None,
+        findings: list[masfeat.Finding] | None = None,
         recommendations: list[str] | None = None,
         assessors: list[str] | None = None,
     ) -> masfeat.FEATAssessment:

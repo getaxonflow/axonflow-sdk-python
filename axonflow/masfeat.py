@@ -86,6 +86,42 @@ class KillSwitchEventType(str, Enum):
     CONFIGURED = "configured"
 
 
+class FindingSeverity(str, Enum):
+    """FEAT Assessment finding severity levels."""
+
+    CRITICAL = "critical"
+    MAJOR = "major"
+    MINOR = "minor"
+    OBSERVATION = "observation"
+
+
+class FindingStatus(str, Enum):
+    """FEAT Assessment finding status."""
+
+    OPEN = "open"
+    RESOLVED = "resolved"
+    ACCEPTED = "accepted"
+
+
+# ===========================================================================
+# Finding (for FEAT Assessments)
+# ===========================================================================
+
+
+@dataclass
+class Finding:
+    """A FEAT assessment finding."""
+
+    id: str
+    pillar: FEATPillar
+    severity: FindingSeverity
+    category: str
+    description: str
+    status: FindingStatus
+    remediation: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+
 # ===========================================================================
 # AI System Registry
 # ===========================================================================
@@ -155,7 +191,7 @@ class FEATAssessment:
     ethics_details: Optional[dict[str, Any]] = None
     accountability_details: Optional[dict[str, Any]] = None
     transparency_details: Optional[dict[str, Any]] = None
-    findings: Optional[list[str]] = None
+    findings: Optional[list[Finding]] = None
     recommendations: Optional[list[str]] = None
     assessors: Optional[list[str]] = None
     approved_by: Optional[str] = None
@@ -277,6 +313,44 @@ def registry_summary_from_dict(data: dict[str, Any]) -> RegistrySummary:
     )
 
 
+def finding_from_dict(data: dict[str, Any]) -> Finding:
+    """Create Finding from API response dict."""
+    return Finding(
+        id=data["id"],
+        pillar=_parse_enum(FEATPillar, data["pillar"]),
+        severity=_parse_enum(FindingSeverity, data["severity"]),
+        category=data["category"],
+        description=data["description"],
+        status=_parse_enum(FindingStatus, data["status"]),
+        remediation=data.get("remediation"),
+        due_date=_parse_datetime(data.get("due_date")),
+    )
+
+
+def finding_to_dict(finding: Finding) -> dict[str, Any]:
+    """Convert Finding to dict for API request."""
+    result: dict[str, Any] = {
+        "id": finding.id,
+        "pillar": finding.pillar.value if isinstance(finding.pillar, Enum) else finding.pillar,
+        "severity": finding.severity.value if isinstance(finding.severity, Enum) else finding.severity,
+        "category": finding.category,
+        "description": finding.description,
+        "status": finding.status.value if isinstance(finding.status, Enum) else finding.status,
+    }
+    if finding.remediation is not None:
+        result["remediation"] = finding.remediation
+    if finding.due_date is not None:
+        result["due_date"] = finding.due_date.isoformat()
+    return result
+
+
+def _parse_findings(data: list[dict[str, Any]] | None) -> list[Finding] | None:
+    """Parse list of findings from API response."""
+    if data is None:
+        return None
+    return [finding_from_dict(f) for f in data]
+
+
 def feat_assessment_from_dict(data: dict[str, Any]) -> FEATAssessment:
     """Create FEATAssessment from API response dict."""
     return FEATAssessment(
@@ -296,7 +370,7 @@ def feat_assessment_from_dict(data: dict[str, Any]) -> FEATAssessment:
         ethics_details=data.get("ethics_details"),
         accountability_details=data.get("accountability_details"),
         transparency_details=data.get("transparency_details"),
-        findings=data.get("findings"),
+        findings=_parse_findings(data.get("findings")),
         recommendations=data.get("recommendations"),
         assessors=data.get("assessors"),
         approved_by=data.get("approved_by"),
