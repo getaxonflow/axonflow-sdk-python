@@ -5,6 +5,35 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-01-23
+
+### Added
+
+- **MAS FEAT Compliance Module** (Enterprise): Singapore financial services AI governance
+  - AI System Registry: `masfeat.register_system()`, `masfeat.get_system()`, `masfeat.update_system()`, `masfeat.list_systems()`, `masfeat.activate_system()`, `masfeat.retire_system()`, `masfeat.get_registry_summary()`
+  - 3-Dimensional Risk Rating: Customer Impact × Model Complexity × Human Reliance
+  - Materiality Classification: High (sum≥12), Medium (sum≥8), Low (sum<8)
+  - FEAT Assessments: `masfeat.create_assessment()`, `masfeat.get_assessment()`, `masfeat.update_assessment()`, `masfeat.list_assessments()`, `masfeat.submit_assessment()`, `masfeat.approve_assessment()`, `masfeat.reject_assessment()`
+  - Assessment Lifecycle: pending → in_progress → completed → approved/rejected
+  - Kill Switch: `masfeat.get_kill_switch()`, `masfeat.configure_kill_switch()`, `masfeat.check_kill_switch()`, `masfeat.trigger_kill_switch()`, `masfeat.restore_kill_switch()`, `masfeat.enable_kill_switch()`, `masfeat.disable_kill_switch()`, `masfeat.get_kill_switch_history()`
+  - Automatic model shutdown based on accuracy, bias, and error rate thresholds
+  - New namespace property: `client.masfeat` (async) and `client.masfeat` (sync via `AxonFlow.sync()`)
+  - New types: `AISystemRegistry`, `AISystemUseCase`, `MaterialityClassification`, `SystemStatus`, `FEATAssessment`, `FEATAssessmentStatus`, `FEATPillar`, `KillSwitch`, `KillSwitchStatus`, `KillSwitchEvent`, `KillSwitchEventType`, `RegistrySummary`
+
+- **proxy_llm_call()**: New primary method for Proxy Mode with improved documentation
+  - Clearly describes Proxy Mode behavior (AxonFlow makes the LLM call on your behalf)
+  - Documents when to use Proxy Mode vs Gateway Mode
+  - Same functionality as execute_query, but with clearer naming
+
+### Deprecated
+
+- **execute_query()**: Deprecated in favor of proxy_llm_call()
+  - Will be removed in v2.0.0
+  - Emits deprecation warning in debug mode
+  - Remains functional as a wrapper around proxy_llm_call()
+
+---
+
 ## [1.6.0] - 2026-01-18
 
 ### Added
