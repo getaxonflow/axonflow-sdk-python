@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # ===========================================================================
 # Enums
@@ -137,9 +137,9 @@ class AISystemRegistry:
     system_name: str
     use_case: AISystemUseCase
     owner_team: str
-    customer_impact: int | None
-    model_complexity: int | None
-    human_reliance: int | None
+    customer_impact: Optional[int]
+    model_complexity: Optional[int]
+    human_reliance: Optional[int]
     materiality: MaterialityClassification
     status: SystemStatus
     created_at: Optional[datetime]
@@ -147,7 +147,7 @@ class AISystemRegistry:
     description: Optional[str] = None
     technical_owner: Optional[str] = None
     business_owner: Optional[str] = None
-    metadata: Optional[dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
     created_by: Optional[str] = None
 
 
@@ -160,8 +160,8 @@ class RegistrySummary:
     high_materiality_count: int
     medium_materiality_count: int
     low_materiality_count: int
-    by_use_case: dict[str, int] = field(default_factory=dict)
-    by_status: dict[str, int] = field(default_factory=dict)
+    by_use_case: Dict[str, int] = field(default_factory=dict)
+    by_status: Dict[str, int] = field(default_factory=dict)
 
 
 # ===========================================================================
@@ -187,13 +187,13 @@ class FEATAssessment:
     accountability_score: Optional[int] = None
     transparency_score: Optional[int] = None
     overall_score: Optional[int] = None
-    fairness_details: Optional[dict[str, Any]] = None
-    ethics_details: Optional[dict[str, Any]] = None
-    accountability_details: Optional[dict[str, Any]] = None
-    transparency_details: Optional[dict[str, Any]] = None
-    findings: Optional[list[Finding]] = None
-    recommendations: Optional[list[str]] = None
-    assessors: Optional[list[str]] = None
+    fairness_details: Optional[Dict[str, Any]] = None
+    ethics_details: Optional[Dict[str, Any]] = None
+    accountability_details: Optional[Dict[str, Any]] = None
+    transparency_details: Optional[Dict[str, Any]] = None
+    findings: Optional[List[Finding]] = None
+    recommendations: Optional[List[str]] = None
+    assessors: Optional[List[str]] = None
     approved_by: Optional[str] = None
     approved_at: Optional[datetime] = None
     created_by: Optional[str] = None
@@ -233,7 +233,7 @@ class KillSwitchEvent:
     kill_switch_id: str
     event_type: KillSwitchEventType
     created_at: Optional[datetime]
-    event_data: Optional[dict[str, Any]] = None
+    event_data: Optional[Dict[str, Any]] = None
     created_by: Optional[str] = None
 
 
@@ -252,10 +252,19 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
         # Handle ISO format with Z suffix
         if value.endswith("Z"):
             value = value[:-1] + "+00:00"
-        # Handle nanosecond precision (Go sends 9 digits, Python supports 6)
-        match = re.match(r"(.+\.\d{6})\d*(\+.*)", value)
+        # Handle variable fractional seconds (Go may send 5-9 digits, Python 3.9 needs exactly 6)
+        # Match: date-time part, decimal point, fractional digits, timezone
+        match = re.match(r"(.+)\.(\d+)(\+.*|-.*)?$", value)
         if match:
-            value = match.group(1) + match.group(2)
+            base = match.group(1)
+            frac = match.group(2)
+            tz = match.group(3) or ""
+            # Normalize to exactly 6 digits (pad or truncate)
+            if len(frac) < 6:
+                frac = frac.ljust(6, "0")
+            elif len(frac) > 6:
+                frac = frac[:6]
+            value = f"{base}.{frac}{tz}"
         return datetime.fromisoformat(value)
     return None
 
@@ -269,7 +278,7 @@ def _parse_enum(enum_class: type, value: Any) -> Any:
     return enum_class(value)
 
 
-def ai_system_registry_from_dict(data: dict[str, Any]) -> AISystemRegistry:
+def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
     """Create AISystemRegistry from API response dict."""
     return AISystemRegistry(
         id=data["id"],
@@ -296,7 +305,7 @@ def ai_system_registry_from_dict(data: dict[str, Any]) -> AISystemRegistry:
     )
 
 
-def registry_summary_from_dict(data: dict[str, Any]) -> RegistrySummary:
+def registry_summary_from_dict(data: Dict[str, Any]) -> RegistrySummary:
     """Create RegistrySummary from API response dict."""
     return RegistrySummary(
         total_systems=data["total_systems"],
@@ -313,7 +322,7 @@ def registry_summary_from_dict(data: dict[str, Any]) -> RegistrySummary:
     )
 
 
-def finding_from_dict(data: dict[str, Any]) -> Finding:
+def finding_from_dict(data: Dict[str, Any]) -> Finding:
     """Create Finding from API response dict."""
     return Finding(
         id=data["id"],
@@ -327,9 +336,9 @@ def finding_from_dict(data: dict[str, Any]) -> Finding:
     )
 
 
-def finding_to_dict(finding: Finding) -> dict[str, Any]:
+def finding_to_dict(finding: Finding) -> Dict[str, Any]:
     """Convert Finding to dict for API request."""
-    result: dict[str, Any] = {
+    result: Dict[str, Any] = {
         "id": finding.id,
         "pillar": finding.pillar.value if isinstance(finding.pillar, Enum) else finding.pillar,
         "severity": finding.severity.value if isinstance(finding.severity, Enum) else finding.severity,
@@ -344,14 +353,14 @@ def finding_to_dict(finding: Finding) -> dict[str, Any]:
     return result
 
 
-def _parse_findings(data: list[dict[str, Any]] | None) -> list[Finding] | None:
+def _parse_findings(data: Optional[List[Dict[str, Any]]]) -> Optional[List[Finding]]:
     """Parse list of findings from API response."""
     if data is None:
         return None
     return [finding_from_dict(f) for f in data]
 
 
-def feat_assessment_from_dict(data: dict[str, Any]) -> FEATAssessment:
+def feat_assessment_from_dict(data: Dict[str, Any]) -> FEATAssessment:
     """Create FEATAssessment from API response dict."""
     return FEATAssessment(
         id=data["id"],
@@ -381,7 +390,7 @@ def feat_assessment_from_dict(data: dict[str, Any]) -> FEATAssessment:
     )
 
 
-def kill_switch_from_dict(data: dict[str, Any]) -> KillSwitch:
+def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
     """Create KillSwitch from API response dict."""
     # Handle nested response format (trigger/restore return {kill_switch: {...}, message: ...})
     if "kill_switch" in data:
@@ -405,13 +414,29 @@ def kill_switch_from_dict(data: dict[str, Any]) -> KillSwitch:
     )
 
 
-def kill_switch_event_from_dict(data: dict[str, Any]) -> KillSwitchEvent:
+def kill_switch_event_from_dict(data: Dict[str, Any]) -> KillSwitchEvent:
     """Create KillSwitchEvent from API response dict."""
+    # Handle both API formats:
+    # - event_type (SDK expected) vs action (API actual)
+    # - created_at (SDK expected) vs performed_at (API actual)
+    # - created_by (SDK expected) vs performed_by (API actual)
+    event_type_value = data.get("event_type") or data.get("action")
+    created_at_value = data.get("created_at") or data.get("performed_at")
+    created_by_value = data.get("created_by") or data.get("performed_by")
+
+    # Build event_data from additional fields if not present
+    event_data = data.get("event_data")
+    if event_data is None and any(k in data for k in ["previous_status", "new_status", "reason"]):
+        event_data = {
+            k: v for k, v in data.items()
+            if k in ["previous_status", "new_status", "reason"] and v is not None
+        }
+
     return KillSwitchEvent(
         id=data["id"],
         kill_switch_id=data["kill_switch_id"],
-        event_type=_parse_enum(KillSwitchEventType, data["event_type"]),
-        event_data=data.get("event_data"),
-        created_by=data.get("created_by"),
-        created_at=_parse_datetime(data["created_at"]),
+        event_type=_parse_enum(KillSwitchEventType, event_type_value),
+        event_data=event_data if event_data else None,
+        created_by=created_by_value,
+        created_at=_parse_datetime(created_at_value),
     )
