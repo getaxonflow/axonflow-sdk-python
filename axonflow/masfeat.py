@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional
 
 # ===========================================================================
 # Enums
@@ -147,7 +147,7 @@ class AISystemRegistry:
     description: Optional[str] = None
     technical_owner: Optional[str] = None
     business_owner: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
     created_by: Optional[str] = None
 
 
@@ -160,8 +160,8 @@ class RegistrySummary:
     high_materiality_count: int
     medium_materiality_count: int
     low_materiality_count: int
-    by_use_case: Dict[str, int] = field(default_factory=dict)
-    by_status: Dict[str, int] = field(default_factory=dict)
+    by_use_case: dict[str, int] = field(default_factory=dict)
+    by_status: dict[str, int] = field(default_factory=dict)
 
 
 # ===========================================================================
@@ -187,13 +187,13 @@ class FEATAssessment:
     accountability_score: Optional[int] = None
     transparency_score: Optional[int] = None
     overall_score: Optional[int] = None
-    fairness_details: Optional[Dict[str, Any]] = None
-    ethics_details: Optional[Dict[str, Any]] = None
-    accountability_details: Optional[Dict[str, Any]] = None
-    transparency_details: Optional[Dict[str, Any]] = None
-    findings: Optional[List[Finding]] = None
-    recommendations: Optional[List[str]] = None
-    assessors: Optional[List[str]] = None
+    fairness_details: Optional[dict[str, Any]] = None
+    ethics_details: Optional[dict[str, Any]] = None
+    accountability_details: Optional[dict[str, Any]] = None
+    transparency_details: Optional[dict[str, Any]] = None
+    findings: Optional[list[Finding]] = None
+    recommendations: Optional[list[str]] = None
+    assessors: Optional[list[str]] = None
     approved_by: Optional[str] = None
     approved_at: Optional[datetime] = None
     created_by: Optional[str] = None
@@ -233,7 +233,7 @@ class KillSwitchEvent:
     kill_switch_id: str
     event_type: KillSwitchEventType
     created_at: Optional[datetime]
-    event_data: Optional[Dict[str, Any]] = None
+    event_data: Optional[dict[str, Any]] = None
     created_by: Optional[str] = None
 
 
@@ -278,7 +278,7 @@ def _parse_enum(enum_class: type, value: Any) -> Any:
     return enum_class(value)
 
 
-def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
+def ai_system_registry_from_dict(data: dict[str, Any]) -> AISystemRegistry:
     """Create AISystemRegistry from API response dict."""
     return AISystemRegistry(
         id=data["id"],
@@ -305,7 +305,7 @@ def ai_system_registry_from_dict(data: Dict[str, Any]) -> AISystemRegistry:
     )
 
 
-def registry_summary_from_dict(data: Dict[str, Any]) -> RegistrySummary:
+def registry_summary_from_dict(data: dict[str, Any]) -> RegistrySummary:
     """Create RegistrySummary from API response dict."""
     return RegistrySummary(
         total_systems=data["total_systems"],
@@ -322,7 +322,7 @@ def registry_summary_from_dict(data: Dict[str, Any]) -> RegistrySummary:
     )
 
 
-def finding_from_dict(data: Dict[str, Any]) -> Finding:
+def finding_from_dict(data: dict[str, Any]) -> Finding:
     """Create Finding from API response dict."""
     return Finding(
         id=data["id"],
@@ -336,9 +336,9 @@ def finding_from_dict(data: Dict[str, Any]) -> Finding:
     )
 
 
-def finding_to_dict(finding: Finding) -> Dict[str, Any]:
+def finding_to_dict(finding: Finding) -> dict[str, Any]:
     """Convert Finding to dict for API request."""
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "id": finding.id,
         "pillar": finding.pillar.value if isinstance(finding.pillar, Enum) else finding.pillar,
         "severity": finding.severity.value if isinstance(finding.severity, Enum) else finding.severity,
@@ -353,14 +353,14 @@ def finding_to_dict(finding: Finding) -> Dict[str, Any]:
     return result
 
 
-def _parse_findings(data: Optional[List[Dict[str, Any]]]) -> Optional[List[Finding]]:
+def _parse_findings(data: Optional[list[dict[str, Any]]]) -> Optional[list[Finding]]:
     """Parse list of findings from API response."""
     if data is None:
         return None
     return [finding_from_dict(f) for f in data]
 
 
-def feat_assessment_from_dict(data: Dict[str, Any]) -> FEATAssessment:
+def feat_assessment_from_dict(data: dict[str, Any]) -> FEATAssessment:
     """Create FEATAssessment from API response dict."""
     return FEATAssessment(
         id=data["id"],
@@ -390,7 +390,7 @@ def feat_assessment_from_dict(data: Dict[str, Any]) -> FEATAssessment:
     )
 
 
-def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
+def kill_switch_from_dict(data: dict[str, Any]) -> KillSwitch:
     """Create KillSwitch from API response dict."""
     # Handle nested response format (trigger/restore return {kill_switch: {...}, message: ...})
     if "kill_switch" in data:
@@ -414,7 +414,7 @@ def kill_switch_from_dict(data: Dict[str, Any]) -> KillSwitch:
     )
 
 
-def kill_switch_event_from_dict(data: Dict[str, Any]) -> KillSwitchEvent:
+def kill_switch_event_from_dict(data: dict[str, Any]) -> KillSwitchEvent:
     """Create KillSwitchEvent from API response dict."""
     # Handle both API formats:
     # - event_type (SDK expected) vs action (API actual)
