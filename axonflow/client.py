@@ -30,6 +30,7 @@ import contextlib
 import hashlib
 import os
 import re
+import warnings
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -560,14 +561,27 @@ class AxonFlow:
                 return response.get("status") == "healthy"
             return False
 
-    async def execute_query(
+    async def proxy_llm_call(
         self,
         user_token: str,
         query: str,
         request_type: str,
         context: dict[str, Any] | None = None,
     ) -> ClientResponse:
-        """Execute a query through AxonFlow with policy enforcement.
+        """Send a query through AxonFlow with full policy enforcement (Proxy Mode).
+
+        This is Proxy Mode - AxonFlow acts as an intermediary, making the LLM call
+        on your behalf.
+
+        Use this when you want AxonFlow to:
+          - Evaluate policies before the LLM call
+          - Make the LLM call to the configured provider
+          - Filter/redact sensitive data from responses
+          - Automatically track costs and audit the interaction
+
+        For Gateway Mode (lower latency, you make the LLM call), use:
+          - get_policy_approved_context() before your LLM call
+          - audit_llm_call() after your LLM call
 
         Args:
             user_token: User authentication token. If empty, defaults to "anonymous"
@@ -639,6 +653,35 @@ class AxonFlow:
             self._cache[cache_key] = response
 
         return response
+
+    async def execute_query(
+        self,
+        user_token: str,
+        query: str,
+        request_type: str,
+        context: dict[str, Any] | None = None,
+    ) -> ClientResponse:
+        """Execute a query through AxonFlow with policy enforcement.
+
+        .. deprecated:: 2.7.0
+            Use :meth:`proxy_llm_call` instead. This method will be removed in v3.0.0.
+
+        Args:
+            user_token: User authentication token
+            query: The query or prompt
+            request_type: Type of request
+            context: Optional additional context
+
+        Returns:
+            ClientResponse with results or error
+        """
+        warnings.warn(
+            "execute_query() is deprecated. Use proxy_llm_call() instead. "
+            "This method will be removed in v3.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return await self.proxy_llm_call(user_token, query, request_type, context)
 
     async def list_connectors(self) -> list[ConnectorMetadata]:
         """List all available MCP connectors.
@@ -3274,6 +3317,24 @@ class SyncAxonFlow:
         """Check if AxonFlow Orchestrator is healthy."""
         return self._run_sync(self._async_client.orchestrator_health_check())
 
+    def proxy_llm_call(
+        self,
+        user_token: str,
+        query: str,
+        request_type: str,
+        context: dict[str, Any] | None = None,
+    ) -> ClientResponse:
+        """Send a query through AxonFlow with full policy enforcement (Proxy Mode).
+
+        This is Proxy Mode - AxonFlow acts as an intermediary, making the LLM call
+        on your behalf.
+
+        If user_token is empty, defaults to "anonymous" for audit purposes.
+        """
+        return self._run_sync(
+            self._async_client.proxy_llm_call(user_token, query, request_type, context)
+        )
+
     def execute_query(
         self,
         user_token: str,
@@ -3283,11 +3344,16 @@ class SyncAxonFlow:
     ) -> ClientResponse:
         """Execute a query through AxonFlow.
 
-        If user_token is empty, defaults to "anonymous" for audit purposes.
+        .. deprecated:: 2.7.0
+            Use :meth:`proxy_llm_call` instead. This method will be removed in v3.0.0.
         """
-        return self._run_sync(
-            self._async_client.execute_query(user_token, query, request_type, context)
+        warnings.warn(
+            "execute_query() is deprecated. Use proxy_llm_call() instead. "
+            "This method will be removed in v3.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
         )
+        return self.proxy_llm_call(user_token, query, request_type, context)
 
     def list_connectors(self) -> list[ConnectorMetadata]:
         """List all available MCP connectors."""
