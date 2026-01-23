@@ -30,6 +30,7 @@ import contextlib
 import hashlib
 import os
 import re
+import warnings
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -674,8 +675,6 @@ class AxonFlow:
         Returns:
             ClientResponse with results or error
         """
-        import warnings
-
         warnings.warn(
             "execute_query() is deprecated. Use proxy_llm_call() instead. "
             "This method will be removed in v3.0.0.",
@@ -3854,8 +3853,6 @@ class SyncAxonFlow:
         .. deprecated:: 2.7.0
             Use :meth:`proxy_llm_call` instead. This method will be removed in v3.0.0.
         """
-        import warnings
-
         warnings.warn(
             "execute_query() is deprecated. Use proxy_llm_call() instead. "
             "This method will be removed in v3.0.0.",
