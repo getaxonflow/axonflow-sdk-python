@@ -13,6 +13,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
+# Python's datetime.fromisoformat requires exactly 6 fractional digits
+_MICROSECOND_PRECISION = 6
+
 # ===========================================================================
 # Enums
 # ===========================================================================
@@ -260,10 +263,10 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
             frac = match.group(2)
             tz = match.group(3) or ""
             # Normalize to exactly 6 digits (pad or truncate)
-            if len(frac) < 6:
-                frac = frac.ljust(6, "0")
-            elif len(frac) > 6:
-                frac = frac[:6]
+            if len(frac) < _MICROSECOND_PRECISION:
+                frac = frac.ljust(_MICROSECOND_PRECISION, "0")
+            elif len(frac) > _MICROSECOND_PRECISION:
+                frac = frac[:_MICROSECOND_PRECISION]
             value = f"{base}.{frac}{tz}"
         return datetime.fromisoformat(value)
     return None
@@ -341,7 +344,9 @@ def finding_to_dict(finding: Finding) -> dict[str, Any]:
     result: dict[str, Any] = {
         "id": finding.id,
         "pillar": finding.pillar.value if isinstance(finding.pillar, Enum) else finding.pillar,
-        "severity": finding.severity.value if isinstance(finding.severity, Enum) else finding.severity,
+        "severity": (
+            finding.severity.value if isinstance(finding.severity, Enum) else finding.severity
+        ),
         "category": finding.category,
         "description": finding.description,
         "status": finding.status.value if isinstance(finding.status, Enum) else finding.status,

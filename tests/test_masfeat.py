@@ -18,6 +18,9 @@ from axonflow.masfeat import (
     FEATAssessment,
     FEATAssessmentStatus,
     FEATPillar,
+    Finding,
+    FindingSeverity,
+    FindingStatus,
     KillSwitch,
     KillSwitchEvent,
     KillSwitchEventType,
@@ -27,8 +30,11 @@ from axonflow.masfeat import (
     SystemStatus,
     _parse_datetime,
     _parse_enum,
+    _parse_findings,
     ai_system_registry_from_dict,
     feat_assessment_from_dict,
+    finding_from_dict,
+    finding_to_dict,
     kill_switch_event_from_dict,
     kill_switch_from_dict,
     registry_summary_from_dict,
@@ -167,6 +173,12 @@ class TestParseDatetime:
         result = _parse_datetime("2026-01-23T12:00:00.123456789+00:00")
         assert result is not None
         assert result.microsecond == 123456
+
+    def test_short_fractional_seconds_padding(self) -> None:
+        """Test padding of short fractional seconds."""
+        result = _parse_datetime("2026-01-23T12:00:00.123+00:00")
+        assert result is not None
+        assert result.microsecond == 123000
 
     def test_non_string_non_datetime(self) -> None:
         """Test with non-string, non-datetime input."""
@@ -507,6 +519,136 @@ class TestKillSwitchEventFromDict:
         assert result.id == "event-123"
         assert result.event_type == KillSwitchEventType.TRIGGERED
         assert result.event_data["reason"] == "Manual trigger"
+
+    def test_alternate_field_names(self) -> None:
+        """Test handling of alternate field names from API."""
+        data = {
+            "id": "event-123",
+            "kill_switch_id": "ks-456",
+            "action": "triggered",
+            "performed_by": "user@example.com",
+            "performed_at": "2026-01-23T12:00:00Z",
+            "previous_status": "enabled",
+            "new_status": "triggered",
+            "reason": "Test trigger",
+        }
+        result = kill_switch_event_from_dict(data)
+        assert result.id == "event-123"
+        assert result.event_type == KillSwitchEventType.TRIGGERED
+        assert result.created_by == "user@example.com"
+        assert result.event_data is not None
+        assert result.event_data["reason"] == "Test trigger"
+
+
+class TestFindingFromDict:
+    """Test finding_from_dict conversion."""
+
+    def test_basic_conversion(self) -> None:
+        """Test basic dict to dataclass conversion."""
+        data = {
+            "id": "f-1",
+            "pillar": "fairness",
+            "severity": "major",
+            "category": "bias",
+            "description": "Potential bias in model",
+            "status": "open",
+        }
+        result = finding_from_dict(data)
+        assert result.id == "f-1"
+        assert result.pillar == FEATPillar.FAIRNESS
+        assert result.severity == FindingSeverity.MAJOR
+        assert result.status == FindingStatus.OPEN
+
+    def test_with_optional_fields(self) -> None:
+        """Test with optional fields."""
+        data = {
+            "id": "f-1",
+            "pillar": "ethics",
+            "severity": "minor",
+            "category": "documentation",
+            "description": "Missing documentation",
+            "status": "resolved",
+            "remediation": "Added documentation",
+            "due_date": "2026-02-01T12:00:00Z",
+        }
+        result = finding_from_dict(data)
+        assert result.remediation == "Added documentation"
+        assert result.due_date is not None
+
+
+class TestFindingToDict:
+    """Test finding_to_dict conversion."""
+
+    def test_basic_conversion(self) -> None:
+        """Test basic finding to dict conversion."""
+        finding = Finding(
+            id="f-1",
+            pillar=FEATPillar.FAIRNESS,
+            severity=FindingSeverity.MAJOR,
+            category="bias",
+            description="Test finding",
+            status=FindingStatus.OPEN,
+        )
+        result = finding_to_dict(finding)
+        assert result["id"] == "f-1"
+        assert result["pillar"] == "fairness"
+        assert result["severity"] == "major"
+        assert result["status"] == "open"
+
+    def test_with_optional_fields(self) -> None:
+        """Test with optional fields."""
+        finding = Finding(
+            id="f-1",
+            pillar=FEATPillar.ETHICS,
+            severity=FindingSeverity.MINOR,
+            category="docs",
+            description="Test",
+            status=FindingStatus.RESOLVED,
+            remediation="Fixed",
+            due_date=datetime(2026, 2, 1, 12, 0, 0, tzinfo=timezone.utc),
+        )
+        result = finding_to_dict(finding)
+        assert result["remediation"] == "Fixed"
+        assert "due_date" in result
+
+
+class TestParseFindings:
+    """Test _parse_findings helper."""
+
+    def test_none_value(self) -> None:
+        """Test with None input."""
+        assert _parse_findings(None) is None
+
+    def test_empty_list(self) -> None:
+        """Test with empty list."""
+        result = _parse_findings([])
+        assert result == []
+
+    def test_list_of_findings(self) -> None:
+        """Test with list of finding dicts."""
+        data = [
+            {
+                "id": "f-1",
+                "pillar": "fairness",
+                "severity": "major",
+                "category": "bias",
+                "description": "Finding 1",
+                "status": "open",
+            },
+            {
+                "id": "f-2",
+                "pillar": "ethics",
+                "severity": "minor",
+                "category": "docs",
+                "description": "Finding 2",
+                "status": "resolved",
+            },
+        ]
+        result = _parse_findings(data)
+        assert result is not None
+        assert len(result) == 2
+        assert result[0].id == "f-1"
+        assert result[1].id == "f-2"
 
 
 # ============================================================================
