@@ -146,6 +146,22 @@ from axonflow.workflow import (
     WorkflowStatusResponse,
     WorkflowStepInfo,
 )
+from axonflow.masfeat import (
+    # Enums
+    AISystemUseCase,
+    FEATAssessmentStatus,
+    FEATPillar,
+    KillSwitchEventType,
+    KillSwitchStatus,
+    MaterialityClassification,
+    SystemStatus,
+    # Types
+    AISystemRegistry,
+    FEATAssessment,
+    KillSwitch,
+    KillSwitchEvent,
+    RegistrySummary,
+)
 
 __version__ = "1.6.0"
 __all__ = [
@@ -273,4 +289,17 @@ __all__ = [
     "MarkStepCompletedRequest",
     "AbortWorkflowRequest",
     "PolicyMatch",
+    # MAS FEAT Compliance types (Enterprise)
+    "MaterialityClassification",
+    "SystemStatus",
+    "FEATAssessmentStatus",
+    "KillSwitchStatus",
+    "FEATPillar",
+    "AISystemUseCase",
+    "KillSwitchEventType",
+    "AISystemRegistry",
+    "RegistrySummary",
+    "FEATAssessment",
+    "KillSwitch",
+    "KillSwitchEvent",
 ]
