@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 class MaterialityClassification(str, Enum):
     """Materiality classification based on 3-dimensional risk rating."""
+
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -27,6 +28,7 @@ class MaterialityClassification(str, Enum):
 
 class SystemStatus(str, Enum):
     """AI System lifecycle status."""
+
     DRAFT = "draft"
     ACTIVE = "active"
     SUSPENDED = "suspended"
@@ -35,6 +37,7 @@ class SystemStatus(str, Enum):
 
 class FEATAssessmentStatus(str, Enum):
     """FEAT Assessment lifecycle status."""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -44,6 +47,7 @@ class FEATAssessmentStatus(str, Enum):
 
 class KillSwitchStatus(str, Enum):
     """Kill Switch operational status."""
+
     ENABLED = "enabled"
     DISABLED = "disabled"
     TRIGGERED = "triggered"
@@ -51,6 +55,7 @@ class KillSwitchStatus(str, Enum):
 
 class FEATPillar(str, Enum):
     """FEAT framework pillars."""
+
     FAIRNESS = "fairness"
     ETHICS = "ethics"
     ACCOUNTABILITY = "accountability"
@@ -59,6 +64,7 @@ class FEATPillar(str, Enum):
 
 class AISystemUseCase(str, Enum):
     """Predefined AI system use cases for MAS compliance."""
+
     CREDIT_SCORING = "credit_scoring"
     ROBO_ADVISORY = "robo_advisory"
     INSURANCE_UNDERWRITING = "insurance_underwriting"
@@ -71,6 +77,7 @@ class AISystemUseCase(str, Enum):
 
 class KillSwitchEventType(str, Enum):
     """Kill Switch event types."""
+
     CREATED = "created"
     ENABLED = "enabled"
     DISABLED = "disabled"
@@ -87,6 +94,7 @@ class KillSwitchEventType(str, Enum):
 @dataclass
 class AISystemRegistry:
     """Registered AI system in the MAS FEAT registry."""
+
     id: str
     org_id: str
     system_id: str
@@ -110,6 +118,7 @@ class AISystemRegistry:
 @dataclass
 class RegistrySummary:
     """Summary of all AI systems in the registry."""
+
     total_systems: int
     active_systems: int
     high_materiality_count: int
@@ -127,6 +136,7 @@ class RegistrySummary:
 @dataclass
 class FEATAssessment:
     """FEAT Assessment record."""
+
     id: str
     org_id: str
     system_id: str
@@ -161,6 +171,7 @@ class FEATAssessment:
 @dataclass
 class KillSwitch:
     """Kill Switch configuration and status."""
+
     id: str
     org_id: str
     system_id: str
@@ -181,6 +192,7 @@ class KillSwitch:
 @dataclass
 class KillSwitchEvent:
     """Kill Switch event record."""
+
     id: str
     kill_switch_id: str
     event_type: KillSwitchEventType

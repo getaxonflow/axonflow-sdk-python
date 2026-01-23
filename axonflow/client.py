@@ -3815,9 +3815,7 @@ class AxonFlow:
         Returns:
             Enabled kill switch
         """
-        response = await self._request(
-            "POST", f"/api/v1/masfeat/killswitch/{system_id}/enable"
-        )
+        response = await self._request("POST", f"/api/v1/masfeat/killswitch/{system_id}/enable")
         return masfeat.kill_switch_from_dict(response)
 
     async def masfeat_disable_kill_switch(
