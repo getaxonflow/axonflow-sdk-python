@@ -80,6 +80,18 @@ from axonflow.exceptions import (
     PolicyViolationError,
     TimeoutError,
 )
+from axonflow.execution import (
+    ExecutionStatus,
+    ExecutionStatusValue,
+    ExecutionType,
+    StepStatusValue,
+    UnifiedApprovalStatus,
+    UnifiedGateDecision,
+    UnifiedListExecutionsRequest,
+    UnifiedListExecutionsResponse,
+    UnifiedStepStatus,
+    UnifiedStepType,
+)
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
     CreatePolicyOverrideRequest,
@@ -157,18 +169,6 @@ from axonflow.workflow import (
     WorkflowStatus,
     WorkflowStatusResponse,
     WorkflowStepInfo,
-)
-from axonflow.execution import (
-    ExecutionStatus,
-    ExecutionStatusValue,
-    ExecutionType,
-    StepStatusValue,
-    UnifiedApprovalStatus,
-    UnifiedGateDecision,
-    UnifiedListExecutionsRequest,
-    UnifiedListExecutionsResponse,
-    UnifiedStepStatus,
-    UnifiedStepType,
 )
 
 if TYPE_CHECKING:
@@ -4025,7 +4025,8 @@ class AxonFlow:
                         step_name=s.get("step_name", ""),
                         step_type=UnifiedStepType(s["step_type"]),
                         status=StepStatusValue(s["status"]),
-                        started_at=_parse_datetime(s["started_at"]) if s.get("started_at") else None,
+                        started_at=(_parse_datetime(s["started_at"])
+                                    if s.get("started_at") else None),
                         ended_at=_parse_datetime(s["ended_at"]) if s.get("ended_at") else None,
                         duration=s.get("duration"),
                         decision=UnifiedGateDecision(s["decision"]) if s.get("decision") else None,
@@ -4058,7 +4059,8 @@ class AxonFlow:
             total_steps=data.get("total_steps", 0),
             progress_percent=data.get("progress_percent", 0.0),
             started_at=_parse_datetime(data["started_at"]),
-            completed_at=_parse_datetime(data["completed_at"]) if data.get("completed_at") else None,
+            completed_at=(_parse_datetime(data["completed_at"])
+                          if data.get("completed_at") else None),
             duration=data.get("duration"),
             estimated_cost_usd=data.get("estimated_cost_usd"),
             actual_cost_usd=data.get("actual_cost_usd"),
