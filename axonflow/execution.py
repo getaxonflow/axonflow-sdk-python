@@ -170,9 +170,7 @@ class ExecutionStatus(BaseModel):
     )
     started_at: datetime = Field(..., description="When execution started")
     completed_at: datetime | None = Field(default=None, description="When execution completed")
-    duration: str | None = Field(
-        default=None, description="Duration of execution (human-readable)"
-    )
+    duration: str | None = Field(default=None, description="Duration of execution (human-readable)")
     estimated_cost_usd: float | None = Field(
         default=None, description="Estimated cost in USD (pre-execution)"
     )
