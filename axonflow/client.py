@@ -4002,7 +4002,8 @@ class AxonFlow:
             msg = "Unexpected response type from list executions"
             raise TypeError(msg)
 
-        executions = [self._map_execution_status(e) for e in response.get("executions", [])]
+        raw_executions = response.get("executions") or []
+        executions = [self._map_execution_status(e) for e in raw_executions]
 
         return UnifiedListExecutionsResponse(
             executions=executions,
@@ -5174,6 +5175,71 @@ class SyncAxonFlow:
     ) -> str:
         """Export code governance data as CSV for compliance reporting."""
         return self._run_sync(self._async_client.export_code_governance_data_csv(options))
+
+    # Workflow Control Plane sync wrappers
+
+    def create_workflow(
+        self,
+        request: CreateWorkflowRequest,
+    ) -> CreateWorkflowResponse:
+        """Create a new WCP workflow for tracking external agent execution."""
+        return self._run_sync(self._async_client.create_workflow(request))
+
+    def get_workflow(self, workflow_id: str) -> WorkflowStatusResponse:
+        """Get the status of a WCP workflow."""
+        return self._run_sync(self._async_client.get_workflow(workflow_id))
+
+    def step_gate(
+        self,
+        workflow_id: str,
+        step_id: str,
+        request: StepGateRequest,
+    ) -> StepGateResponse:
+        """Check policy gate for a workflow step."""
+        return self._run_sync(self._async_client.step_gate(workflow_id, step_id, request))
+
+    def mark_step_completed(
+        self,
+        workflow_id: str,
+        step_id: str,
+        request: MarkStepCompletedRequest | None = None,
+    ) -> None:
+        """Mark a workflow step as completed."""
+        return self._run_sync(
+            self._async_client.mark_step_completed(workflow_id, step_id, request)
+        )
+
+    def complete_workflow(self, workflow_id: str) -> None:
+        """Mark a workflow as completed."""
+        return self._run_sync(self._async_client.complete_workflow(workflow_id))
+
+    def abort_workflow(self, workflow_id: str, reason: str | None = None) -> None:
+        """Abort a workflow with an optional reason."""
+        return self._run_sync(self._async_client.abort_workflow(workflow_id, reason))
+
+    def resume_workflow(self, workflow_id: str) -> None:
+        """Resume a paused workflow."""
+        return self._run_sync(self._async_client.resume_workflow(workflow_id))
+
+    def list_workflows(
+        self,
+        options: ListWorkflowsOptions | None = None,
+    ) -> ListWorkflowsResponse:
+        """List workflows with optional filtering."""
+        return self._run_sync(self._async_client.list_workflows(options))
+
+    # Unified Execution Tracking sync wrappers
+
+    def get_execution_status(self, execution_id: str) -> ExecutionStatus:
+        """Get unified execution status for both MAP plans and WCP workflows."""
+        return self._run_sync(self._async_client.get_execution_status(execution_id))
+
+    def list_unified_executions(
+        self,
+        request: UnifiedListExecutionsRequest | None = None,
+    ) -> UnifiedListExecutionsResponse:
+        """List unified executions (both MAP plans and WCP workflows)."""
+        return self._run_sync(self._async_client.list_unified_executions(request))
 
     # Execution Replay sync wrappers
 
