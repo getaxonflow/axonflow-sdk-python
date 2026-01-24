@@ -114,6 +114,22 @@ class PolicyEvaluationInfo(BaseModel):
     code_artifact: CodeArtifact | None = Field(default=None, description="Code metadata")
 
 
+class BudgetInfo(BaseModel):
+    """Budget enforcement status information (Issue #1082).
+
+    Returned when a budget check is performed, showing current usage
+    relative to budget limits.
+    """
+
+    budget_id: str | None = Field(default=None, description="Budget ID")
+    budget_name: str | None = Field(default=None, description="Budget name")
+    used_usd: float = Field(default=0.0, description="Current usage in USD")
+    limit_usd: float = Field(default=0.0, description="Budget limit in USD")
+    percentage: float = Field(default=0.0, description="Usage percentage (0-100+)")
+    exceeded: bool = Field(default=False, description="Whether budget is exceeded")
+    action: str | None = Field(default=None, description="Action on exceed: warn, block, downgrade")
+
+
 class ClientResponse(BaseModel):
     """Response from AxonFlow Agent."""
 
@@ -126,6 +142,7 @@ class ClientResponse(BaseModel):
     blocked: bool = Field(default=False, description="Whether request was blocked")
     block_reason: str | None = Field(default=None, description="Block reason")
     policy_info: PolicyEvaluationInfo | None = Field(default=None)
+    budget_info: BudgetInfo | None = Field(default=None, description="Budget status (Issue #1082)")
 
 
 class ConnectorMetadata(BaseModel):
