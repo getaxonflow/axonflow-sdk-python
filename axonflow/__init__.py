@@ -56,6 +56,18 @@ from axonflow.exceptions import (
     RateLimitError,
     TimeoutError,
 )
+from axonflow.execution import (
+    ExecutionStatus,
+    ExecutionStatusValue,
+    ExecutionType,
+    StepStatusValue,
+    UnifiedApprovalStatus,
+    UnifiedGateDecision,
+    UnifiedListExecutionsRequest,
+    UnifiedListExecutionsResponse,
+    UnifiedStepStatus,
+    UnifiedStepType,
+)
 from axonflow.masfeat import (
     # Types
     AISystemRegistry,
@@ -302,4 +314,15 @@ __all__ = [
     "FEATAssessment",
     "KillSwitch",
     "KillSwitchEvent",
+    # Unified Execution types (Issue #1075)
+    "ExecutionType",
+    "ExecutionStatusValue",
+    "StepStatusValue",
+    "UnifiedStepType",
+    "UnifiedGateDecision",
+    "UnifiedApprovalStatus",
+    "UnifiedStepStatus",
+    "ExecutionStatus",
+    "UnifiedListExecutionsRequest",
+    "UnifiedListExecutionsResponse",
 ]
