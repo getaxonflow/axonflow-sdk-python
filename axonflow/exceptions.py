@@ -61,6 +61,38 @@ class RateLimitError(AxonFlowError):
         self.reset_at = reset_at
 
 
+class BudgetExceededError(AxonFlowError):
+    """Budget limit exceeded (HTTP 402).
+
+    Raised when a request is blocked due to budget constraints.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        budget_id: str | None = None,
+        budget_name: str | None = None,
+        used_usd: float = 0.0,
+        limit_usd: float = 0.0,
+        action: str | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            details={
+                "budget_id": budget_id,
+                "budget_name": budget_name,
+                "used_usd": used_usd,
+                "limit_usd": limit_usd,
+                "action": action,
+            },
+        )
+        self.budget_id = budget_id
+        self.budget_name = budget_name
+        self.used_usd = used_usd
+        self.limit_usd = limit_usd
+        self.action = action
+
+
 class ConnectionError(AxonFlowError):
     """Connection to AxonFlow Agent failed."""
 

@@ -75,6 +75,7 @@ from axonflow.code_governance import (
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
+    BudgetExceededError,
     ConnectionError,
     ConnectorError,
     PolicyViolationError,
@@ -508,6 +509,17 @@ class AxonFlow:
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
+            if e.response.status_code == 402:  # noqa: PLR2004
+                body = e.response.json()
+                budget_info = body.get("budget_info", {})
+                raise BudgetExceededError(
+                    body.get("message", "Budget exceeded"),
+                    budget_id=budget_info.get("budget_id"),
+                    budget_name=budget_info.get("budget_name"),
+                    used_usd=budget_info.get("used_usd", 0.0),
+                    limit_usd=budget_info.get("limit_usd", 0.0),
+                    action=budget_info.get("action"),
+                ) from e
             if e.response.status_code == 403:  # noqa: PLR2004
                 body = e.response.json()
                 # Extract policy from policy_info if available
@@ -583,6 +595,17 @@ class AxonFlow:
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
+            if e.response.status_code == 402:  # noqa: PLR2004
+                body = e.response.json()
+                budget_info = body.get("budget_info", {})
+                raise BudgetExceededError(
+                    body.get("message", "Budget exceeded"),
+                    budget_id=budget_info.get("budget_id"),
+                    budget_name=budget_info.get("budget_name"),
+                    used_usd=budget_info.get("used_usd", 0.0),
+                    limit_usd=budget_info.get("limit_usd", 0.0),
+                    action=budget_info.get("action"),
+                ) from e
             if e.response.status_code == 403:  # noqa: PLR2004
                 body = e.response.json()
                 policy = body.get("policy")
