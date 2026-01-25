@@ -28,6 +28,7 @@ class PolicyCategory(str, Enum):
     PII_US = "pii-us"
     PII_EU = "pii-eu"
     PII_INDIA = "pii-india"
+    PII_SINGAPORE = "pii-singapore"
 
     # Static policy categories - Code Governance
     CODE_SECRETS = "code-secrets"

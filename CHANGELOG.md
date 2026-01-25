@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BudgetInfo**: `QueryResponse.budget_info` for budget enforcement (HTTP 402)
 
+### Fixed
+
+- **PolicyCategory**: Added `PII_SINGAPORE = "pii-singapore"` enum value for MAS FEAT Singapore PII detection patterns
+
 ### Deprecated
 
 - **execute_query()**: Deprecated in favor of proxy_llm_call()
