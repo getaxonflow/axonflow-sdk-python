@@ -133,67 +133,89 @@ class TestAuthHeadersWithoutCredentials:
 
 
 class TestEnterpriseFeatureValidation:
-    """Test that enterprise features require client_id before making requests."""
+    """Test that Gateway Mode uses smart defaults for client_id."""
 
     @pytest.mark.asyncio
-    async def test_pre_check_fails_without_client_id(self, httpx_mock):
-        """get_policy_approved_context should fail before making request when no client_id."""
-        # Don't mock the endpoint - we should fail before making the request
+    async def test_pre_check_uses_smart_default_without_client_id(self, httpx_mock):
+        """get_policy_approved_context should use 'community' as default client_id."""
+        httpx_mock.add_response(
+            url="http://localhost:8080/api/policy/pre-check",
+            json={
+                "context_id": "ctx_smart_default",
+                "approved": True,
+                "policies": [],
+                "expires_at": "2025-12-20T12:00:00Z",
+            },
+        )
+
         client = AxonFlow(
             endpoint="http://localhost:8080",
-            # No client_id - truly no credentials
+            # No client_id - should use "community" smart default
             debug=True,
         )
 
         async with client:
-            with pytest.raises(AuthenticationError) as exc_info:
-                await client.get_policy_approved_context(
-                    user_token="",
-                    query="Test query",
-                )
+            result = await client.get_policy_approved_context(
+                user_token="test-user",
+                query="Test query",
+            )
 
-            assert "requires client_id" in str(exc_info.value)
-            assert "Gateway Mode" in str(exc_info.value)
+            assert result.approved is True
+            assert result.context_id == "ctx_smart_default"
 
-        # No request should have been made
+        # Verify request was made with smart default client_id
         requests = httpx_mock.get_requests()
-        assert len(requests) == 0
+        assert len(requests) == 1
+        import json
 
-        print("✅ get_policy_approved_context fails without client_id (no request made)")
+        body = json.loads(requests[0].content)
+        assert body["client_id"] == "community"
+
+        print("✅ get_policy_approved_context uses 'community' smart default")
 
     @pytest.mark.asyncio
-    async def test_audit_fails_without_client_id(self, httpx_mock):
-        """audit_llm_call should fail before making request when no client_id."""
-        # Don't mock the endpoint - we should fail before making the request
+    async def test_audit_uses_smart_default_without_client_id(self, httpx_mock):
+        """audit_llm_call should use 'community' as default client_id."""
+        httpx_mock.add_response(
+            url="http://localhost:8080/api/audit/llm-call",
+            json={
+                "success": True,
+                "audit_id": "audit_smart_default",
+            },
+        )
+
         client = AxonFlow(
             endpoint="http://localhost:8080",
-            # No client_id - truly no credentials
+            # No client_id - should use "community" smart default
             debug=True,
         )
 
         async with client:
-            with pytest.raises(AuthenticationError) as exc_info:
-                await client.audit_llm_call(
-                    context_id="ctx_123",
-                    response_summary="Test response",
-                    provider="openai",
-                    model="gpt-4",
-                    token_usage=TokenUsage(
-                        prompt_tokens=100,
-                        completion_tokens=50,
-                        total_tokens=150,
-                    ),
-                    latency_ms=250,
-                )
+            result = await client.audit_llm_call(
+                context_id="ctx_123",
+                response_summary="Test response",
+                provider="openai",
+                model="gpt-4",
+                token_usage=TokenUsage(
+                    prompt_tokens=100,
+                    completion_tokens=50,
+                    total_tokens=150,
+                ),
+                latency_ms=250,
+            )
 
-            assert "requires client_id" in str(exc_info.value)
-            assert "Gateway Mode" in str(exc_info.value)
+            assert result.success is True
+            assert result.audit_id == "audit_smart_default"
 
-        # No request should have been made
+        # Verify request was made with smart default client_id
         requests = httpx_mock.get_requests()
-        assert len(requests) == 0
+        assert len(requests) == 1
+        import json
 
-        print("✅ audit_llm_call fails without client_id (no request made)")
+        body = json.loads(requests[0].content)
+        assert body["client_id"] == "community"
+
+        print("✅ audit_llm_call uses 'community' smart default")
 
     @pytest.mark.asyncio
     async def test_pre_check_works_with_credentials(self, httpx_mock):
