@@ -394,25 +394,17 @@ class AxonFlow:
         """
         return bool(self._config.client_id)
 
-    def _require_credentials(self, feature: str) -> None:
-        """Require credentials for enterprise features.
+    def _get_effective_client_id(self) -> str:
+        """Get the effective client_id, using smart default for community mode.
 
-        Raises AuthenticationError if client_id is not configured.
-        Note: client_secret is optional for community mode.
+        Returns the configured client_id if set, otherwise returns "community"
+        as a smart default. This enables zero-config usage for community/self-hosted
+        deployments while still supporting enterprise deployments with explicit credentials.
 
-        Args:
-            feature: Name of the feature requiring credentials (for error message)
-
-        Raises:
-            AuthenticationError: If client_id is not configured
+        Returns:
+            The client_id to use in requests
         """
-        if not self._has_credentials():
-            msg = (
-                f"{feature} requires client_id. "
-                "Set client_id when creating the client "
-                "(client_secret is optional for community mode)."
-            )
-            raise AuthenticationError(msg)
+        return self._config.client_id if self._config.client_id else "community"
 
     async def __aenter__(self) -> AxonFlow:
         """Async context manager entry."""
@@ -1160,8 +1152,8 @@ class AxonFlow:
         LLM call to ensure policy compliance.
 
         Note:
-            This is an enterprise feature that requires credentials.
-            Set client_id and client_secret when creating the client.
+            Uses smart default "community" for client_id if not configured,
+            enabling zero-config usage for community/self-hosted deployments.
 
         Args:
             user_token: JWT token for the user making the request
@@ -1173,7 +1165,7 @@ class AxonFlow:
             PolicyApprovalResult with context ID and approved data
 
         Raises:
-            AuthenticationError: If credentials are not configured or user token is invalid
+            AuthenticationError: If user token is invalid
             ConnectionError: If unable to reach AxonFlow Agent
             TimeoutError: If request times out
 
@@ -1186,12 +1178,12 @@ class AxonFlow:
             >>> if not result.approved:
             ...     raise PolicyViolationError(result.block_reason)
         """
-        # Gateway Mode is an enterprise feature that requires credentials
-        self._require_credentials("Gateway Mode (get_policy_approved_context)")
+        # Use smart default for client_id - enables zero-config community mode
+        client_id = self._get_effective_client_id()
 
         request_body = {
             "user_token": user_token,
-            "client_id": self._config.client_id,
+            "client_id": client_id,
             "query": query,
             "data_sources": data_sources or [],
             "context": context or {},
@@ -1322,12 +1314,12 @@ class AxonFlow:
             ...     latency_ms=250
             ... )
         """
-        # Gateway Mode is an enterprise feature that requires credentials
-        self._require_credentials("Gateway Mode (audit_llm_call)")
+        # Use smart default for client_id - enables zero-config community mode
+        client_id = self._get_effective_client_id()
 
         request_body = {
             "context_id": context_id,
-            "client_id": self._config.client_id,
+            "client_id": client_id,
             "response_summary": response_summary,
             "provider": provider,
             "model": model,

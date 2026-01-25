@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.7.1] - 2026-01-25
 
+### Changed
+
+- **Gateway Mode smart defaults**: `get_policy_approved_context()` and `audit_llm_call()` now use `"community"` as default client_id when not configured, enabling zero-config usage for community/self-hosted deployments
+
 ### Fixed
 
 - **PolicyCategory**: Added `PII_SINGAPORE = "pii-singapore"` enum value for Singapore PII detection policies (NRIC, FIN, UEN patterns)
