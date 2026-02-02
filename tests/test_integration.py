@@ -51,9 +51,9 @@ async def test_health_check(client):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_simple(client):
+async def test_proxy_llm_call_simple(client):
     """Test a basic query."""
-    response = await client.execute_query(
+    response = await client.proxy_llm_call(
         user_token="demo-user",
         query="What is 2+2?",
         request_type="chat",
@@ -62,9 +62,9 @@ async def test_execute_query_simple(client):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_sql_injection(client):
+async def test_proxy_llm_call_sql_injection(client):
     """Test that SQL injection is blocked."""
-    response = await client.execute_query(
+    response = await client.proxy_llm_call(
         user_token="demo-user",
         query="SELECT * FROM users; DROP TABLE users;--",
         request_type="sql",
@@ -75,9 +75,9 @@ async def test_execute_query_sql_injection(client):
 
 
 @pytest.mark.asyncio
-async def test_execute_query_pii_detection(client):
+async def test_proxy_llm_call_pii_detection(client):
     """Test that PII is blocked."""
-    response = await client.execute_query(
+    response = await client.proxy_llm_call(
         user_token="demo-user",
         query="My SSN is 123-45-6789",
         request_type="chat",

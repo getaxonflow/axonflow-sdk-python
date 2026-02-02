@@ -159,7 +159,7 @@ def wrap_bedrock_client(
 
             loop = _get_loop()
             response = loop.run_until_complete(
-                axonflow.execute_query(
+                axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
                     request_type="llm_chat",
@@ -189,7 +189,7 @@ def wrap_bedrock_client(
 
             loop = _get_loop()
             response = loop.run_until_complete(
-                axonflow.execute_query(
+                axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
                     request_type="llm_chat",

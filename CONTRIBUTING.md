@@ -145,7 +145,7 @@ from axonflow import AxonFlow
 
 
 @pytest.mark.asyncio
-async def test_execute_query(httpx_mock: HTTPXMock):
+async def test_proxy_llm_call(httpx_mock: HTTPXMock):
     httpx_mock.add_response(json={"success": True, "data": "result"})
 
     async with AxonFlow(
@@ -153,7 +153,7 @@ async def test_execute_query(httpx_mock: HTTPXMock):
         client_id="test",
         client_secret="test",
     ) as client:
-        result = await client.execute_query("token", "query", "chat")
+        result = await client.proxy_llm_call("token", "query", "chat")
         assert result.success is True
 ```
 

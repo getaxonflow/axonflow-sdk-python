@@ -278,6 +278,10 @@ class ConnectorResponse(BaseModel):
         default=None, description="Policy evaluation details"
     )
 
+    def was_redacted(self) -> bool:
+        """Returns True if any fields were redacted by policy evaluation."""
+        return self.redacted
+
 
 class PlanStep(BaseModel):
     """A step in a multi-agent plan."""

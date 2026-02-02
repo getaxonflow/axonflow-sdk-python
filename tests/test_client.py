@@ -107,7 +107,7 @@ class TestHealthCheck:
         assert result is False
 
 
-class TestExecuteQuery:
+class TestProxyLLMCall:
     """Test query execution."""
 
     @pytest.mark.asyncio
@@ -120,7 +120,7 @@ class TestExecuteQuery:
         """Test successful query execution."""
         httpx_mock.add_response(json=mock_query_response)
 
-        result = await client.execute_query(
+        result = await client.proxy_llm_call(
             user_token="test-token",
             query="What is AI?",
             request_type="chat",
@@ -131,7 +131,7 @@ class TestExecuteQuery:
         assert result.data == {"result": "test result"}
 
     @pytest.mark.asyncio
-    async def test_execute_query_empty_user_token_defaults_to_anonymous(
+    async def test_proxy_llm_call_empty_user_token_defaults_to_anonymous(
         self,
         client: AxonFlow,
         httpx_mock: HTTPXMock,
@@ -150,7 +150,7 @@ class TestExecuteQuery:
 
         httpx_mock.add_callback(capture_request)
 
-        await client.execute_query(
+        await client.proxy_llm_call(
             user_token="",  # Empty token
             query="What is AI?",
             request_type="chat",
@@ -169,7 +169,7 @@ class TestExecuteQuery:
         httpx_mock.add_response(json=mock_blocked_response)
 
         with pytest.raises(PolicyViolationError) as exc_info:
-            await client.execute_query(
+            await client.proxy_llm_call(
                 user_token="test-token",
                 query="What is AI?",
                 request_type="chat",
@@ -187,7 +187,7 @@ class TestExecuteQuery:
         httpx_mock.add_response(status_code=401)
 
         with pytest.raises(AuthenticationError):
-            await client.execute_query(
+            await client.proxy_llm_call(
                 user_token="bad-token",
                 query="test",
                 request_type="chat",
@@ -210,7 +210,7 @@ class TestExecuteQuery:
         )
 
         with pytest.raises(PolicyViolationError) as exc_info:
-            await client.execute_query(
+            await client.proxy_llm_call(
                 user_token="test",
                 query="test",
                 request_type="chat",
@@ -228,7 +228,7 @@ class TestExecuteQuery:
         httpx_mock.add_response(status_code=500, text="Internal Server Error")
 
         with pytest.raises(AxonFlowError) as exc_info:
-            await client.execute_query(
+            await client.proxy_llm_call(
                 user_token="test",
                 query="test",
                 request_type="chat",
@@ -246,7 +246,7 @@ class TestExecuteQuery:
         """Test query with additional context."""
         httpx_mock.add_response(json=mock_query_response)
 
-        result = await client.execute_query(
+        result = await client.proxy_llm_call(
             user_token="test-token",
             query="What is AI?",
             request_type="chat",
@@ -271,14 +271,14 @@ class TestCaching:
 
         async with AxonFlow(**config_dict) as client:
             # First call
-            result1 = await client.execute_query(
+            result1 = await client.proxy_llm_call(
                 user_token="test",
                 query="cached query",
                 request_type="chat",
             )
 
             # Second call - should hit cache
-            result2 = await client.execute_query(
+            result2 = await client.proxy_llm_call(
                 user_token="test",
                 query="cached query",
                 request_type="chat",
@@ -300,8 +300,8 @@ class TestCaching:
         httpx_mock.add_response(json=mock_query_response)
 
         async with AxonFlow(**config_dict) as client:
-            await client.execute_query("test", "query1", "chat")
-            await client.execute_query("test", "query2", "chat")
+            await client.proxy_llm_call("test", "query1", "chat")
+            await client.proxy_llm_call("test", "query2", "chat")
 
             # Two HTTP requests should have been made
             assert len(httpx_mock.get_requests()) == 2
@@ -318,8 +318,8 @@ class TestCaching:
         httpx_mock.add_response(json=mock_query_response)
 
         async with AxonFlow(**config_dict, cache_enabled=False) as client:
-            await client.execute_query("test", "query", "chat")
-            await client.execute_query("test", "query", "chat")
+            await client.proxy_llm_call("test", "query", "chat")
+            await client.proxy_llm_call("test", "query", "chat")
 
             # Both requests should be made
             assert len(httpx_mock.get_requests()) == 2
@@ -565,7 +565,7 @@ class TestSyncClient:
         result = sync_client.health_check()
         assert result is True
 
-    def test_sync_execute_query(
+    def test_sync_proxy_llm_call(
         self,
         sync_client,
         httpx_mock: HTTPXMock,
@@ -573,7 +573,7 @@ class TestSyncClient:
     ) -> None:
         """Test sync query execution."""
         httpx_mock.add_response(json=mock_query_response)
-        result = sync_client.execute_query("test", "query", "chat")
+        result = sync_client.proxy_llm_call("test", "query", "chat")
         assert result.success is True
 
     def test_sync_context_manager(

@@ -243,6 +243,24 @@ class TestConnectorTypes:
         )
         assert response.success is True
 
+    def test_connector_response_was_redacted_true(self) -> None:
+        """Test was_redacted() returns True when redacted."""
+        response = ConnectorResponse(
+            success=True,
+            data={"rows": []},
+            redacted=True,
+            redacted_fields=["rows[0].ssn"],
+        )
+        assert response.was_redacted() is True
+
+    def test_connector_response_was_redacted_false(self) -> None:
+        """Test was_redacted() returns False when not redacted."""
+        response = ConnectorResponse(
+            success=True,
+            data={"rows": []},
+        )
+        assert response.was_redacted() is False
+
 
 class TestPlanTypes:
     """Test planning-related types."""

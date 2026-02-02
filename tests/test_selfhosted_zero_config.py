@@ -217,9 +217,9 @@ class TestProxyModeZeroConfig:
             yield ax
 
     @pytest.mark.asyncio
-    async def test_execute_query_without_credentials(self, client):
-        """Execute query should work without credentials."""
-        response = await client.execute_query(
+    async def test_proxy_llm_call_without_credentials(self, client):
+        """Proxy LLM call should work without credentials."""
+        response = await client.proxy_llm_call(
             user_token="",  # Empty token
             query="What is 2 + 2?",
             request_type="chat",
@@ -312,7 +312,7 @@ class TestFirstTimeUserZeroConfig:
             assert healthy, "Health check should pass"
 
             # Step 2: Execute query should work (community feature)
-            response = await client.execute_query(
+            response = await client.proxy_llm_call(
                 user_token="",
                 query="Hello, this is my first query!",
                 request_type="chat",

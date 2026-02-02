@@ -13,7 +13,7 @@ Example:
     ...     client_id="your-client-id",
     ...     client_secret="your-client-secret"
     ... ) as client:
-    ...     result = await client.execute_query("user-token", "What is AI?", "chat")
+    ...     result = await client.proxy_llm_call("user-token", "What is AI?", "chat")
     ...     print(result.data)
     >>>
     >>> # Sync usage
@@ -22,7 +22,7 @@ Example:
     ...     client_id="your-client-id",
     ...     client_secret="your-client-secret"
     ... )
-    >>> result = client.execute_query("user-token", "What is AI?", "chat")
+    >>> result = client.proxy_llm_call("user-token", "What is AI?", "chat")
 """
 
 from axonflow.client import AxonFlow, SyncAxonFlow
@@ -177,7 +177,7 @@ from axonflow.workflow import (
     WorkflowStepInfo,
 )
 
-__version__ = "1.6.0"
+__version__ = "2.0.0"
 __all__ = [
     # Main client
     "AxonFlow",

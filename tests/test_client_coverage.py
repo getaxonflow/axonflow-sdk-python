@@ -27,12 +27,12 @@ class TestSyncClientCoverage:
             assert isinstance(client, SyncAxonFlow)
             assert client.config.client_id == config_dict["client_id"]
 
-    def test_sync_execute_query_basic(
+    def test_sync_proxy_llm_call_basic(
         self,
         sync_client: SyncAxonFlow,
         httpx_mock: HTTPXMock,
     ) -> None:
-        """Test sync execute_query."""
+        """Test sync proxy_llm_call."""
         httpx_mock.add_response(
             json={
                 "success": True,
@@ -41,7 +41,7 @@ class TestSyncClientCoverage:
             }
         )
 
-        result = sync_client.execute_query(
+        result = sync_client.proxy_llm_call(
             user_token="test-user",
             query="Test query",
             request_type="chat",

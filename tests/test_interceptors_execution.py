@@ -43,7 +43,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_invoke_model_allowed(self) -> None:
         """Test Bedrock invoke_model allowed by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -62,7 +62,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_invoke_model_blocked(self) -> None:
         """Test Bedrock invoke_model blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="PII detected")
         )
 
@@ -80,7 +80,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_stream_allowed(self) -> None:
         """Test Bedrock invoke_model_with_response_stream allowed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -103,7 +103,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_stream_blocked(self) -> None:
         """Test Bedrock streaming blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Rate limit")
         )
 
@@ -121,7 +121,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_invoke_model_default_block_reason(self) -> None:
         """Test Bedrock invoke_model with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -139,7 +139,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_stream_default_block_reason(self) -> None:
         """Test Bedrock stream with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -157,7 +157,7 @@ class TestBedrockWrappedExecution:
     def test_bedrock_extract_prompt_from_bytes(self) -> None:
         """Test prompt extraction from bytes in wrapped client."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -187,7 +187,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_generate_content_allowed(self) -> None:
         """Test Gemini generate_content allowed by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -204,7 +204,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_generate_content_blocked(self) -> None:
         """Test Gemini generate_content blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Content policy")
         )
 
@@ -221,7 +221,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_generate_content_blocked_default_reason(self) -> None:
         """Test Gemini generate_content blocked with no reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -239,7 +239,7 @@ class TestGeminiWrappedExecution:
     async def test_gemini_generate_content_async_allowed(self) -> None:
         """Test Gemini async generate_content allowed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -256,7 +256,7 @@ class TestGeminiWrappedExecution:
     async def test_gemini_generate_content_async_blocked(self) -> None:
         """Test Gemini async generate_content blocked."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Async blocked")
         )
 
@@ -275,7 +275,7 @@ class TestGeminiWrappedExecution:
     async def test_gemini_generate_content_async_default_block_reason(self) -> None:
         """Test Gemini async with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -293,7 +293,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_start_chat_send_message_allowed(self) -> None:
         """Test Gemini chat session send_message allowed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -313,7 +313,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_chat_send_message_blocked(self) -> None:
         """Test Gemini chat session send_message blocked."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Chat blocked")
         )
 
@@ -335,7 +335,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_chat_send_message_default_block_reason(self) -> None:
         """Test Gemini chat with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -358,7 +358,7 @@ class TestGeminiWrappedExecution:
     async def test_gemini_chat_send_message_async_allowed(self) -> None:
         """Test Gemini chat async send_message allowed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -380,7 +380,7 @@ class TestGeminiWrappedExecution:
     async def test_gemini_chat_send_message_async_blocked(self) -> None:
         """Test Gemini chat async send_message blocked."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Async chat blocked")
         )
 
@@ -404,7 +404,7 @@ class TestGeminiWrappedExecution:
     async def test_gemini_chat_async_default_block_reason(self) -> None:
         """Test Gemini async chat with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -436,7 +436,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_extract_prompt_from_kwargs_contents(self) -> None:
         """Test Gemini prompt extraction from contents kwarg."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -452,7 +452,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_extract_prompt_from_list_with_content_objects(self) -> None:
         """Test Gemini prompt extraction from list with Content objects."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -472,7 +472,7 @@ class TestGeminiWrappedExecution:
     def test_gemini_chat_send_message_non_string_content(self) -> None:
         """Test chat session with non-string content."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -492,7 +492,7 @@ class TestOllamaWrappedExecution:
     def test_ollama_chat_allowed(self) -> None:
         """Test Ollama chat allowed by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -507,7 +507,7 @@ class TestOllamaWrappedExecution:
     def test_ollama_chat_blocked(self) -> None:
         """Test Ollama chat blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Ollama blocked")
         )
 
@@ -524,7 +524,7 @@ class TestOllamaWrappedExecution:
     def test_ollama_chat_default_block_reason(self) -> None:
         """Test Ollama chat with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -541,7 +541,7 @@ class TestOllamaWrappedExecution:
     def test_ollama_generate_allowed(self) -> None:
         """Test Ollama generate allowed by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -556,7 +556,7 @@ class TestOllamaWrappedExecution:
     def test_ollama_generate_blocked(self) -> None:
         """Test Ollama generate blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Generate blocked")
         )
 
@@ -573,7 +573,7 @@ class TestOllamaWrappedExecution:
     def test_ollama_generate_default_block_reason(self) -> None:
         """Test Ollama generate with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -591,7 +591,7 @@ class TestOllamaWrappedExecution:
     async def test_ollama_async_chat_allowed(self) -> None:
         """Test Ollama async chat allowed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -609,7 +609,7 @@ class TestOllamaWrappedExecution:
     async def test_ollama_async_chat_blocked(self) -> None:
         """Test Ollama async chat blocked."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Async chat blocked")
         )
 
@@ -627,7 +627,7 @@ class TestOllamaWrappedExecution:
     async def test_ollama_async_chat_default_block_reason(self) -> None:
         """Test Ollama async chat with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -645,7 +645,7 @@ class TestOllamaWrappedExecution:
     async def test_ollama_async_generate_allowed(self) -> None:
         """Test Ollama async generate allowed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -661,7 +661,7 @@ class TestOllamaWrappedExecution:
     async def test_ollama_async_generate_blocked(self) -> None:
         """Test Ollama async generate blocked."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Async gen blocked")
         )
 
@@ -679,7 +679,7 @@ class TestOllamaWrappedExecution:
     async def test_ollama_async_generate_default_block_reason(self) -> None:
         """Test Ollama async generate with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -708,7 +708,7 @@ class TestOpenAIWrappedExecution:
     def test_openai_sync_create_allowed(self) -> None:
         """Test OpenAI sync create allowed by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -727,7 +727,7 @@ class TestOpenAIWrappedExecution:
     def test_openai_sync_create_blocked(self) -> None:
         """Test OpenAI sync create blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="OpenAI blocked")
         )
 
@@ -746,7 +746,7 @@ class TestOpenAIWrappedExecution:
     def test_openai_sync_create_default_block_reason(self) -> None:
         """Test OpenAI sync create with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -766,7 +766,7 @@ class TestOpenAIWrappedExecution:
     async def test_openai_async_create_allowed(self) -> None:
         """Test OpenAI async create allowed by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -786,7 +786,7 @@ class TestOpenAIWrappedExecution:
     async def test_openai_async_create_blocked(self) -> None:
         """Test OpenAI async create blocked by policy."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason="Async blocked")
         )
 
@@ -806,7 +806,7 @@ class TestOpenAIWrappedExecution:
     async def test_openai_async_create_default_block_reason(self) -> None:
         """Test OpenAI async create with no block_reason provided."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=True, block_reason=None)
         )
 
@@ -829,7 +829,7 @@ class TestEventLoopHandling:
     def test_bedrock_creates_event_loop_if_needed(self) -> None:
         """Test Bedrock creates event loop when needed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -846,7 +846,7 @@ class TestEventLoopHandling:
     def test_ollama_creates_event_loop_if_needed(self) -> None:
         """Test Ollama creates event loop when needed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -861,7 +861,7 @@ class TestEventLoopHandling:
     def test_gemini_creates_event_loop_if_needed(self) -> None:
         """Test Gemini creates event loop when needed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -876,7 +876,7 @@ class TestEventLoopHandling:
     def test_openai_creates_event_loop_if_needed(self) -> None:
         """Test OpenAI creates event loop when needed."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -915,7 +915,7 @@ class TestPromptExtractionEdgeCases:
     def test_bedrock_extract_titan_format(self) -> None:
         """Test Bedrock extracts prompt from Titan format."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -931,7 +931,7 @@ class TestPromptExtractionEdgeCases:
     def test_bedrock_extract_generic_prompt_format(self) -> None:
         """Test Bedrock extracts prompt from generic format."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -947,7 +947,7 @@ class TestPromptExtractionEdgeCases:
     def test_bedrock_invalid_json_body(self) -> None:
         """Test Bedrock handles invalid JSON body gracefully."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -963,7 +963,7 @@ class TestPromptExtractionEdgeCases:
     def test_gemini_extract_from_prompt_kwarg(self) -> None:
         """Test Gemini extracts from prompt kwarg."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -983,7 +983,7 @@ class TestGeminiChatSessionEdgeCases:
     def test_wrap_chat_session_without_async(self) -> None:
         """Test wrapping chat session without async send_message."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -1001,7 +1001,7 @@ class TestGeminiChatSessionEdgeCases:
     def test_gemini_model_without_async_generate(self) -> None:
         """Test wrapping Gemini model without async generate_content."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -1018,7 +1018,7 @@ class TestGeminiChatSessionEdgeCases:
     def test_gemini_model_without_start_chat(self) -> None:
         """Test wrapping Gemini model without start_chat method."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
@@ -1049,7 +1049,7 @@ class TestOllamaAsyncEdgeCases:
     async def test_ollama_async_without_generate_method(self) -> None:
         """Test async wrapping client without generate method."""
         mock_axonflow = MagicMock()
-        mock_axonflow.execute_query = AsyncMock(
+        mock_axonflow.proxy_llm_call = AsyncMock(
             return_value=MagicMock(blocked=False, block_reason=None)
         )
 
