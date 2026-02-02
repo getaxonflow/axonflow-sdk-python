@@ -125,7 +125,7 @@ def wrap_gemini_model(
         # Check with AxonFlow (sync)
         loop = _get_loop()
         response = loop.run_until_complete(
-            axonflow.execute_query(
+            axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",
@@ -152,7 +152,7 @@ def wrap_gemini_model(
             prompt = _extract_prompt(args, kwargs)
 
             # Check with AxonFlow
-            response = await axonflow.execute_query(
+            response = await axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",
@@ -211,7 +211,7 @@ def _wrap_chat_session(
 
         loop = _get_loop()
         response = loop.run_until_complete(
-            axonflow.execute_query(
+            axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",
@@ -236,7 +236,7 @@ def _wrap_chat_session(
         async def async_wrapped_send(content: Any, **kwargs: Any) -> Any:
             prompt = content if isinstance(content, str) else str(content)
 
-            response = await axonflow.execute_query(
+            response = await axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",

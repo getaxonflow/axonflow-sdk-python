@@ -40,7 +40,7 @@ class TestAuthHeadersWithCredentials:
         )
 
         async with client:
-            await client.execute_query(
+            await client.proxy_llm_call(
                 user_token="",
                 query="What is 2+2?",
                 request_type="chat",
@@ -80,7 +80,7 @@ class TestAuthHeadersWithoutCredentials:
         )
 
         async with client:
-            await client.execute_query(
+            await client.proxy_llm_call(
                 user_token="",
                 query="What is 2+2?",
                 request_type="chat",

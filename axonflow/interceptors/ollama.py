@@ -105,7 +105,7 @@ def wrap_ollama_client(
 
             loop = _get_loop()
             response = loop.run_until_complete(
-                axonflow.execute_query(
+                axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
                     request_type="llm_chat",
@@ -134,7 +134,7 @@ def wrap_ollama_client(
 
             loop = _get_loop()
             response = loop.run_until_complete(
-                axonflow.execute_query(
+                axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
                     request_type="llm_chat",
@@ -187,7 +187,7 @@ async def wrap_ollama_client_async(
             prompt = _extract_chat_prompt(kwargs)
             model = kwargs.get("model", "llama2")
 
-            response = await axonflow.execute_query(
+            response = await axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",
@@ -213,7 +213,7 @@ async def wrap_ollama_client_async(
             prompt = kwargs.get("prompt", "")
             model = kwargs.get("model", "llama2")
 
-            response = await axonflow.execute_query(
+            response = await axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",

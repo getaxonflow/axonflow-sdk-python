@@ -49,7 +49,7 @@ async def main():
         client_secret="your-client-secret"
     ) as client:
         # Execute a governed query
-        response = await client.execute_query(
+        response = await client.proxy_llm_call(
             user_token="user-jwt-token",
             query="What is AI governance?",
             request_type="chat"
@@ -69,7 +69,7 @@ with AxonFlow.sync(
     client_id="your-client-id",
     client_secret="your-client-secret"
 ) as client:
-    response = client.execute_query(
+    response = client.proxy_llm_call(
         user_token="user-jwt-token",
         query="What is AI governance?",
         request_type="chat"
@@ -242,7 +242,7 @@ from axonflow.exceptions import (
 )
 
 try:
-    response = await client.execute_query(...)
+    response = await client.proxy_llm_call(...)
 except PolicyViolationError as e:
     print(f"Blocked by policy: {e.block_reason}")
 except RateLimitError as e:
@@ -268,7 +268,7 @@ from axonflow import (
 )
 
 # Full autocomplete and type checking support
-response: ClientResponse = await client.execute_query(...)
+response: ClientResponse = await client.proxy_llm_call(...)
 print(response.success)
 print(response.data)
 print(response.policy_info.policies_evaluated)

@@ -92,7 +92,7 @@ def wrap_openai_client(
             prompt = _extract_prompt(kwargs)
 
             # Check with AxonFlow
-            response = await axonflow.execute_query(
+            response = await axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
                 request_type="llm_chat",
@@ -121,7 +121,7 @@ def wrap_openai_client(
             # Check with AxonFlow (sync)
             loop = _get_loop()
             response = loop.run_until_complete(
-                axonflow.execute_query(
+                axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
                     request_type="llm_chat",

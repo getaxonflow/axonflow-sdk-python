@@ -5,6 +5,22 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - Unreleased
+
+### Breaking Changes
+
+- **Removed `execute_query()`**: Use `proxy_llm_call()` instead (deprecated since v1.7.0). Removed from both `AxonFlow` (async) and `SyncAxonFlow` clients.
+
+### Added
+
+- **`was_redacted()` helper**: Convenience method on `ConnectorResponse` to check if any fields were redacted by PII policies
+
+### Changed
+
+- Updated module docstring examples from `execute_query` to `proxy_llm_call`
+
+---
+
 ## [1.7.1] - 2026-01-25
 
 ### Changed

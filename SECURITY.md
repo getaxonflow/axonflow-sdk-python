@@ -123,7 +123,7 @@ def process_user_query(user_input: str) -> dict:
     sanitized = sanitize_input(user_input)
 
     # Send to AxonFlow
-    result = await client.execute_query("user-token", sanitized, "chat")
+    result = await client.proxy_llm_call("user-token", sanitized, "chat")
     return result
 ```
 
@@ -133,7 +133,7 @@ Never expose sensitive information in error messages:
 
 ```python
 try:
-    result = await client.execute_query(token, query, "chat")
+    result = await client.proxy_llm_call(token, query, "chat")
 except AxonFlowError as e:
     # BAD - Exposes details
     raise Exception(f"query failed with token {token}: {e}")

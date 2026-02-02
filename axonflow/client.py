@@ -8,17 +8,17 @@ Example:
     >>>
     >>> # Async usage (enterprise with authentication)
     >>> async with AxonFlow(endpoint="...", client_id="...", client_secret="...") as client:
-    ...     result = await client.execute_query("user-token", "What is AI?", "chat")
+    ...     result = await client.proxy_llm_call("user-token", "What is AI?", "chat")
     ...     print(result.data)
     >>>
     >>> # Async usage (community/self-hosted - no auth required)
     >>> async with AxonFlow(endpoint="http://localhost:8080") as client:
-    ...     result = await client.execute_query("user-token", "What is AI?", "chat")
+    ...     result = await client.proxy_llm_call("user-token", "What is AI?", "chat")
     ...     print(result.data)
     >>>
     >>> # Sync usage
     >>> client = AxonFlow.sync(endpoint="...", client_id="...", client_secret="...")
-    >>> result = client.execute_query("user-token", "What is AI?", "chat")
+    >>> result = client.proxy_llm_call("user-token", "What is AI?", "chat")
 """
 
 from __future__ import annotations
@@ -30,7 +30,6 @@ import contextlib
 import hashlib
 import os
 import re
-import warnings
 from collections.abc import Coroutine
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -437,11 +436,11 @@ class AxonFlow:
         Example:
             >>> # Enterprise mode with authentication
             >>> client = AxonFlow.sync(endpoint="...", client_id="...", client_secret="...")
-            >>> result = client.execute_query("token", "query", "chat")
+            >>> result = client.proxy_llm_call("token", "query", "chat")
             >>>
             >>> # Community/self-hosted mode (no auth required)
             >>> client = AxonFlow.sync(endpoint="http://localhost:8080")
-            >>> result = client.execute_query("token", "query", "chat")
+            >>> result = client.proxy_llm_call("token", "query", "chat")
         """
         return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
@@ -733,35 +732,6 @@ class AxonFlow:
 
         return response
 
-    async def execute_query(
-        self,
-        user_token: str,
-        query: str,
-        request_type: str,
-        context: dict[str, Any] | None = None,
-    ) -> ClientResponse:
-        """Execute a query through AxonFlow with policy enforcement.
-
-        .. deprecated:: 2.7.0
-            Use :meth:`proxy_llm_call` instead. This method will be removed in v3.0.0.
-
-        Args:
-            user_token: User authentication token
-            query: The query or prompt
-            request_type: Type of request
-            context: Optional additional context
-
-        Returns:
-            ClientResponse with results or error
-        """
-        warnings.warn(
-            "execute_query() is deprecated. Use proxy_llm_call() instead. "
-            "This method will be removed in v3.0.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return await self.proxy_llm_call(user_token, query, request_type, context)
-
     async def list_connectors(self) -> list[ConnectorMetadata]:
         """List all available MCP connectors.
 
@@ -874,7 +844,7 @@ class AxonFlow:
         }
 
         # Execute via the standard request flow
-        client_response = await self.execute_query(
+        client_response = await self.proxy_llm_call(
             user_token=user_token,
             query=operation,
             request_type="mcp-query",
@@ -4845,26 +4815,6 @@ class SyncAxonFlow:
         return self._run_sync(
             self._async_client.proxy_llm_call(user_token, query, request_type, context)
         )
-
-    def execute_query(
-        self,
-        user_token: str,
-        query: str,
-        request_type: str,
-        context: dict[str, Any] | None = None,
-    ) -> ClientResponse:
-        """Execute a query through AxonFlow.
-
-        .. deprecated:: 2.7.0
-            Use :meth:`proxy_llm_call` instead. This method will be removed in v3.0.0.
-        """
-        warnings.warn(
-            "execute_query() is deprecated. Use proxy_llm_call() instead. "
-            "This method will be removed in v3.0.0.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.proxy_llm_call(user_token, query, request_type, context)
 
     def list_connectors(self) -> list[ConnectorMetadata]:
         """List all available MCP connectors."""
