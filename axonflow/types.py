@@ -113,6 +113,11 @@ class PolicyEvaluationInfo(BaseModel):
     tenant_id: str = Field(default="")
     code_artifact: CodeArtifact | None = Field(default=None, description="Code metadata")
 
+    @field_validator("policies_evaluated", "static_checks", mode="before")
+    @classmethod
+    def _coerce_none_to_list(cls, v: object) -> object:
+        return v if v is not None else []
+
 
 class BudgetInfo(BaseModel):
     """Budget enforcement status information (Issue #1082).
