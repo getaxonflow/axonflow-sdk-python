@@ -234,6 +234,8 @@ class DynamicPolicy(BaseModel):
     description: str | None = None
     type: str | None = None  # "risk", "content", "user", "cost"
     category: str | None = None  # "dynamic-risk", "dynamic-compliance", etc.
+    tier: PolicyTier | None = None
+    organization_id: str | None = Field(default=None, alias="organization_id")
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int = 0
@@ -264,10 +266,18 @@ class CreateDynamicPolicyRequest(BaseModel):
     description: str | None = None
     type: str = "risk"  # "risk", "content", "user", "cost"
     category: str = "dynamic-risk"  # Must start with "dynamic-" for dynamic policies
+    tier: PolicyTier = PolicyTier.TENANT
+    organization_id: str | None = Field(
+        default=None,
+        alias="organization_id",
+        description="Organization ID for organization-tier policies",
+    )
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int = 0
     enabled: bool = True
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class UpdateDynamicPolicyRequest(BaseModel):
