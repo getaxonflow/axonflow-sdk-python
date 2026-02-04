@@ -1407,7 +1407,10 @@ class AxonFlow:
         # Wrapped response format (response is dict at this point)
         if not isinstance(response, dict):
             response = {}
-        entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
+        raw_entries = response.get("entries")
+        if not isinstance(raw_entries, list):
+            raw_entries = []
+        entries = [AuditLogEntry.model_validate(e) for e in raw_entries]
         return AuditSearchResponse(
             entries=entries,
             total=response.get("total", len(entries)),
@@ -1475,7 +1478,10 @@ class AxonFlow:
         # Wrapped response format (response is dict at this point)
         if not isinstance(response, dict):
             response = {}
-        entries = [AuditLogEntry.model_validate(e) for e in response.get("entries", [])]
+        raw_entries = response.get("entries")
+        if not isinstance(raw_entries, list):
+            raw_entries = []
+        entries = [AuditLogEntry.model_validate(e) for e in raw_entries]
         return AuditSearchResponse(
             entries=entries,
             total=response.get("total", len(entries)),
@@ -2340,22 +2346,6 @@ class AxonFlow:
     # Execution Replay Methods
     # =========================================================================
 
-    def _get_orchestrator_url(self) -> str:
-        """Get orchestrator URL.
-
-        Note: As of v1.0.0 (ADR-026 Single Entry Point), all routes go through
-        the single endpoint. This method now returns the endpoint directly.
-        """
-        return self._config.endpoint
-
-    def _get_portal_url(self) -> str:
-        """Get portal URL.
-
-        Note: As of v1.0.0 (ADR-026 Single Entry Point), all routes go through
-        the single endpoint. This method now returns the endpoint directly.
-        """
-        return self._config.endpoint
-
     async def login_to_portal(self, org_id: str, password: str) -> dict[str, Any]:
         """Login to Customer Portal and store session cookie.
 
@@ -2372,7 +2362,7 @@ class AxonFlow:
             >>> login = await client.login_to_portal("test-org-001", "test123")
             >>> print(f"Logged in as {login['name']}")
         """
-        base_url = self._get_portal_url()
+        base_url = self._config.endpoint
         url = f"{base_url}/api/v1/auth/login"
 
         try:
@@ -2410,7 +2400,7 @@ class AxonFlow:
         if not self._session_cookie:
             return
 
-        base_url = self._get_portal_url()
+        base_url = self._config.endpoint
         url = f"{base_url}/api/v1/auth/logout"
 
         with contextlib.suppress(httpx.HTTPError):
@@ -2443,7 +2433,7 @@ class AxonFlow:
             msg = "Not logged in to Customer Portal. Call login_to_portal() first."
             raise AuthenticationError(msg)
 
-        base_url = self._get_portal_url()
+        base_url = self._config.endpoint
         url = f"{base_url}{path}"
 
         try:
@@ -2486,7 +2476,7 @@ class AxonFlow:
             msg = "Not logged in to Customer Portal. Call login_to_portal() first."
             raise AuthenticationError(msg)
 
-        base_url = self._get_portal_url()
+        base_url = self._config.endpoint
         url = f"{base_url}{path}"
 
         if self._config.debug:
@@ -2519,7 +2509,7 @@ class AxonFlow:
         json_data: dict[str, Any] | None = None,
     ) -> dict[str, Any] | list[Any] | None:
         """Make HTTP request to Orchestrator."""
-        base_url = self._get_orchestrator_url()
+        base_url = self._config.endpoint
         url = f"{base_url}{path}"
 
         try:

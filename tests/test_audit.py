@@ -168,6 +168,27 @@ class TestSearchAuditLogs:
         assert result.total == 0
 
     @pytest.mark.asyncio
+    async def test_search_handles_null_entries(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test wrapped response with null entries is normalized to empty list."""
+        httpx_mock.add_response(
+            json={
+                "entries": None,
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+
+        result = await client.search_audit_logs()
+
+        assert result.entries == []
+        assert result.total == 0
+
+    @pytest.mark.asyncio
     async def test_search_400_error(
         self,
         client: AxonFlow,
@@ -280,6 +301,27 @@ class TestGetAuditLogsByTenant:
         result = await client.get_audit_logs_by_tenant("tenant-abc")
 
         assert len(result.entries) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_handles_null_entries(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test wrapped response with null entries is normalized to empty list."""
+        httpx_mock.add_response(
+            json={
+                "entries": None,
+                "total": 0,
+                "limit": 50,
+                "offset": 0,
+            }
+        )
+
+        result = await client.get_audit_logs_by_tenant("tenant-abc")
+
+        assert result.entries == []
+        assert result.total == 0
 
     @pytest.mark.asyncio
     async def test_get_404_error(
