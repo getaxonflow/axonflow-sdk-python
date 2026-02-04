@@ -9,11 +9,15 @@ Enterprise AI Governance in 3 Lines of Code.
 
 > **Evaluating AxonFlow in production?** We're opening limited Design Partner slots.
 >
-> Free 30-minute architecture review, incident-readiness review, priority issue triage, roadmap input and early feature access.
+> Free 30-minute architecture and incident-readiness review, priority issue triage, roadmap input, and early feature access.
 >
 > [Apply here](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python) or email [design-partners@getaxonflow.com](mailto:design-partners@getaxonflow.com).
 >
 > No commitment required. We reply within 48 hours.
+
+> **AxonFlow Feedback Week (Feb 5–12, 2026)** — We're shipping 3 improvements from user feedback.
+>
+> [Share feedback](https://github.com/getaxonflow/axonflow/discussions) or email [hello@getaxonflow.com](mailto:hello@getaxonflow.com) for private feedback.
 
 ## How This SDK Fits with AxonFlow
 
