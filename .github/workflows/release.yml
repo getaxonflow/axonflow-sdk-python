@@ -70,4 +70,17 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: dist/*
-          generate_release_notes: true
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## AxonFlow Python SDK ${{ github.ref_name }}
+
+            ### Installation
+
+            ```bash
+            pip install axonflow
+            ```
+
+            ### Changes
+
+            See [CHANGELOG.md](https://github.com/getaxonflow/axonflow-sdk-python/blob/main/CHANGELOG.md) for full release details.
+          generate_release_notes: false

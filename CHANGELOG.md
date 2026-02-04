@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.0] - 2026-02-04
 
+### Fixed
+
+- Improved audit-log read reliability when the API returns empty payloads as `entries: null`.
+- `search_audit_logs()` now normalizes null entries to an empty list.
+- `get_audit_logs_by_tenant()` now normalizes null entries to an empty list.
+
 ### Changed
 
-- Removed internal legacy endpoint helper methods `_get_orchestrator_url()` and `_get_portal_url()` from the async `AxonFlow` client
-- Portal and execution replay requests now directly use the configured `endpoint`, matching ADR-026 Single Entry Point architecture
+- Simplified internal endpoint resolution by removing legacy helper names `_get_orchestrator_url()` and `_get_portal_url()`.
+- Internal portal/orchestrator request construction now uses the configured SDK endpoint directly.
+- No public API change.
 
 ## [3.0.0] - 2026-02-03
 
