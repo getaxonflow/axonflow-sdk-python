@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tier` field on `CreateDynamicPolicyRequest`**: Allows setting the policy tier (`system`, `organization`, `tenant`) when creating dynamic policies. Defaults to `PolicyTier.TENANT` for backward compatibility.
 - **`organization_id` field on `CreateDynamicPolicyRequest`**: Allows specifying the organization ID for organization-tier policies.
 - **`tier` and `organization_id` fields on `DynamicPolicy`**: Response model now includes the policy tier and organization ID when returned by the API.
+- **`tier` and `organization_id` fields on `UpdateDynamicPolicyRequest`**: Allows updating the policy tier and organization ID on existing dynamic policies.
+- **`tier` and `organization_id` filters on `ListDynamicPoliciesOptions`**: Enables filtering dynamic policies by tier and organization ID, matching the existing static policy list filters.
 
 ## [3.1.0] - 2026-02-04
 
