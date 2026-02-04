@@ -95,3 +95,5 @@ WEEK_[0-9]*.md
 *_PLAN.md
 *_SUMMARY.md
 *_COMPLETE.md
+
+.codex/
