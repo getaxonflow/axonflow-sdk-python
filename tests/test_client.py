@@ -1077,6 +1077,7 @@ class TestPortalAuthentication:
         await client.login_to_portal("test", "pass")
         assert client.is_logged_in() is True
 
+
 class TestCodeGovernance:
     """Test Code Governance methods."""
 
