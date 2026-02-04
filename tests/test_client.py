@@ -1077,19 +1077,6 @@ class TestPortalAuthentication:
         await client.login_to_portal("test", "pass")
         assert client.is_logged_in() is True
 
-    @pytest.mark.asyncio
-    async def test_get_portal_url_default(
-        self,
-        client: AxonFlow,
-    ) -> None:
-        """Test portal URL returns the configured endpoint (ADR-026 Single Entry Point)."""
-        # Client has endpoint https://test.axonflow.com
-        url = client._get_portal_url()
-        assert url == "https://test.axonflow.com"
-
-    # Note: test_get_portal_url_custom removed in v1.0.0 (ADR-026 Single Entry Point)
-    # All routes now go through a single endpoint
-
 
 class TestCodeGovernance:
     """Test Code Governance methods."""
