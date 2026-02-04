@@ -7,22 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.1.0] - 2026-02-04
 
-### Changed
-
-- Removed internal legacy endpoint helper names `_get_orchestrator_url()` and `_get_portal_url()` as part of ADR-026 single endpoint cleanup (#1132).
-- Portal and orchestrator-bound request construction now uses the configured `endpoint` directly.
-- No public API break for Python SDK consumers.
-
 ### Fixed
 
-- Hardened audit read response parsing for null-entry payloads returned by live endpoints.
-- Normalized `entries: null` to `entries: []` for audit search and tenant-read responses to prevent downstream validation failures.
-- Added regression tests for null-entry audit payload handling.
+- Improved audit-log read reliability when the API returns empty payloads as `entries: null`.
+- `search_audit_logs()` now normalizes null entries to an empty list.
+- `get_audit_logs_by_tenant()` now normalizes null entries to an empty list.
 
-### Validation
+### Changed
 
-- `python3 -m pytest -o addopts='' tests/test_audit.py tests/test_client.py` passed on the release branch.
-- 3.1.0 audit examples validated end-to-end against local AxonFlow services.
+- Simplified internal endpoint resolution by removing legacy helper names `_get_orchestrator_url()` and `_get_portal_url()`.
+- Internal portal/orchestrator request construction now uses the configured SDK endpoint directly.
+- No public API change.
 
 ## [3.0.0] - 2026-02-03
 
