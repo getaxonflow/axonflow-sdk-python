@@ -17,7 +17,7 @@ Enterprise AI Governance in 3 Lines of Code.
 
 > **AxonFlow Feedback Week (Feb 5–12, 2026)** — We're shipping 3 improvements from user feedback.
 >
-> [Share feedback](https://github.com/getaxonflow/axonflow/discussions) or email [hello@getaxonflow.com](mailto:hello@getaxonflow.com) for private feedback.
+> [Share feedback](https://github.com/getaxonflow/axonflow/discussions/239) or email [hello@getaxonflow.com](mailto:hello@getaxonflow.com) for private feedback.
 
 ## How This SDK Fits with AxonFlow
 
