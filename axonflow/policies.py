@@ -234,6 +234,8 @@ class DynamicPolicy(BaseModel):
     description: str | None = None
     type: str | None = None  # "risk", "content", "user", "cost"
     category: str | None = None  # "dynamic-risk", "dynamic-compliance", etc.
+    tier: PolicyTier | None = None
+    organization_id: str | None = Field(default=None, alias="organization_id")
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int = 0
@@ -246,6 +248,11 @@ class ListDynamicPoliciesOptions(BaseModel):
     """Options for listing dynamic policies."""
 
     type: str | None = None  # Filter by policy type
+    tier: PolicyTier | None = None
+    organization_id: str | None = Field(
+        default=None,
+        description="Filter by organization ID (Enterprise)",
+    )
     enabled: bool | None = None
     limit: int | None = Field(default=None, ge=1)
     offset: int | None = Field(default=None, ge=0)
@@ -264,10 +271,18 @@ class CreateDynamicPolicyRequest(BaseModel):
     description: str | None = None
     type: str = "risk"  # "risk", "content", "user", "cost"
     category: str = "dynamic-risk"  # Must start with "dynamic-" for dynamic policies
+    tier: PolicyTier = PolicyTier.TENANT
+    organization_id: str | None = Field(
+        default=None,
+        alias="organization_id",
+        description="Organization ID for organization-tier policies",
+    )
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int = 0
     enabled: bool = True
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class UpdateDynamicPolicyRequest(BaseModel):
@@ -276,10 +291,18 @@ class UpdateDynamicPolicyRequest(BaseModel):
     For provider restrictions, use action config with "allowed_providers" key.
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str | None = None
     description: str | None = None
     type: str | None = None
     category: str | None = None  # Must start with "dynamic-" if specified
+    tier: PolicyTier | None = None
+    organization_id: str | None = Field(
+        default=None,
+        alias="organization_id",
+        description="Organization ID for organization-tier policies",
+    )
     conditions: list[DynamicPolicyCondition] | None = None
     actions: list[DynamicPolicyAction] | None = None
     priority: int | None = None

@@ -1833,6 +1833,10 @@ class AxonFlow:
         if options:
             if options.type:
                 params.append(f"type={options.type}")
+            if options.tier:
+                params.append(f"tier={options.tier.value}")
+            if options.organization_id:
+                params.append(f"organization_id={options.organization_id}")
             if options.enabled is not None:
                 params.append(f"enabled={str(options.enabled).lower()}")
             if options.limit:
