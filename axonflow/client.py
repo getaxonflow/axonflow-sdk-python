@@ -5234,6 +5234,14 @@ class SyncAxonFlow:
         """List unified executions (both MAP plans and WCP workflows)."""
         return self._run_sync(self._async_client.list_unified_executions(request))
 
+    def cancel_execution(
+        self,
+        execution_id: str,
+        reason: str | None = None,
+    ) -> None:
+        """Cancel a unified execution (MAP plan or WCP workflow)."""
+        return self._run_sync(self._async_client.cancel_execution(execution_id, reason))
+
     # Execution Replay sync wrappers
 
     def list_executions(
