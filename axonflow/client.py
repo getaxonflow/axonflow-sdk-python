@@ -3913,7 +3913,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting execution status", execution_id=execution_id)
 
-        response = await self._orchestrator_request("GET", f"/api/v1/executions/{execution_id}")
+        response = await self._orchestrator_request("GET", f"/api/v1/unified/executions/{execution_id}")
         if not isinstance(response, dict):
             msg = "Unexpected response type from get execution status"
             raise TypeError(msg)
@@ -3969,7 +3969,7 @@ class AxonFlow:
             if options.offset:
                 params.append(f"offset={options.offset}")
 
-        path = "/api/v1/executions"
+        path = "/api/v1/unified/executions"
         if params:
             path = f"{path}?{'&'.join(params)}"
 
@@ -3991,6 +3991,38 @@ class AxonFlow:
             offset=response.get("offset", 0),
             has_more=response.get("has_more", False),
         )
+
+    async def cancel_execution(
+        self,
+        execution_id: str,
+        reason: str | None = None,
+    ) -> None:
+        """Cancel a unified execution (MAP plan or WCP workflow).
+
+        This method cancels an execution via the unified execution API,
+        automatically propagating to the correct subsystem (MAP or WCP).
+
+        Args:
+            execution_id: The execution ID (plan ID or workflow ID)
+            reason: Optional reason for cancellation
+
+        Example:
+            >>> await client.cancel_execution("wf_abc123", "User requested cancellation")
+        """
+        if not execution_id:
+            msg = "Execution ID is required"
+            raise ValueError(msg)
+
+        body = {"reason": reason} if reason else {}
+
+        await self._orchestrator_request(
+            "POST",
+            f"/api/v1/unified/executions/{execution_id}/cancel",
+            json_data=body,
+        )
+
+        if self._config.debug:
+            self._logger.debug("Cancelled execution", execution_id=execution_id)
 
     def _map_execution_status(self, data: dict[str, Any]) -> ExecutionStatus:
         """Map API response to ExecutionStatus."""
