@@ -4022,7 +4022,7 @@ class AxonFlow:
         )
 
         if self._config.debug:
-            self._logger.debug("Cancelled execution", execution_id=execution_id)
+            self._logger.debug("Cancelled execution", execution_id=execution_id, reason=reason)
 
     def _map_execution_status(self, data: dict[str, Any]) -> ExecutionStatus:
         """Map API response to ExecutionStatus."""
