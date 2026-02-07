@@ -3597,9 +3597,7 @@ class AxonFlow:
             if key in kwargs:
                 body[key] = kwargs[key]
 
-        response = await self._request(
-            "PUT", f"/api/v1/webhooks/{webhook_id}", json_data=body
-        )
+        response = await self._request("PUT", f"/api/v1/webhooks/{webhook_id}", json_data=body)
         return WebhookSubscription.model_validate(response)
 
     async def delete_webhook(self, webhook_id: str) -> None:
@@ -3629,9 +3627,7 @@ class AxonFlow:
             msg = "Unexpected response type from list webhooks"
             raise TypeError(msg)
 
-        webhooks = [
-            WebhookSubscription.model_validate(w) for w in response.get("webhooks", [])
-        ]
+        webhooks = [WebhookSubscription.model_validate(w) for w in response.get("webhooks", [])]
 
         return ListWebhooksResponse(
             webhooks=webhooks,
@@ -5689,9 +5685,7 @@ class SyncAxonFlow:
         active: bool = True,
     ) -> WebhookSubscription:
         """Create a webhook subscription."""
-        return self._run_sync(
-            self._async_client.create_webhook(url, events, secret, active)
-        )
+        return self._run_sync(self._async_client.create_webhook(url, events, secret, active))
 
     def get_webhook(self, webhook_id: str) -> WebhookSubscription:
         """Get a webhook subscription by ID."""

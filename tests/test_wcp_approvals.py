@@ -1,4 +1,5 @@
-"""Unit tests for WCP Approval, Plan Rollback, and Webhook CRUD methods."""
+"""Unit tests for WCP Approval, Plan Rollback, Webhook CRUD, WCP Workflow Lifecycle,
+and Unified Execution Tracking methods."""
 
 from __future__ import annotations
 
@@ -8,6 +9,13 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from axonflow import AxonFlow, SyncAxonFlow
+from axonflow.execution import (
+    ExecutionStatus,
+    ExecutionStatusValue,
+    ExecutionType,
+    UnifiedListExecutionsRequest,
+    UnifiedListExecutionsResponse,
+)
 from axonflow.types import (
     ListWebhooksResponse,
     RollbackPlanResponse,
@@ -15,9 +23,21 @@ from axonflow.types import (
 )
 from axonflow.workflow import (
     ApproveStepResponse,
+    CreateWorkflowRequest,
+    CreateWorkflowResponse,
+    GateDecision,
+    ListWorkflowsOptions,
+    ListWorkflowsResponse,
+    MarkStepCompletedRequest,
     PendingApproval,
     PendingApprovalsResponse,
     RejectStepResponse,
+    StepGateRequest,
+    StepGateResponse,
+    StepType,
+    WorkflowSource,
+    WorkflowStatus,
+    WorkflowStatusResponse,
 )
 
 # =========================================================================
@@ -729,18 +749,14 @@ class TestTypeModels:
 
     def test_approve_step_response(self) -> None:
         """Test ApproveStepResponse model."""
-        resp = ApproveStepResponse(
-            workflow_id="wf-1", step_id="step-1", status="approved"
-        )
+        resp = ApproveStepResponse(workflow_id="wf-1", step_id="step-1", status="approved")
         assert resp.workflow_id == "wf-1"
         assert resp.step_id == "step-1"
         assert resp.status == "approved"
 
     def test_reject_step_response(self) -> None:
         """Test RejectStepResponse model."""
-        resp = RejectStepResponse(
-            workflow_id="wf-1", step_id="step-1", status="rejected"
-        )
+        resp = RejectStepResponse(workflow_id="wf-1", step_id="step-1", status="rejected")
         assert resp.workflow_id == "wf-1"
         assert resp.status == "rejected"
 
@@ -818,3 +834,827 @@ class TestTypeModels:
         resp = ListWebhooksResponse(webhooks=[wh], total=1)
         assert len(resp.webhooks) == 1
         assert resp.total == 1
+
+
+# =========================================================================
+# WCP Workflow Lifecycle Tests
+# =========================================================================
+
+
+class TestCreateWorkflow:
+    """Test create_workflow method."""
+
+    @pytest.mark.asyncio
+    async def test_create_workflow(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test creating a new workflow."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows",
+            json={
+                "workflow_id": "wf-abc",
+                "workflow_name": "customer-support",
+                "source": "langgraph",
+                "status": "in_progress",
+                "created_at": "2026-02-07T10:00:00Z",
+            },
+        )
+
+        request = CreateWorkflowRequest(
+            workflow_name="customer-support",
+            source=WorkflowSource.LANGGRAPH,
+            total_steps=3,
+            metadata={"customer_id": "cust-1"},
+        )
+        result = await client.create_workflow(request)
+        assert isinstance(result, CreateWorkflowResponse)
+        assert result.workflow_id == "wf-abc"
+        assert result.workflow_name == "customer-support"
+        assert result.source == WorkflowSource.LANGGRAPH
+        assert result.status == WorkflowStatus.IN_PROGRESS
+
+    @pytest.mark.asyncio
+    async def test_create_workflow_no_source(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test creating a workflow without specifying source."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows",
+            json={
+                "workflow_id": "wf-xyz",
+                "workflow_name": "data-pipeline",
+                "source": "external",
+                "status": "in_progress",
+                "created_at": "2026-02-07T11:00:00Z",
+            },
+        )
+
+        request = CreateWorkflowRequest(workflow_name="data-pipeline")
+        result = await client.create_workflow(request)
+        assert result.workflow_id == "wf-xyz"
+        assert result.source == WorkflowSource.EXTERNAL
+
+
+class TestGetWorkflow:
+    """Test get_workflow method."""
+
+    @pytest.mark.asyncio
+    async def test_get_workflow(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting workflow status."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc",
+            json={
+                "workflow_id": "wf-abc",
+                "workflow_name": "customer-support",
+                "source": "langgraph",
+                "status": "in_progress",
+                "current_step_index": 1,
+                "total_steps": 3,
+                "started_at": "2026-02-07T10:00:00Z",
+                "steps": [
+                    {
+                        "step_id": "step-1",
+                        "step_index": 0,
+                        "step_name": "Fetch Data",
+                        "step_type": "tool_call",
+                        "decision": "allow",
+                        "gate_checked_at": "2026-02-07T10:01:00Z",
+                        "completed_at": "2026-02-07T10:02:00Z",
+                    },
+                ],
+            },
+        )
+
+        result = await client.get_workflow("wf-abc")
+        assert isinstance(result, WorkflowStatusResponse)
+        assert result.workflow_id == "wf-abc"
+        assert result.status == WorkflowStatus.IN_PROGRESS
+        assert result.current_step_index == 1
+        assert len(result.steps) == 1
+        assert result.steps[0].step_id == "step-1"
+        assert result.steps[0].decision == GateDecision.ALLOW
+
+    @pytest.mark.asyncio
+    async def test_get_workflow_no_steps(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting workflow status with no steps yet."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-new",
+            json={
+                "workflow_id": "wf-new",
+                "workflow_name": "new-workflow",
+                "source": "external",
+                "status": "in_progress",
+                "current_step_index": 0,
+                "started_at": "2026-02-07T10:00:00Z",
+            },
+        )
+
+        result = await client.get_workflow("wf-new")
+        assert result.steps == []
+        assert result.current_step_index == 0
+
+
+class TestStepGate:
+    """Test step_gate method."""
+
+    @pytest.mark.asyncio
+    async def test_step_gate_allow(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test step gate returning allow decision."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/steps/step-1/gate",
+            json={
+                "decision": "allow",
+                "step_id": "step-1",
+                "reason": None,
+                "policy_ids": [],
+            },
+        )
+
+        request = StepGateRequest(
+            step_name="Generate Response",
+            step_type=StepType.LLM_CALL,
+            model="gpt-4",
+            provider="openai",
+        )
+        result = await client.step_gate("wf-abc", "step-1", request)
+        assert isinstance(result, StepGateResponse)
+        assert result.decision == GateDecision.ALLOW
+        assert result.step_id == "step-1"
+        assert result.is_allowed() is True
+        assert result.is_blocked() is False
+
+    @pytest.mark.asyncio
+    async def test_step_gate_block(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test step gate returning block decision."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/steps/step-2/gate",
+            json={
+                "decision": "block",
+                "step_id": "step-2",
+                "reason": "PII detected in step input",
+                "policy_ids": ["pii-ssn", "pii-email"],
+            },
+        )
+
+        request = StepGateRequest(
+            step_name="Delete Records",
+            step_type=StepType.TOOL_CALL,
+        )
+        result = await client.step_gate("wf-abc", "step-2", request)
+        assert result.decision == GateDecision.BLOCK
+        assert result.reason == "PII detected in step input"
+        assert len(result.policy_ids) == 2
+        assert result.is_blocked() is True
+
+    @pytest.mark.asyncio
+    async def test_step_gate_require_approval(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test step gate returning require_approval decision."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/steps/step-3/gate",
+            json={
+                "decision": "require_approval",
+                "step_id": "step-3",
+                "reason": "High-risk operation requires approval",
+                "policy_ids": ["high-risk-ops"],
+                "approval_url": "https://portal.axonflow.com/approve/step-3",
+            },
+        )
+
+        request = StepGateRequest(
+            step_name="Execute SQL",
+            step_type=StepType.CONNECTOR_CALL,
+        )
+        result = await client.step_gate("wf-abc", "step-3", request)
+        assert result.decision == GateDecision.REQUIRE_APPROVAL
+        assert result.requires_approval() is True
+        assert result.approval_url == "https://portal.axonflow.com/approve/step-3"
+
+
+class TestMarkStepCompleted:
+    """Test mark_step_completed method."""
+
+    @pytest.mark.asyncio
+    async def test_mark_step_completed(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test marking a step as completed with output."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/steps/step-1/complete",
+            status_code=204,
+        )
+
+        request = MarkStepCompletedRequest(
+            output={"result": "Data fetched successfully"},
+            metadata={"duration_ms": 150},
+        )
+        # Should not raise
+        await client.mark_step_completed("wf-abc", "step-1", request)
+
+    @pytest.mark.asyncio
+    async def test_mark_step_completed_no_request(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test marking a step as completed without output."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/steps/step-2/complete",
+            status_code=204,
+        )
+
+        await client.mark_step_completed("wf-abc", "step-2")
+
+
+class TestCompleteWorkflow:
+    """Test complete_workflow method."""
+
+    @pytest.mark.asyncio
+    async def test_complete_workflow(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test completing a workflow."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/complete",
+            status_code=204,
+        )
+
+        await client.complete_workflow("wf-abc")
+
+
+class TestAbortWorkflow:
+    """Test abort_workflow method."""
+
+    @pytest.mark.asyncio
+    async def test_abort_workflow_with_reason(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test aborting a workflow with a reason."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/abort",
+            status_code=204,
+        )
+
+        await client.abort_workflow("wf-abc", reason="User cancelled")
+
+    @pytest.mark.asyncio
+    async def test_abort_workflow_no_reason(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test aborting a workflow without a reason."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/abort",
+            status_code=204,
+        )
+
+        await client.abort_workflow("wf-abc")
+
+
+class TestResumeWorkflow:
+    """Test resume_workflow method."""
+
+    @pytest.mark.asyncio
+    async def test_resume_workflow(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test resuming a workflow after approval."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows/wf-abc/resume",
+            status_code=204,
+        )
+
+        await client.resume_workflow("wf-abc")
+
+
+class TestListWorkflows:
+    """Test list_workflows method."""
+
+    @pytest.mark.asyncio
+    async def test_list_workflows(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing workflows with no filters."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows",
+            json={
+                "workflows": [
+                    {
+                        "workflow_id": "wf-1",
+                        "workflow_name": "wf-one",
+                        "source": "langgraph",
+                        "status": "in_progress",
+                        "current_step_index": 0,
+                        "started_at": "2026-02-07T10:00:00Z",
+                    },
+                ],
+                "total": 1,
+            },
+        )
+
+        result = await client.list_workflows()
+        assert isinstance(result, ListWorkflowsResponse)
+        assert result.total == 1
+        assert len(result.workflows) == 1
+        assert result.workflows[0].workflow_id == "wf-1"
+
+    @pytest.mark.asyncio
+    async def test_list_workflows_with_filters(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing workflows with status and source filters."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/workflows?status=in_progress&source=langgraph&limit=10&offset=5",
+            json={
+                "workflows": [],
+                "total": 0,
+            },
+        )
+
+        options = ListWorkflowsOptions(
+            status=WorkflowStatus.IN_PROGRESS,
+            source=WorkflowSource.LANGGRAPH,
+            limit=10,
+            offset=5,
+        )
+        result = await client.list_workflows(options)
+        assert result.total == 0
+        assert result.workflows == []
+
+
+# =========================================================================
+# Unified Execution Tracking Tests
+# =========================================================================
+
+
+class TestGetExecutionStatus:
+    """Test get_execution_status method."""
+
+    @pytest.mark.asyncio
+    async def test_get_execution_status(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting unified execution status."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/unified/executions/exec-123",
+            json={
+                "execution_id": "exec-123",
+                "execution_type": "wcp_workflow",
+                "name": "customer-support",
+                "source": "langgraph",
+                "status": "running",
+                "current_step_index": 1,
+                "total_steps": 3,
+                "progress_percent": 33.3,
+                "started_at": "2026-02-07T10:00:00Z",
+                "duration": "2m30s",
+                "steps": [
+                    {
+                        "step_id": "step-1",
+                        "step_index": 0,
+                        "step_name": "Fetch Data",
+                        "step_type": "tool_call",
+                        "status": "completed",
+                        "started_at": "2026-02-07T10:00:00Z",
+                        "ended_at": "2026-02-07T10:01:00Z",
+                        "duration": "1m0s",
+                        "decision": "allow",
+                        "policies_matched": [],
+                        "model": "gpt-4",
+                        "provider": "openai",
+                        "cost_usd": 0.05,
+                        "output": {"result": "ok"},
+                    },
+                    {
+                        "step_id": "step-2",
+                        "step_index": 1,
+                        "step_name": "Generate Response",
+                        "step_type": "llm_call",
+                        "status": "running",
+                        "started_at": "2026-02-07T10:01:00Z",
+                        "decision": "allow",
+                        "policies_matched": [],
+                    },
+                ],
+                "tenant_id": "tenant-1",
+                "org_id": "org-1",
+                "user_id": "user-1",
+                "client_id": "client-1",
+                "metadata": {"key": "value"},
+                "created_at": "2026-02-07T10:00:00Z",
+                "updated_at": "2026-02-07T10:02:30Z",
+            },
+        )
+
+        result = await client.get_execution_status("exec-123")
+        assert isinstance(result, ExecutionStatus)
+        assert result.execution_id == "exec-123"
+        assert result.execution_type == ExecutionType.WCP_WORKFLOW
+        assert result.name == "customer-support"
+        assert result.status == ExecutionStatusValue.RUNNING
+        assert result.progress_percent == 33.3
+        assert len(result.steps) == 2
+        assert result.steps[0].step_name == "Fetch Data"
+        assert result.steps[0].cost_usd == 0.05
+        assert result.steps[1].step_name == "Generate Response"
+        assert result.tenant_id == "tenant-1"
+        assert result.is_wcp_workflow() is True
+        assert result.is_map_plan() is False
+
+    @pytest.mark.asyncio
+    async def test_get_execution_status_completed(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test getting completed execution status with approval fields."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/unified/executions/exec-456",
+            json={
+                "execution_id": "exec-456",
+                "execution_type": "map_plan",
+                "name": "data-analysis",
+                "status": "completed",
+                "current_step_index": 2,
+                "total_steps": 2,
+                "progress_percent": 100.0,
+                "started_at": "2026-02-07T09:00:00Z",
+                "completed_at": "2026-02-07T09:30:00Z",
+                "duration": "30m0s",
+                "estimated_cost_usd": 0.50,
+                "actual_cost_usd": 0.45,
+                "steps": [
+                    {
+                        "step_id": "s-1",
+                        "step_index": 0,
+                        "step_name": "Query DB",
+                        "step_type": "connector_call",
+                        "status": "completed",
+                        "started_at": "2026-02-07T09:00:00Z",
+                        "ended_at": "2026-02-07T09:10:00Z",
+                        "decision": "require_approval",
+                        "decision_reason": "High-risk query",
+                        "approval_status": "approved",
+                        "approved_by": "admin@example.com",
+                        "approved_at": "2026-02-07T09:05:00Z",
+                        "result_summary": "Fetched 1000 rows",
+                    },
+                ],
+                "metadata": {},
+                "created_at": "2026-02-07T09:00:00Z",
+                "updated_at": "2026-02-07T09:30:00Z",
+            },
+        )
+
+        result = await client.get_execution_status("exec-456")
+        assert result.execution_type == ExecutionType.MAP_PLAN
+        assert result.status == ExecutionStatusValue.COMPLETED
+        assert result.actual_cost_usd == 0.45
+        assert result.is_map_plan() is True
+        assert result.steps[0].approval_status is not None
+        assert result.steps[0].approved_by == "admin@example.com"
+        assert result.steps[0].result_summary == "Fetched 1000 rows"
+
+    @pytest.mark.asyncio
+    async def test_get_execution_status_empty_id(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test get_execution_status with empty ID raises ValueError."""
+        with pytest.raises(ValueError, match="Execution ID is required"):
+            await client.get_execution_status("")
+
+
+class TestListUnifiedExecutions:
+    """Test list_unified_executions method."""
+
+    @pytest.mark.asyncio
+    async def test_list_unified_executions(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing unified executions with no filters."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/unified/executions",
+            json={
+                "executions": [
+                    {
+                        "execution_id": "exec-1",
+                        "execution_type": "wcp_workflow",
+                        "name": "wf-one",
+                        "status": "running",
+                        "started_at": "2026-02-07T10:00:00Z",
+                        "created_at": "2026-02-07T10:00:00Z",
+                        "updated_at": "2026-02-07T10:05:00Z",
+                    },
+                ],
+                "total": 1,
+                "limit": 50,
+                "offset": 0,
+                "has_more": False,
+            },
+        )
+
+        result = await client.list_unified_executions()
+        assert isinstance(result, UnifiedListExecutionsResponse)
+        assert result.total == 1
+        assert len(result.executions) == 1
+        assert result.executions[0].execution_id == "exec-1"
+        assert result.has_more is False
+
+    @pytest.mark.asyncio
+    async def test_list_unified_executions_with_filters(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test listing unified executions with filters."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/unified/executions?execution_type=wcp_workflow&status=running&tenant_id=t1&org_id=o1&limit=10&offset=5",
+            json={
+                "executions": [],
+                "total": 0,
+                "limit": 10,
+                "offset": 5,
+                "has_more": False,
+            },
+        )
+
+        options = UnifiedListExecutionsRequest(
+            execution_type=ExecutionType.WCP_WORKFLOW,
+            status=ExecutionStatusValue.RUNNING,
+            tenant_id="t1",
+            org_id="o1",
+            limit=10,
+            offset=5,
+        )
+        result = await client.list_unified_executions(options)
+        assert result.total == 0
+        assert result.limit == 10
+        assert result.offset == 5
+
+
+class TestCancelExecution:
+    """Test cancel_execution method."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_with_reason(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test cancelling an execution with a reason."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/unified/executions/exec-123/cancel",
+            status_code=204,
+        )
+
+        await client.cancel_execution("exec-123", reason="No longer needed")
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_no_reason(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test cancelling an execution without a reason."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/unified/executions/exec-456/cancel",
+            status_code=204,
+        )
+
+        await client.cancel_execution("exec-456")
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_empty_id(
+        self,
+        client: AxonFlow,
+    ) -> None:
+        """Test cancel_execution with empty ID raises ValueError."""
+        with pytest.raises(ValueError, match="Execution ID is required"):
+            await client.cancel_execution("")
+
+
+# =========================================================================
+# Sync Wrapper Tests for WCP Workflow + Unified Execution
+# =========================================================================
+
+
+class TestSyncWorkflowWrappers:
+    """Test sync wrappers for WCP workflow lifecycle methods."""
+
+    def test_sync_create_workflow(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync create_workflow wrapper."""
+        httpx_mock.add_response(
+            json={
+                "workflow_id": "wf-sync",
+                "workflow_name": "sync-wf",
+                "source": "external",
+                "status": "in_progress",
+                "created_at": "2026-02-07T10:00:00Z",
+            },
+        )
+
+        request = CreateWorkflowRequest(workflow_name="sync-wf")
+        result = sync_client.create_workflow(request)
+        assert isinstance(result, CreateWorkflowResponse)
+        assert result.workflow_id == "wf-sync"
+
+    def test_sync_get_workflow(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync get_workflow wrapper."""
+        httpx_mock.add_response(
+            json={
+                "workflow_id": "wf-sync",
+                "workflow_name": "sync-wf",
+                "source": "external",
+                "status": "in_progress",
+                "current_step_index": 0,
+                "started_at": "2026-02-07T10:00:00Z",
+            },
+        )
+
+        result = sync_client.get_workflow("wf-sync")
+        assert isinstance(result, WorkflowStatusResponse)
+        assert result.workflow_id == "wf-sync"
+
+    def test_sync_step_gate(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync step_gate wrapper."""
+        httpx_mock.add_response(
+            json={
+                "decision": "allow",
+                "step_id": "step-1",
+                "policy_ids": [],
+            },
+        )
+
+        request = StepGateRequest(
+            step_name="Test Step",
+            step_type=StepType.LLM_CALL,
+        )
+        result = sync_client.step_gate("wf-sync", "step-1", request)
+        assert isinstance(result, StepGateResponse)
+        assert result.decision == GateDecision.ALLOW
+
+    def test_sync_mark_step_completed(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync mark_step_completed wrapper."""
+        httpx_mock.add_response(status_code=204)
+
+        sync_client.mark_step_completed("wf-sync", "step-1")
+
+    def test_sync_complete_workflow(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync complete_workflow wrapper."""
+        httpx_mock.add_response(status_code=204)
+
+        sync_client.complete_workflow("wf-sync")
+
+    def test_sync_abort_workflow(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync abort_workflow wrapper."""
+        httpx_mock.add_response(status_code=204)
+
+        sync_client.abort_workflow("wf-sync", reason="Cancelled")
+
+    def test_sync_resume_workflow(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync resume_workflow wrapper."""
+        httpx_mock.add_response(status_code=204)
+
+        sync_client.resume_workflow("wf-sync")
+
+    def test_sync_list_workflows(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync list_workflows wrapper."""
+        httpx_mock.add_response(
+            json={
+                "workflows": [],
+                "total": 0,
+            },
+        )
+
+        result = sync_client.list_workflows()
+        assert isinstance(result, ListWorkflowsResponse)
+        assert result.total == 0
+
+
+class TestSyncUnifiedExecutionWrappers:
+    """Test sync wrappers for unified execution methods."""
+
+    def test_sync_get_execution_status(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync get_execution_status wrapper."""
+        httpx_mock.add_response(
+            json={
+                "execution_id": "exec-sync",
+                "execution_type": "wcp_workflow",
+                "name": "sync-exec",
+                "status": "running",
+                "started_at": "2026-02-07T10:00:00Z",
+                "created_at": "2026-02-07T10:00:00Z",
+                "updated_at": "2026-02-07T10:05:00Z",
+            },
+        )
+
+        result = sync_client.get_execution_status("exec-sync")
+        assert isinstance(result, ExecutionStatus)
+        assert result.execution_id == "exec-sync"
+
+    def test_sync_list_unified_executions(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync list_unified_executions wrapper."""
+        httpx_mock.add_response(
+            json={
+                "executions": [],
+                "total": 0,
+                "limit": 50,
+                "offset": 0,
+                "has_more": False,
+            },
+        )
+
+        result = sync_client.list_unified_executions()
+        assert isinstance(result, UnifiedListExecutionsResponse)
+        assert result.total == 0
+
+    def test_sync_cancel_execution(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync cancel_execution wrapper."""
+        httpx_mock.add_response(status_code=204)
+
+        sync_client.cancel_execution("exec-sync", reason="Done")
