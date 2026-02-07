@@ -149,6 +149,22 @@ class ClientResponse(BaseModel):
     policy_info: PolicyEvaluationInfo | None = Field(default=None)
     budget_info: BudgetInfo | None = Field(default=None, description="Budget status (Issue #1082)")
 
+    def model_post_init(self, __context: Any) -> None:
+        """Detect nested data.success=false and surface error."""
+        if isinstance(self.data, dict):
+            data_success = self.data.get("success")
+            if data_success is False:
+                data_error = self.data.get("error")
+                if data_error and not self.error:
+                    object.__setattr__(self, "error", str(data_error))
+                object.__setattr__(self, "success", False)
+            if not self.result and isinstance(self.data.get("result"), str):
+                object.__setattr__(self, "result", self.data["result"])
+            if not self.plan_id and isinstance(self.data.get("plan_id"), str):
+                object.__setattr__(self, "plan_id", self.data["plan_id"])
+            if not self.metadata and isinstance(self.data.get("metadata"), dict):
+                object.__setattr__(self, "metadata", self.data["metadata"])
+
 
 class ConnectorMetadata(BaseModel):
     """MCP connector metadata."""
@@ -348,6 +364,81 @@ class PlanExecutionResponse(BaseModel):
     policy_info: PolicyEvaluationResult | None = Field(
         default=None, description="Policy evaluation result for the plan execution"
     )
+
+
+class ExecutionMode(str, Enum):
+    """MAP plan execution mode.
+
+    Controls how plan steps are scheduled and executed.
+    """
+
+    AUTO = "auto"
+    SEQUENTIAL = "sequential"
+    PARALLEL = "parallel"
+    BALANCED = "balanced"
+    CONFIRM = "confirm"
+    STEP = "step"
+
+
+class CancelPlanResponse(BaseModel):
+    """Response from cancelling a running plan."""
+
+    plan_id: str = Field(..., description="ID of the cancelled plan")
+    status: str = Field(..., description="Plan status after cancellation")
+    message: str = Field(..., description="Cancellation confirmation message")
+
+
+class UpdatePlanRequest(BaseModel):
+    """Request to update a plan with optimistic concurrency control.
+
+    The expected_version field enables optimistic locking: the update
+    will only succeed if the plan's current version matches.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    expected_version: int = Field(..., alias="version", description="Expected current version for optimistic locking")
+    execution_mode: ExecutionMode | None = Field(
+        default=None, description="New execution mode for the plan"
+    )
+    domain: str | None = Field(default=None, description="New domain for the plan")
+
+
+class UpdatePlanResponse(BaseModel):
+    """Response from updating a plan."""
+
+    plan_id: str = Field(..., description="ID of the updated plan")
+    version: int = Field(..., description="New version number after update")
+    status: str = Field(..., description="Plan status after update")
+    success: bool = Field(..., description="Whether the update succeeded")
+
+
+class PlanVersionEntry(BaseModel):
+    """A single entry in a plan's version history."""
+
+    version: int = Field(..., description="Version number")
+    changed_at: str = Field(..., description="ISO timestamp of the change")
+    change_type: str = Field(..., description="Type of change (created, updated, etc.)")
+    changed_by: str | None = Field(default=None, description="User or system that made the change")
+    change_summary: str | None = Field(default=None, description="Human-readable summary of changes")
+
+
+class PlanVersionsResponse(BaseModel):
+    """Response containing a plan's version history."""
+
+    plan_id: str = Field(..., description="ID of the plan")
+    versions: list[PlanVersionEntry] = Field(
+        default_factory=list, description="Version history entries"
+    )
+
+
+class ResumePlanResponse(BaseModel):
+    """Response from resuming a paused plan."""
+
+    plan_id: str = Field(..., description="ID of the resumed plan")
+    status: str = Field(..., description="Plan status after resume")
+    approved: bool = Field(..., description="Whether the resume was approved")
+    message: str = Field(..., description="Resume confirmation message")
 
 
 # Gateway Mode Types
@@ -828,3 +919,42 @@ class PricingListResponse(BaseModel):
     """Response containing pricing information."""
 
     pricing: list[PricingInfo] = Field(default_factory=list)
+
+
+# =========================================================================
+# Plan Rollback Types (Feature 7)
+# =========================================================================
+
+
+class RollbackPlanResponse(BaseModel):
+    """Response from rolling back a plan to a previous version."""
+
+    plan_id: str = Field(..., description="ID of the plan")
+    version: int = Field(..., description="Version after rollback")
+    previous_version: int = Field(..., description="Version before rollback")
+    status: str = Field(..., description="Plan status after rollback")
+
+
+# =========================================================================
+# Webhook Types (Feature 7)
+# =========================================================================
+
+
+class WebhookSubscription(BaseModel):
+    """A webhook subscription."""
+
+    id: str = Field(..., description="Webhook subscription ID")
+    url: str = Field(..., description="Webhook URL")
+    events: list[str] = Field(default_factory=list, description="Events to subscribe to")
+    active: bool = Field(default=True, description="Whether the webhook is active")
+    created_at: str = Field(..., description="When the webhook was created")
+    updated_at: str = Field(..., description="When the webhook was last updated")
+
+
+class ListWebhooksResponse(BaseModel):
+    """Response containing a list of webhooks."""
+
+    webhooks: list[WebhookSubscription] = Field(
+        default_factory=list, description="List of webhook subscriptions"
+    )
+    total: int = Field(default=0, ge=0, description="Total count of webhooks")

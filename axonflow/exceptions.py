@@ -133,3 +133,32 @@ class PlanExecutionError(AxonFlowError):
         )
         self.plan_id = plan_id
         self.step = step
+
+
+class VersionConflictError(AxonFlowError):
+    """Plan version conflict (HTTP 409).
+
+    Raised when an update_plan request fails due to optimistic concurrency
+    control — the plan was modified since the expected_version was read.
+    """
+
+    def __init__(
+        self,
+        plan_id: str,
+        expected_version: int,
+        current_version: int | None = None,
+    ) -> None:
+        msg = f"Version conflict for plan {plan_id}: expected version {expected_version}"
+        if current_version is not None:
+            msg += f", current version {current_version}"
+        super().__init__(
+            msg,
+            details={
+                "plan_id": plan_id,
+                "expected_version": expected_version,
+                "current_version": current_version,
+            },
+        )
+        self.plan_id = plan_id
+        self.expected_version = expected_version
+        self.current_version = current_version

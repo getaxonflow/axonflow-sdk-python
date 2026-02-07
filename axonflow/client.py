@@ -79,6 +79,7 @@ from axonflow.exceptions import (
     ConnectorError,
     PolicyViolationError,
     TimeoutError,
+    VersionConflictError,
 )
 from axonflow.execution import (
     ExecutionStatus,
@@ -123,6 +124,7 @@ from axonflow.types import (
     BudgetsResponse,
     BudgetStatus,
     CacheConfig,
+    CancelPlanResponse,
     ClientRequest,
     ClientResponse,
     ConnectorHealthStatus,
@@ -133,35 +135,47 @@ from axonflow.types import (
     CreateBudgetRequest,
     ExecutionDetail,
     ExecutionExportOptions,
+    ExecutionMode,
     ExecutionSnapshot,
     ListBudgetsOptions,
     ListExecutionsOptions,
     ListExecutionsResponse,
     ListUsageRecordsOptions,
+    ListWebhooksResponse,
     Mode,
     PlanExecutionResponse,
     PlanResponse,
     PlanStep,
+    PlanVersionsResponse,
     PolicyApprovalResult,
     PricingInfo,
     PricingListResponse,
     RateLimitInfo,
+    ResumePlanResponse,
     RetryConfig,
+    RollbackPlanResponse,
     TimelineEntry,
     TokenUsage,
     UpdateBudgetRequest,
+    UpdatePlanRequest,
+    UpdatePlanResponse,
     UsageBreakdown,
     UsageRecordsResponse,
     UsageSummary,
+    WebhookSubscription,
 )
 from axonflow.workflow import (
     ApprovalStatus,
+    ApproveStepResponse,
     CreateWorkflowRequest,
     CreateWorkflowResponse,
     GateDecision,
     ListWorkflowsOptions,
     ListWorkflowsResponse,
     MarkStepCompletedRequest,
+    PendingApproval,
+    PendingApprovalsResponse,
+    RejectStepResponse,
     StepGateRequest,
     StepGateResponse,
     StepType,
@@ -609,6 +623,13 @@ class AxonFlow:
                     policy=policy,
                     block_reason=body.get("block_reason"),
                 ) from e
+            if e.response.status_code == 409:  # noqa: PLR2004
+                body = e.response.json()
+                raise VersionConflictError(
+                    plan_id=body.get("plan_id", ""),
+                    expected_version=body.get("expected_version", 0),
+                    current_version=body.get("current_version"),
+                ) from e
             msg = f"HTTP {e.response.status_code}: {e.response.text}"
             raise AxonFlowError(msg) from e
 
@@ -964,6 +985,7 @@ class AxonFlow:
         query: str,
         domain: str | None = None,
         user_token: str | None = None,
+        execution_mode: ExecutionMode | None = None,
     ) -> PlanResponse:
         """Generate a multi-agent execution plan.
 
@@ -971,6 +993,7 @@ class AxonFlow:
             query: Natural language query describing the task
             domain: Optional domain hint (travel, healthcare, etc.)
             user_token: Optional user token for authentication (defaults to client_id)
+            execution_mode: Optional execution mode (auto, sequential, parallel, etc.)
 
         Returns:
             PlanResponse with generated plan
@@ -979,7 +1002,11 @@ class AxonFlow:
             This uses map_timeout (default 120s) as MAP operations involve
             multiple LLM calls and can take 30-60+ seconds.
         """
-        context = {"domain": domain} if domain else {}
+        context: dict[str, Any] = {}
+        if domain:
+            context["domain"] = domain
+        if execution_mode is not None:
+            context["execution_mode"] = execution_mode.value
 
         request = ClientRequest(
             query=query,
@@ -1104,6 +1131,98 @@ class AxonFlow:
         """
         response = await self._request("GET", f"/api/v1/plan/{plan_id}")
         return PlanExecutionResponse.model_validate(response)
+
+    async def cancel_plan(
+        self,
+        plan_id: str,
+        reason: str | None = None,
+    ) -> CancelPlanResponse:
+        """Cancel a running plan.
+
+        Args:
+            plan_id: ID of the plan to cancel
+            reason: Optional reason for cancellation
+
+        Returns:
+            CancelPlanResponse with cancellation confirmation
+        """
+        json_data: dict[str, Any] = {}
+        if reason is not None:
+            json_data["reason"] = reason
+
+        response = await self._map_request(
+            "POST",
+            f"/api/v1/plan/{plan_id}/cancel",
+            json_data=json_data if json_data else None,
+        )
+        return CancelPlanResponse.model_validate(response)
+
+    async def update_plan(
+        self,
+        plan_id: str,
+        request: UpdatePlanRequest,
+    ) -> UpdatePlanResponse:
+        """Update a plan with optimistic concurrency control.
+
+        Args:
+            plan_id: ID of the plan to update
+            request: Update request with expected_version for optimistic locking
+
+        Returns:
+            UpdatePlanResponse with updated plan info
+
+        Raises:
+            VersionConflictError: If the plan was modified since expected_version
+        """
+        json_data: dict[str, Any] = {"version": request.expected_version}
+        if request.execution_mode is not None:
+            json_data["execution_mode"] = request.execution_mode.value
+        if request.domain is not None:
+            json_data["domain"] = request.domain
+
+        response = await self._map_request(
+            "PUT",
+            f"/api/v1/plan/{plan_id}",
+            json_data=json_data,
+        )
+        return UpdatePlanResponse.model_validate(response)
+
+    async def get_plan_versions(self, plan_id: str) -> PlanVersionsResponse:
+        """Get version history of a plan.
+
+        Args:
+            plan_id: ID of the plan
+
+        Returns:
+            PlanVersionsResponse with version history entries
+        """
+        response = await self._request("GET", f"/api/v1/plan/{plan_id}/versions")
+        return PlanVersionsResponse.model_validate(response)
+
+    async def resume_plan(
+        self,
+        plan_id: str,
+        approved: bool | None = None,
+    ) -> ResumePlanResponse:
+        """Resume a paused plan.
+
+        Args:
+            plan_id: ID of the plan to resume
+            approved: Whether the resume is approved (defaults to True if None)
+
+        Returns:
+            ResumePlanResponse with resume confirmation
+        """
+        json_data: dict[str, Any] = {
+            "approved": approved if approved is not None else True,
+        }
+
+        response = await self._map_request(
+            "POST",
+            f"/api/v1/plan/{plan_id}/resume",
+            json_data=json_data,
+        )
+        return ResumePlanResponse.model_validate(response)
 
     # =========================================================================
     # Gateway Mode Methods
@@ -3249,6 +3368,276 @@ class AxonFlow:
         )
 
     # =========================================================================
+    # WCP Approval Methods (Feature 5)
+    # =========================================================================
+
+    async def approve_step(
+        self,
+        workflow_id: str,
+        step_id: str,
+    ) -> ApproveStepResponse:
+        """Approve a workflow step that requires human approval.
+
+        Call this to approve a step that received a ``require_approval`` gate decision.
+
+        Args:
+            workflow_id: Workflow ID
+            step_id: Step ID to approve
+
+        Returns:
+            ApproveStepResponse with approval confirmation
+
+        Example:
+            >>> result = await client.approve_step("wf_123", "step-1")
+            >>> print(f"Step {result.step_id} status: {result.status}")
+        """
+        response = await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflow-control/{workflow_id}/steps/{step_id}/approve",
+            json_data={},
+        )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from approve step"
+            raise TypeError(msg)
+
+        return ApproveStepResponse(
+            workflow_id=response.get("workflow_id", workflow_id),
+            step_id=response.get("step_id", step_id),
+            status=response["status"],
+        )
+
+    async def reject_step(
+        self,
+        workflow_id: str,
+        step_id: str,
+        reason: str = "",
+    ) -> RejectStepResponse:
+        """Reject a workflow step that requires human approval.
+
+        Call this to reject a step that received a ``require_approval`` gate decision.
+
+        Args:
+            workflow_id: Workflow ID
+            step_id: Step ID to reject
+            reason: Optional reason for rejection
+
+        Returns:
+            RejectStepResponse with rejection confirmation
+
+        Example:
+            >>> result = await client.reject_step("wf_123", "step-1", reason="Unsafe operation")
+            >>> print(f"Step {result.step_id} status: {result.status}")
+        """
+        body: dict[str, Any] = {}
+        if reason:
+            body["reason"] = reason
+
+        response = await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflow-control/{workflow_id}/steps/{step_id}/reject",
+            json_data=body,
+        )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from reject step"
+            raise TypeError(msg)
+
+        return RejectStepResponse(
+            workflow_id=response.get("workflow_id", workflow_id),
+            step_id=response.get("step_id", step_id),
+            status=response["status"],
+        )
+
+    async def get_pending_approvals(
+        self,
+        limit: int = 20,
+    ) -> PendingApprovalsResponse:
+        """Get all pending approvals across workflows.
+
+        Args:
+            limit: Maximum number of pending approvals to return (default: 20)
+
+        Returns:
+            PendingApprovalsResponse with list of pending approvals
+
+        Example:
+            >>> result = await client.get_pending_approvals(limit=10)
+            >>> for approval in result.approvals:
+            ...     print(f"{approval.workflow_name}/{approval.step_name}: pending since {approval.created_at}")
+        """
+        path = f"/api/v1/workflow-control/pending-approvals?limit={limit}"
+
+        response = await self._orchestrator_request("GET", path)
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from get pending approvals"
+            raise TypeError(msg)
+
+        approvals = [
+            PendingApproval(
+                workflow_id=a["workflow_id"],
+                workflow_name=a["workflow_name"],
+                step_id=a["step_id"],
+                step_name=a["step_name"],
+                step_type=a["step_type"],
+                created_at=a["created_at"],
+            )
+            for a in response.get("approvals", [])
+        ]
+
+        return PendingApprovalsResponse(
+            approvals=approvals,
+            total=response.get("total", len(approvals)),
+        )
+
+    # =========================================================================
+    # Plan Rollback (Feature 7)
+    # =========================================================================
+
+    async def rollback_plan(
+        self,
+        plan_id: str,
+        target_version: int,
+    ) -> RollbackPlanResponse:
+        """Rollback a plan to a previous version.
+
+        Args:
+            plan_id: ID of the plan to rollback
+            target_version: Version number to rollback to
+
+        Returns:
+            RollbackPlanResponse with rollback confirmation
+
+        Example:
+            >>> result = await client.rollback_plan("plan-123", target_version=2)
+            >>> print(f"Rolled back to version {result.version}")
+        """
+        response = await self._map_request(
+            "POST",
+            f"/api/v1/plan/{plan_id}/rollback/{target_version}",
+        )
+        return RollbackPlanResponse.model_validate(response)
+
+    # =========================================================================
+    # Webhook CRUD (Feature 7)
+    # =========================================================================
+
+    async def create_webhook(
+        self,
+        url: str,
+        events: list[str],
+        secret: str = "",
+        active: bool = True,
+    ) -> WebhookSubscription:
+        """Create a webhook subscription.
+
+        Args:
+            url: Webhook URL to receive events
+            events: List of event types to subscribe to
+            secret: Optional shared secret for webhook signature verification
+            active: Whether the webhook is active (default: True)
+
+        Returns:
+            Created WebhookSubscription
+
+        Example:
+            >>> webhook = await client.create_webhook(
+            ...     url="https://example.com/webhooks",
+            ...     events=["workflow.completed", "step.approval_required"],
+            ...     secret="my-secret",
+            ... )
+            >>> print(f"Webhook created: {webhook.id}")
+        """
+        body: dict[str, Any] = {
+            "url": url,
+            "events": events,
+            "active": active,
+        }
+        if secret:
+            body["secret"] = secret
+
+        response = await self._request("POST", "/api/v1/webhooks", json_data=body)
+        return WebhookSubscription.model_validate(response)
+
+    async def get_webhook(self, webhook_id: str) -> WebhookSubscription:
+        """Get a webhook subscription by ID.
+
+        Args:
+            webhook_id: Webhook subscription ID
+
+        Returns:
+            WebhookSubscription details
+
+        Example:
+            >>> webhook = await client.get_webhook("wh-123")
+            >>> print(f"Webhook {webhook.id}: {webhook.url}")
+        """
+        response = await self._request("GET", f"/api/v1/webhooks/{webhook_id}")
+        return WebhookSubscription.model_validate(response)
+
+    async def update_webhook(
+        self,
+        webhook_id: str,
+        **kwargs: Any,
+    ) -> WebhookSubscription:
+        """Update a webhook subscription.
+
+        Args:
+            webhook_id: Webhook subscription ID
+            **kwargs: Fields to update (url, events, secret, active)
+
+        Returns:
+            Updated WebhookSubscription
+
+        Example:
+            >>> webhook = await client.update_webhook("wh-123", active=False)
+            >>> print(f"Webhook active: {webhook.active}")
+        """
+        body: dict[str, Any] = {}
+        for key in ("url", "events", "secret", "active"):
+            if key in kwargs:
+                body[key] = kwargs[key]
+
+        response = await self._request(
+            "PUT", f"/api/v1/webhooks/{webhook_id}", json_data=body
+        )
+        return WebhookSubscription.model_validate(response)
+
+    async def delete_webhook(self, webhook_id: str) -> None:
+        """Delete a webhook subscription.
+
+        Args:
+            webhook_id: Webhook subscription ID
+
+        Example:
+            >>> await client.delete_webhook("wh-123")
+        """
+        await self._request("DELETE", f"/api/v1/webhooks/{webhook_id}")
+
+    async def list_webhooks(self) -> ListWebhooksResponse:
+        """List all webhook subscriptions.
+
+        Returns:
+            ListWebhooksResponse with all webhook subscriptions
+
+        Example:
+            >>> result = await client.list_webhooks()
+            >>> for wh in result.webhooks:
+            ...     print(f"{wh.id}: {wh.url} ({len(wh.events)} events)")
+        """
+        response = await self._request("GET", "/api/v1/webhooks")
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from list webhooks"
+            raise TypeError(msg)
+
+        webhooks = [
+            WebhookSubscription.model_validate(w) for w in response.get("webhooks", [])
+        ]
+
+        return ListWebhooksResponse(
+            webhooks=webhooks,
+            total=response.get("total", len(webhooks)),
+        )
+
+    # =========================================================================
     # MAS FEAT COMPLIANCE (Enterprise)
     # =========================================================================
 
@@ -4903,9 +5292,12 @@ class SyncAxonFlow:
         query: str,
         domain: str | None = None,
         user_token: str | None = None,
+        execution_mode: ExecutionMode | None = None,
     ) -> PlanResponse:
         """Generate a multi-agent execution plan."""
-        return self._run_sync(self._async_client.generate_plan(query, domain, user_token))
+        return self._run_sync(
+            self._async_client.generate_plan(query, domain, user_token, execution_mode)
+        )
 
     def execute_plan(
         self,
@@ -4918,6 +5310,34 @@ class SyncAxonFlow:
     def get_plan_status(self, plan_id: str) -> PlanExecutionResponse:
         """Get status of a running or completed plan."""
         return self._run_sync(self._async_client.get_plan_status(plan_id))
+
+    def cancel_plan(
+        self,
+        plan_id: str,
+        reason: str | None = None,
+    ) -> CancelPlanResponse:
+        """Cancel a running plan."""
+        return self._run_sync(self._async_client.cancel_plan(plan_id, reason))
+
+    def update_plan(
+        self,
+        plan_id: str,
+        request: UpdatePlanRequest,
+    ) -> UpdatePlanResponse:
+        """Update a plan with optimistic concurrency control."""
+        return self._run_sync(self._async_client.update_plan(plan_id, request))
+
+    def get_plan_versions(self, plan_id: str) -> PlanVersionsResponse:
+        """Get version history of a plan."""
+        return self._run_sync(self._async_client.get_plan_versions(plan_id))
+
+    def resume_plan(
+        self,
+        plan_id: str,
+        approved: bool | None = None,
+    ) -> ResumePlanResponse:
+        """Resume a paused plan."""
+        return self._run_sync(self._async_client.resume_plan(plan_id, approved))
 
     # Gateway Mode sync wrappers
 
@@ -5220,6 +5640,76 @@ class SyncAxonFlow:
     ) -> ListWorkflowsResponse:
         """List workflows with optional filtering."""
         return self._run_sync(self._async_client.list_workflows(options))
+
+    # WCP Approval sync wrappers (Feature 5)
+
+    def approve_step(
+        self,
+        workflow_id: str,
+        step_id: str,
+    ) -> ApproveStepResponse:
+        """Approve a workflow step that requires human approval."""
+        return self._run_sync(self._async_client.approve_step(workflow_id, step_id))
+
+    def reject_step(
+        self,
+        workflow_id: str,
+        step_id: str,
+        reason: str = "",
+    ) -> RejectStepResponse:
+        """Reject a workflow step that requires human approval."""
+        return self._run_sync(self._async_client.reject_step(workflow_id, step_id, reason))
+
+    def get_pending_approvals(
+        self,
+        limit: int = 20,
+    ) -> PendingApprovalsResponse:
+        """Get all pending approvals across workflows."""
+        return self._run_sync(self._async_client.get_pending_approvals(limit))
+
+    # Plan Rollback sync wrapper (Feature 7)
+
+    def rollback_plan(
+        self,
+        plan_id: str,
+        target_version: int,
+    ) -> RollbackPlanResponse:
+        """Rollback a plan to a previous version."""
+        return self._run_sync(self._async_client.rollback_plan(plan_id, target_version))
+
+    # Webhook CRUD sync wrappers (Feature 7)
+
+    def create_webhook(
+        self,
+        url: str,
+        events: list[str],
+        secret: str = "",
+        active: bool = True,
+    ) -> WebhookSubscription:
+        """Create a webhook subscription."""
+        return self._run_sync(
+            self._async_client.create_webhook(url, events, secret, active)
+        )
+
+    def get_webhook(self, webhook_id: str) -> WebhookSubscription:
+        """Get a webhook subscription by ID."""
+        return self._run_sync(self._async_client.get_webhook(webhook_id))
+
+    def update_webhook(
+        self,
+        webhook_id: str,
+        **kwargs: Any,
+    ) -> WebhookSubscription:
+        """Update a webhook subscription."""
+        return self._run_sync(self._async_client.update_webhook(webhook_id, **kwargs))
+
+    def delete_webhook(self, webhook_id: str) -> None:
+        """Delete a webhook subscription."""
+        return self._run_sync(self._async_client.delete_webhook(webhook_id))
+
+    def list_webhooks(self) -> ListWebhooksResponse:
+        """List all webhook subscriptions."""
+        return self._run_sync(self._async_client.list_webhooks())
 
     # Unified Execution Tracking sync wrappers
 
