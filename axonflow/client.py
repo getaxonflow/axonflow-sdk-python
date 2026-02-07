@@ -3577,13 +3577,22 @@ class AxonFlow:
     async def update_webhook(
         self,
         webhook_id: str,
-        **kwargs: Any,
+        *,
+        url: str | None = None,
+        events: list[str] | None = None,
+        secret: str | None = None,
+        active: bool | None = None,
+        description: str | None = None,
     ) -> WebhookSubscription:
         """Update a webhook subscription.
 
         Args:
             webhook_id: Webhook subscription ID
-            **kwargs: Fields to update (url, events, secret, active)
+            url: New webhook URL
+            events: New list of event types to subscribe to
+            secret: New shared secret for webhook signature verification
+            active: Whether the webhook is active
+            description: Webhook description
 
         Returns:
             Updated WebhookSubscription
@@ -3593,9 +3602,16 @@ class AxonFlow:
             >>> print(f"Webhook active: {webhook.active}")
         """
         body: dict[str, Any] = {}
-        for key in ("url", "events", "secret", "active"):
-            if key in kwargs:
-                body[key] = kwargs[key]
+        if url is not None:
+            body["url"] = url
+        if events is not None:
+            body["events"] = events
+        if secret is not None:
+            body["secret"] = secret
+        if active is not None:
+            body["active"] = active
+        if description is not None:
+            body["description"] = description
 
         response = await self._request("PUT", f"/api/v1/webhooks/{webhook_id}", json_data=body)
         return WebhookSubscription.model_validate(response)
@@ -5691,10 +5707,24 @@ class SyncAxonFlow:
     def update_webhook(
         self,
         webhook_id: str,
-        **kwargs: Any,
+        *,
+        url: str | None = None,
+        events: list[str] | None = None,
+        secret: str | None = None,
+        active: bool | None = None,
+        description: str | None = None,
     ) -> WebhookSubscription:
         """Update a webhook subscription."""
-        return self._run_sync(self._async_client.update_webhook(webhook_id, **kwargs))
+        return self._run_sync(
+            self._async_client.update_webhook(
+                webhook_id,
+                url=url,
+                events=events,
+                secret=secret,
+                active=active,
+                description=description,
+            )
+        )
 
     def delete_webhook(self, webhook_id: str) -> None:
         """Delete a webhook subscription."""
