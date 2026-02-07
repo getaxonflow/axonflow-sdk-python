@@ -3623,9 +3623,6 @@ class AxonFlow:
             ...     print(f"{wh.id}: {wh.url} ({len(wh.events)} events)")
         """
         response = await self._request("GET", "/api/v1/webhooks")
-        if not isinstance(response, dict):
-            msg = "Unexpected response type from list webhooks"
-            raise TypeError(msg)
 
         webhooks = [WebhookSubscription.model_validate(w) for w in response.get("webhooks", [])]
 
