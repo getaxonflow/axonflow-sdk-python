@@ -397,7 +397,11 @@ class UpdatePlanRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    expected_version: int = Field(..., alias="version", description="Expected current version for optimistic locking")
+    expected_version: int = Field(
+        ...,
+        alias="version",
+        description="Expected current version for optimistic locking",
+    )
     execution_mode: ExecutionMode | None = Field(
         default=None, description="New execution mode for the plan"
     )
@@ -419,8 +423,14 @@ class PlanVersionEntry(BaseModel):
     version: int = Field(..., description="Version number")
     changed_at: str = Field(..., description="ISO timestamp of the change")
     change_type: str = Field(..., description="Type of change (created, updated, etc.)")
-    changed_by: str | None = Field(default=None, description="User or system that made the change")
-    change_summary: str | None = Field(default=None, description="Human-readable summary of changes")
+    changed_by: str | None = Field(
+        default=None,
+        description="User or system that made the change",
+    )
+    change_summary: str | None = Field(
+        default=None,
+        description="Human-readable summary of changes",
+    )
 
 
 class PlanVersionsResponse(BaseModel):

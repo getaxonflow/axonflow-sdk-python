@@ -3462,7 +3462,8 @@ class AxonFlow:
         Example:
             >>> result = await client.get_pending_approvals(limit=10)
             >>> for approval in result.approvals:
-            ...     print(f"{approval.workflow_name}/{approval.step_name}: pending since {approval.created_at}")
+            ...     print(f"{approval.workflow_name}/{approval.step_name}: "
+            ...           f"pending since {approval.created_at}")
         """
         path = f"/api/v1/workflow-control/pending-approvals?limit={limit}"
 
@@ -4302,7 +4303,8 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting execution status", execution_id=execution_id)
 
-        response = await self._orchestrator_request("GET", f"/api/v1/unified/executions/{execution_id}")
+        path = f"/api/v1/unified/executions/{execution_id}"
+        response = await self._orchestrator_request("GET", path)
         if not isinstance(response, dict):
             msg = "Unexpected response type from get execution status"
             raise TypeError(msg)
