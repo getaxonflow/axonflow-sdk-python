@@ -28,9 +28,10 @@ import base64
 import concurrent.futures
 import contextlib
 import hashlib
+import json
 import os
 import re
-from collections.abc import Coroutine
+from collections.abc import AsyncIterator, Coroutine, Iterator
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -4424,6 +4425,136 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Cancelled execution", execution_id=execution_id, reason=reason)
 
+    async def stream_execution_status(
+        self,
+        execution_id: str,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[ExecutionStatus]:
+        """Stream real-time execution status updates via Server-Sent Events (SSE).
+
+        Connects to GET /api/v1/executions/{execution_id}/stream and yields
+        ExecutionStatus objects as they arrive. The stream ends when a terminal
+        status is received (completed, failed, cancelled, aborted, expired)
+        or when the connection is closed.
+
+        Args:
+            execution_id: The execution ID to stream updates for
+            timeout: Optional overall timeout in seconds for the stream connection.
+                     Defaults to None (no timeout, stream runs until terminal status).
+
+        Yields:
+            ExecutionStatus objects with real-time progress updates
+
+        Raises:
+            ValueError: If execution_id is empty
+            ConnectionError: If unable to connect to the SSE endpoint
+            TimeoutError: If the stream times out
+
+        Example:
+            >>> async for status in client.stream_execution_status('exec_123'):
+            ...     print(f"Status: {status.status}, Progress: {status.progress_percent}%")
+            ...     if status.is_terminal():
+            ...         print(f"Execution finished: {status.status}")
+        """
+        if not execution_id:
+            msg = "Execution ID is required"
+            raise ValueError(msg)
+
+        url = f"{self._config.endpoint}/api/v1/executions/{execution_id}/stream"
+
+        # Build headers for SSE
+        headers = dict(self._http_client.headers)
+        headers["Accept"] = "text/event-stream"
+        headers["Cache-Control"] = "no-cache"
+
+        stream_timeout = httpx.Timeout(
+            timeout if timeout is not None else None,
+            connect=30.0,
+        )
+
+        if self._config.debug:
+            self._logger.debug(
+                "Connecting to execution stream",
+                execution_id=execution_id,
+                url=url,
+            )
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=stream_timeout,
+                verify=not self._config.insecure_skip_verify,
+                headers=headers,
+            ) as stream_client:
+                async with stream_client.stream("GET", url) as response:
+                    if response.status_code != 200:  # noqa: PLR2004
+                        await response.aread()
+                        msg = (
+                            f"SSE stream connection failed: "
+                            f"HTTP {response.status_code} for execution {execution_id}"
+                        )
+                        raise AxonFlowError(msg)
+
+                    buffer = ""
+                    async for chunk in response.aiter_text():
+                        buffer += chunk
+
+                        # Process complete SSE events (delimited by double newline)
+                        while "\n\n" in buffer:
+                            event_text, buffer = buffer.split("\n\n", 1)
+
+                            for line in event_text.split("\n"):
+                                line = line.strip()
+
+                                # Skip empty lines and SSE comments
+                                if not line or line.startswith(":"):
+                                    continue
+
+                                # Parse "data: {json}" lines
+                                if line.startswith("data: "):
+                                    data_str = line[6:]
+                                elif line.startswith("data:"):
+                                    data_str = line[5:]
+                                else:
+                                    continue
+
+                                data_str = data_str.strip()
+                                if not data_str:
+                                    continue
+
+                                try:
+                                    data = json.loads(data_str)
+                                except json.JSONDecodeError:
+                                    if self._config.debug:
+                                        self._logger.warning(
+                                            "SSE: failed to parse status event",
+                                            data=data_str[:200],
+                                        )
+                                    continue
+
+                                status = self._map_execution_status(data)
+
+                                if self._config.debug:
+                                    self._logger.debug(
+                                        "SSE: execution status update",
+                                        execution_id=execution_id,
+                                        status=status.status.value,
+                                        progress=status.progress_percent,
+                                    )
+
+                                yield status
+
+                                # Stop if terminal status reached
+                                if status.is_terminal():
+                                    return
+
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to execution stream: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Execution stream timed out: {e}"
+            raise TimeoutError(msg) from e
+
     def _map_execution_status(self, data: dict[str, Any]) -> ExecutionStatus:
         """Map API response to ExecutionStatus."""
         steps = []
@@ -5754,6 +5885,40 @@ class SyncAxonFlow:
     ) -> None:
         """Cancel a unified execution (MAP plan or WCP workflow)."""
         return self._run_sync(self._async_client.cancel_execution(execution_id, reason))
+
+    def stream_execution_status(
+        self,
+        execution_id: str,
+        *,
+        timeout: float | None = None,
+    ) -> Iterator[ExecutionStatus]:
+        """Stream real-time execution status updates via SSE (synchronous).
+
+        Connects to the SSE streaming endpoint and yields ExecutionStatus objects
+        as they arrive. The stream ends when a terminal status is received.
+
+        Args:
+            execution_id: The execution ID to stream updates for
+            timeout: Optional overall timeout in seconds
+
+        Yields:
+            ExecutionStatus objects with real-time progress updates
+
+        Example:
+            >>> for status in client.stream_execution_status('exec_123'):
+            ...     print(f"Status: {status.status}, Progress: {status.progress_percent}%")
+        """
+
+        async def _collect() -> list[ExecutionStatus]:
+            results: list[ExecutionStatus] = []
+            async for status in self._async_client.stream_execution_status(
+                execution_id, timeout=timeout
+            ):
+                results.append(status)
+            return results
+
+        results = self._run_sync(_collect())
+        yield from results
 
     # Execution Replay sync wrappers
 
