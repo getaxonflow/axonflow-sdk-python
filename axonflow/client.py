@@ -4481,72 +4481,52 @@ class AxonFlow:
             )
 
         try:
-            async with httpx.AsyncClient(
-                timeout=stream_timeout,
-                verify=not self._config.insecure_skip_verify,
-                headers=headers,
-            ) as stream_client:
-                async with stream_client.stream("GET", url) as response:
-                    if response.status_code != 200:  # noqa: PLR2004
-                        await response.aread()
-                        msg = (
-                            f"SSE stream connection failed: "
-                            f"HTTP {response.status_code} for execution {execution_id}"
-                        )
-                        raise AxonFlowError(msg)
+            async with (
+                httpx.AsyncClient(
+                    timeout=stream_timeout,
+                    verify=not self._config.insecure_skip_verify,
+                    headers=headers,
+                ) as stream_client,
+                stream_client.stream("GET", url) as response,
+            ):
+                if response.status_code != 200:  # noqa: PLR2004
+                    await response.aread()
+                    msg = (
+                        f"SSE stream connection failed: "
+                        f"HTTP {response.status_code} for execution {execution_id}"
+                    )
+                    raise AxonFlowError(msg)
 
-                    buffer = ""
-                    async for chunk in response.aiter_text():
-                        buffer += chunk
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
 
-                        # Process complete SSE events (delimited by double newline)
-                        while "\n\n" in buffer:
-                            event_text, buffer = buffer.split("\n\n", 1)
+                    # Process complete SSE events (delimited by double newline)
+                    while "\n\n" in buffer:
+                        event_text, buffer = buffer.split("\n\n", 1)
 
-                            for line in event_text.split("\n"):
-                                line = line.strip()
+                        for line in event_text.split("\n"):
+                            stripped = line.strip()
 
-                                # Skip empty lines and SSE comments
-                                if not line or line.startswith(":"):
-                                    continue
+                            data = self._parse_sse_line(stripped)
+                            if data is None:
+                                continue
 
-                                # Parse "data: {json}" lines
-                                if line.startswith("data: "):
-                                    data_str = line[6:]
-                                elif line.startswith("data:"):
-                                    data_str = line[5:]
-                                else:
-                                    continue
+                            status = self._map_execution_status(data)
 
-                                data_str = data_str.strip()
-                                if not data_str:
-                                    continue
+                            if self._config.debug:
+                                self._logger.debug(
+                                    "SSE: execution status update",
+                                    execution_id=execution_id,
+                                    status=status.status.value,
+                                    progress=status.progress_percent,
+                                )
 
-                                try:
-                                    data = json.loads(data_str)
-                                except json.JSONDecodeError:
-                                    if self._config.debug:
-                                        self._logger.warning(
-                                            "SSE: failed to parse status event",
-                                            data=data_str[:200],
-                                        )
-                                    continue
+                            yield status
 
-                                status = self._map_execution_status(data)
-
-                                if self._config.debug:
-                                    self._logger.debug(
-                                        "SSE: execution status update",
-                                        execution_id=execution_id,
-                                        status=status.status.value,
-                                        progress=status.progress_percent,
-                                    )
-
-                                yield status
-
-                                # Stop if terminal status reached
-                                if status.is_terminal():
-                                    return
+                            # Stop if terminal status reached
+                            if status.is_terminal():
+                                return
 
         except httpx.ConnectError as e:
             msg = f"Failed to connect to execution stream: {e}"
@@ -4554,6 +4534,36 @@ class AxonFlow:
         except httpx.TimeoutException as e:
             msg = f"Execution stream timed out: {e}"
             raise TimeoutError(msg) from e
+
+    def _parse_sse_line(self, line: str) -> dict[str, Any] | None:
+        """Parse a single SSE line and return the decoded JSON data, or None."""
+        # Skip empty lines and SSE comments
+        if not line or line.startswith(":"):
+            return None
+
+        # Parse "data: {json}" lines
+        if line.startswith("data: "):
+            data_str = line[6:]
+        elif line.startswith("data:"):
+            data_str = line[5:]
+        else:
+            return None
+
+        data_str = data_str.strip()
+        if not data_str:
+            return None
+
+        try:
+            parsed: dict[str, Any] = json.loads(data_str)
+        except json.JSONDecodeError:
+            if self._config.debug:
+                self._logger.warning(
+                    "SSE: failed to parse status event",
+                    data=data_str[:200],
+                )
+            return None
+        else:
+            return parsed
 
     def _map_execution_status(self, data: dict[str, Any]) -> ExecutionStatus:
         """Map API response to ExecutionStatus."""
