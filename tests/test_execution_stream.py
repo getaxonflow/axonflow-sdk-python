@@ -122,11 +122,7 @@ class TestStreamExecutionStatus:
         event = _make_execution_event(status="completed", progress_percent=100.0)
 
         # Include comments and empty lines in the SSE stream
-        sse_body = (
-            ": keep-alive\n\n"
-            "\n\n"
-            f"data: {json.dumps(event)}\n\n"
-        )
+        sse_body = f": keep-alive\n\n\n\ndata: {json.dumps(event)}\n\n"
 
         httpx_mock.add_response(
             url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
@@ -150,10 +146,7 @@ class TestStreamExecutionStatus:
         """Test that invalid JSON events are skipped without error."""
         valid_event = _make_execution_event(status="completed", progress_percent=100.0)
 
-        sse_body = (
-            "data: {invalid json}\n\n"
-            f"data: {json.dumps(valid_event)}\n\n"
-        )
+        sse_body = f"data: {{invalid json}}\n\ndata: {json.dumps(valid_event)}\n\n"
 
         httpx_mock.add_response(
             url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
