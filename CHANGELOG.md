@@ -5,6 +5,46 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0]
+
+### Added
+
+- **WCP Approval Gates** (Issue #1169): HITL approval and rejection for workflow steps
+  - `approve_step(workflow_id, step_id)` - Approve a pending workflow step
+  - `reject_step(workflow_id, step_id, reason=None)` - Reject a step with optional reason
+  - `get_pending_approvals(limit=20)` - List steps awaiting human approval
+
+- **MAP Plan Cancellation** (Issue #1072): Cancel running multi-agent plans
+  - `cancel_plan(plan_id, reason=None)` - Cancel a plan with optional reason
+
+- **MAP Plan Update** (Issue #1072): Modify plan configuration before or during execution
+  - `update_plan(plan_id, **kwargs)` - Update execution mode, domain, or version
+
+- **MAP Plan Versioning and Rollback** (Issue #1072): Version history and rollback support
+  - `get_plan_versions(plan_id)` - List plan version history
+  - `rollback_plan(plan_id, version)` - Rollback to a previous version (raises on 409 conflict)
+  - New types in response: `RollbackPlanResponse`, `PlanVersion`
+
+- **Webhook Subscriptions** (Issue #1169): Event notification management
+  - `create_webhook(url, events, **kwargs)` - Create a webhook subscription
+  - `list_webhooks()` - List active webhook subscriptions
+  - `get_webhook(webhook_id)` - Get webhook details
+  - `update_webhook(webhook_id, *, url=None, events=None, secret=None, active=None, description=None)` - Update webhook with typed parameters
+  - `delete_webhook(webhook_id)` - Delete a webhook subscription
+  - Available on both `AxonFlow` (async) and `SyncAxonFlow` (sync) clients
+
+- **Unified Execution Cancellation** (EPIC #1074): Cancel running executions across both MAP and WCP subsystems
+  - `cancel_execution(execution_id, reason=None)` - Cancel a unified execution via `POST /api/v1/unified/executions/{id}/cancel`
+  - Available on both `AxonFlow` (async) and `SyncAxonFlow` (sync) clients
+  - Propagates to MAP `cancel_plan()` or WCP `abort_workflow()` based on execution type
+
+### Fixed
+
+- **Unified execution API URLs** (EPIC #1074): `get_execution_status()` and `list_unified_executions()` now use correct `/api/v1/unified/executions` path (was incorrectly pointing to `/api/v1/executions` which is the Execution Replay API)
+- **`update_webhook` typed parameters**: Replaced `**kwargs` with explicit keyword-only arguments for type safety
+
+---
+
 ## [3.2.0] - 2026-02-05
 
 ### Added

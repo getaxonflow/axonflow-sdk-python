@@ -228,3 +228,44 @@ class PolicyMatch(BaseModel):
     policy_name: str = Field(..., description="Policy name")
     action: str = Field(..., description="Action taken by the policy")
     reason: str | None = Field(default=None, description="Reason for the match")
+
+
+# =========================================================================
+# WCP Approval Types (Feature 5)
+# =========================================================================
+
+
+class ApproveStepResponse(BaseModel):
+    """Response from approving a workflow step."""
+
+    workflow_id: str = Field(..., description="Workflow ID")
+    step_id: str = Field(..., description="Step ID that was approved")
+    status: str = Field(..., description="Approval status")
+
+
+class RejectStepResponse(BaseModel):
+    """Response from rejecting a workflow step."""
+
+    workflow_id: str = Field(..., description="Workflow ID")
+    step_id: str = Field(..., description="Step ID that was rejected")
+    status: str = Field(..., description="Rejection status")
+
+
+class PendingApproval(BaseModel):
+    """A pending approval for a workflow step."""
+
+    workflow_id: str = Field(..., description="Workflow ID")
+    workflow_name: str = Field(..., description="Workflow name")
+    step_id: str = Field(..., description="Step ID awaiting approval")
+    step_name: str = Field(..., description="Step name")
+    step_type: str = Field(..., description="Step type")
+    created_at: str = Field(..., description="When the approval was requested")
+
+
+class PendingApprovalsResponse(BaseModel):
+    """Response containing pending approvals."""
+
+    approvals: list[PendingApproval] = Field(
+        default_factory=list, description="List of pending approvals"
+    )
+    total: int = Field(default=0, ge=0, description="Total count of pending approvals")
