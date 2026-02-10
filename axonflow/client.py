@@ -78,6 +78,7 @@ from axonflow.exceptions import (
     BudgetExceededError,
     ConnectionError,
     ConnectorError,
+    PlanExecutionError,
     PolicyViolationError,
     TimeoutError,
     VersionConflictError,
@@ -702,8 +703,16 @@ class AxonFlow:
         if not user_token:
             user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
 
-        # Check cache
-        if self._cache is not None:
+        # Plan operations are mutations and must not be cached
+        is_mutation = request_type in (
+            "execute-plan",
+            "generate-plan",
+            "cancel-plan",
+            "update-plan",
+        )
+
+        # Check cache (skip for mutations)
+        if self._cache is not None and not is_mutation:
             cache_key = self._get_cache_key(request_type, query, user_token)
             if cache_key in self._cache:
                 if self._config.debug:
@@ -748,8 +757,8 @@ class AxonFlow:
                 block_reason=response.block_reason,
             )
 
-        # Cache successful responses
-        if self._cache is not None and response.success and cache_key:
+        # Cache successful responses (skip mutations — plan operations)
+        if self._cache is not None and response.success and cache_key and not is_mutation:
             self._cache[cache_key] = response
 
         return response
@@ -1112,9 +1121,36 @@ class AxonFlow:
 
         response = ClientResponse.model_validate(response_data)
 
+        # Check for nested failure: server returns HTTP 200 with data.success=false
+        # (e.g., "Plan has been cancelled") — the outer success may still be true
+        if (
+            response.data
+            and isinstance(response.data, dict)
+            and response.data.get("success") is False
+        ):
+            error_msg = response.data.get("error", "Plan execution failed")
+            raise PlanExecutionError(
+                message=error_msg,
+                plan_id=plan_id,
+            )
+
+        # Determine status from response data (e.g., "awaiting_approval" for confirm mode)
+        # Priority: data.status > metadata.status > success-based default
+        status = None
+        workflow_id = None
+        if response.data and isinstance(response.data, dict):
+            status = response.data.get("status")
+            if wf_id := response.data.get("workflow_id"):
+                workflow_id = wf_id
+        if not status and response.metadata:
+            status = response.metadata.get("status")
+        if not status:
+            status = "completed" if response.success else "failed"
+
         return PlanExecutionResponse(
             plan_id=plan_id,
-            status="completed" if response.success else "failed",
+            status=status,
+            workflow_id=workflow_id,
             result=response.result,
             step_results=response.metadata.get("step_results", {}),
             error=response.error,

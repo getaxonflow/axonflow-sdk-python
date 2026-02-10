@@ -356,7 +356,8 @@ class PlanExecutionResponse(BaseModel):
     """Plan execution result."""
 
     plan_id: str
-    status: str  # "running", "completed", "failed"
+    status: str  # "running", "completed", "failed", "awaiting_approval"
+    workflow_id: str | None = None  # WCP workflow ID for confirm/step mode
     result: str | None = None
     step_results: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
@@ -446,9 +447,14 @@ class ResumePlanResponse(BaseModel):
     """Response from resuming a paused plan."""
 
     plan_id: str = Field(..., description="ID of the resumed plan")
+    workflow_id: str | None = Field(default=None, description="WCP workflow ID")
     status: str = Field(..., description="Plan status after resume")
-    approved: bool = Field(..., description="Whether the resume was approved")
-    message: str = Field(..., description="Resume confirmation message")
+    approved: bool | None = Field(default=None, description="Whether the resume was approved")
+    message: str | None = Field(default=None, description="Resume confirmation message")
+    step_result: dict[str, Any] | None = Field(default=None, description="Result of executed step")
+    next_step: int | None = Field(default=None, description="Next step index")
+    next_step_name: str | None = Field(default=None, description="Next step name")
+    total_steps: int | None = Field(default=None, description="Total number of steps")
 
 
 # Gateway Mode Types

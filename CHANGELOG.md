@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`execute_plan` status hardcoded**: `execute_plan()` always returned `status="completed"` regardless of actual server response. Now reads status from response (`data.status` > `metadata.status` > default), correctly surfacing `awaiting_approval` for WCP confirm mode.
 - **Unified execution API URLs** (EPIC #1074): `get_execution_status()` and `list_unified_executions()` now use correct `/api/v1/unified/executions` path (was incorrectly pointing to `/api/v1/executions` which is the Execution Replay API)
 - **`update_webhook` typed parameters**: Replaced `**kwargs` with explicit keyword-only arguments for type safety
 
