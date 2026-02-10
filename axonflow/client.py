@@ -78,6 +78,7 @@ from axonflow.exceptions import (
     BudgetExceededError,
     ConnectionError,
     ConnectorError,
+    PlanExecutionError,
     PolicyViolationError,
     TimeoutError,
     VersionConflictError,
@@ -1119,6 +1120,16 @@ class AxonFlow:
         )
 
         response = ClientResponse.model_validate(response_data)
+
+        # Check for nested failure: server returns HTTP 200 with data.success=false
+        # (e.g., "Plan has been cancelled") — the outer success may still be true
+        if response.data and isinstance(response.data, dict):
+            if response.data.get("success") is False:
+                error_msg = response.data.get("error", "Plan execution failed")
+                raise PlanExecutionError(
+                    message=error_msg,
+                    plan_id=plan_id,
+                )
 
         # Determine status from response data (e.g., "awaiting_approval" for confirm mode)
         status = "completed" if response.success else "failed"
