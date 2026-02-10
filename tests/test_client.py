@@ -13,6 +13,7 @@ from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
     ConnectorError,
+    PlanExecutionError,
     PolicyViolationError,
 )
 
@@ -530,6 +531,128 @@ class TestPlanning:
 
         assert result.status == "completed"
         assert result.result == "Trip booked successfully"
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_status_from_metadata_when_data_has_no_status(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test metadata.status is used when data exists but has no status field.
+
+        Regression test: an elif structure previously caused metadata.status to be
+        skipped when response.data was truthy but lacked a 'status' key, resulting
+        in an incorrect default of 'completed' instead of 'awaiting_approval'.
+        """
+        httpx_mock.add_response(
+            json={
+                "success": True,
+                "result": "Plan ready for approval",
+                "data": {"workflow_id": "wf-456"},
+                "metadata": {
+                    "status": "awaiting_approval",
+                    "duration": "1.0s",
+                    "step_results": {},
+                },
+            }
+        )
+
+        result = await client.execute_plan("plan-123")
+
+        assert result.status == "awaiting_approval"
+        assert result.workflow_id == "wf-456"
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_data_status_takes_precedence_over_metadata(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test data.status takes precedence over metadata.status when both exist."""
+        httpx_mock.add_response(
+            json={
+                "success": True,
+                "result": "Plan completed",
+                "data": {"status": "running", "workflow_id": "wf-789"},
+                "metadata": {
+                    "status": "awaiting_approval",
+                    "duration": "2.0s",
+                    "step_results": {},
+                },
+            }
+        )
+
+        result = await client.execute_plan("plan-123")
+
+        assert result.status == "running"
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_defaults_to_completed_when_no_status(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test default 'completed' when neither data nor metadata has status."""
+        httpx_mock.add_response(
+            json={
+                "success": True,
+                "result": "Done",
+                "data": {"some_field": "value"},
+                "metadata": {
+                    "duration": "3.0s",
+                    "step_results": {"step-1": "done"},
+                },
+            }
+        )
+
+        result = await client.execute_plan("plan-123")
+
+        assert result.status == "completed"
+        assert result.result == "Done"
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_defaults_to_failed_when_success_false(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test default 'failed' when success=false and no explicit status."""
+        httpx_mock.add_response(
+            json={
+                "success": False,
+                "error": "Internal error",
+                "metadata": {
+                    "duration": "0.5s",
+                    "step_results": {},
+                },
+            }
+        )
+
+        result = await client.execute_plan("plan-123")
+
+        assert result.status == "failed"
+        assert result.error == "Internal error"
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_data_success_false_raises(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test that data.success=false raises PlanExecutionError."""
+        httpx_mock.add_response(
+            json={
+                "success": True,
+                "data": {"success": False, "error": "Plan has been cancelled"},
+                "metadata": {
+                    "duration": "0.1s",
+                    "step_results": {},
+                },
+            }
+        )
+
+        with pytest.raises(PlanExecutionError, match="Plan has been cancelled"):
+            await client.execute_plan("plan-123")
 
     @pytest.mark.asyncio
     async def test_get_plan_status(

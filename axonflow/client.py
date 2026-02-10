@@ -1123,24 +1123,29 @@ class AxonFlow:
 
         # Check for nested failure: server returns HTTP 200 with data.success=false
         # (e.g., "Plan has been cancelled") — the outer success may still be true
-        if response.data and isinstance(response.data, dict):
-            if response.data.get("success") is False:
-                error_msg = response.data.get("error", "Plan execution failed")
-                raise PlanExecutionError(
-                    message=error_msg,
-                    plan_id=plan_id,
-                )
+        if (
+            response.data
+            and isinstance(response.data, dict)
+            and response.data.get("success") is False
+        ):
+            error_msg = response.data.get("error", "Plan execution failed")
+            raise PlanExecutionError(
+                message=error_msg,
+                plan_id=plan_id,
+            )
 
         # Determine status from response data (e.g., "awaiting_approval" for confirm mode)
-        status = "completed" if response.success else "failed"
+        # Priority: data.status > metadata.status > success-based default
+        status = None
         workflow_id = None
         if response.data and isinstance(response.data, dict):
-            if data_status := response.data.get("status"):
-                status = data_status
+            status = response.data.get("status")
             if wf_id := response.data.get("workflow_id"):
                 workflow_id = wf_id
-        elif response.metadata and response.metadata.get("status"):
-            status = response.metadata["status"]
+        if not status and response.metadata:
+            status = response.metadata.get("status")
+        if not status:
+            status = "completed" if response.success else "failed"
 
         return PlanExecutionResponse(
             plan_id=plan_id,
