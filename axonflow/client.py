@@ -702,8 +702,11 @@ class AxonFlow:
         if not user_token:
             user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
 
-        # Check cache
-        if self._cache is not None:
+        # Plan operations are mutations and must not be cached
+        is_mutation = request_type in ("execute-plan", "generate-plan", "cancel-plan", "update-plan")
+
+        # Check cache (skip for mutations)
+        if self._cache is not None and not is_mutation:
             cache_key = self._get_cache_key(request_type, query, user_token)
             if cache_key in self._cache:
                 if self._config.debug:
@@ -748,8 +751,8 @@ class AxonFlow:
                 block_reason=response.block_reason,
             )
 
-        # Cache successful responses
-        if self._cache is not None and response.success and cache_key:
+        # Cache successful responses (skip mutations — plan operations)
+        if self._cache is not None and response.success and cache_key and not is_mutation:
             self._cache[cache_key] = response
 
         return response
@@ -1112,9 +1115,21 @@ class AxonFlow:
 
         response = ClientResponse.model_validate(response_data)
 
+        # Determine status from response data (e.g., "awaiting_approval" for confirm mode)
+        status = "completed" if response.success else "failed"
+        workflow_id = None
+        if response.data and isinstance(response.data, dict):
+            if data_status := response.data.get("status"):
+                status = data_status
+            if wf_id := response.data.get("workflow_id"):
+                workflow_id = wf_id
+        elif response.metadata and response.metadata.get("status"):
+            status = response.metadata["status"]
+
         return PlanExecutionResponse(
             plan_id=plan_id,
-            status="completed" if response.success else "failed",
+            status=status,
+            workflow_id=workflow_id,
             result=response.result,
             step_results=response.metadata.get("step_results", {}),
             error=response.error,
