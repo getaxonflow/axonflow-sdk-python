@@ -703,7 +703,9 @@ class AxonFlow:
             user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
 
         # Plan operations are mutations and must not be cached
-        is_mutation = request_type in ("execute-plan", "generate-plan", "cancel-plan", "update-plan")
+        is_mutation = request_type in (
+            "execute-plan", "generate-plan", "cancel-plan", "update-plan",
+        )
 
         # Check cache (skip for mutations)
         if self._cache is not None and not is_mutation:
