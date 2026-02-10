@@ -46,6 +46,22 @@ pip install axonflow[anthropic]   # Anthropic integration
 pip install axonflow[all]         # All integrations
 ```
 
+## Evaluation Tier (Free License)
+
+Need more capacity than Community without moving to Enterprise? Evaluation uses the same core features with higher limits:
+
+| Limit | Community | Evaluation (Free) | Enterprise |
+|-------|-----------|-------------------|------------|
+| Tenant policies | 20 | 50 | Unlimited |
+| Org-wide policies | 0 | 5 | Unlimited |
+| Audit retention | 3 days | 14 days | 3650 days |
+| Concurrent executions | 5 | 25 | Unlimited |
+| Execution history | 50 | 500 | Unlimited |
+
+Also includes higher limits for LLM providers and MAP planning.
+
+[Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Full tier matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise)
+
 ## Quick Start
 
 ### Async Usage (Recommended)
