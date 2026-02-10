@@ -704,7 +704,10 @@ class AxonFlow:
 
         # Plan operations are mutations and must not be cached
         is_mutation = request_type in (
-            "execute-plan", "generate-plan", "cancel-plan", "update-plan",
+            "execute-plan",
+            "generate-plan",
+            "cancel-plan",
+            "update-plan",
         )
 
         # Check cache (skip for mutations)
