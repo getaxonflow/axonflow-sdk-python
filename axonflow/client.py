@@ -4469,7 +4469,7 @@ class AxonFlow:
     ) -> AsyncIterator[ExecutionStatus]:
         """Stream real-time execution status updates via Server-Sent Events (SSE).
 
-        Connects to GET /api/v1/executions/{execution_id}/stream and yields
+        Connects to GET /api/v1/unified/executions/{execution_id}/stream and yields
         ExecutionStatus objects as they arrive. The stream ends when a terminal
         status is received (completed, failed, cancelled, aborted, expired)
         or when the connection is closed.
@@ -4497,7 +4497,7 @@ class AxonFlow:
             msg = "Execution ID is required"
             raise ValueError(msg)
 
-        url = f"{self._config.endpoint}/api/v1/executions/{execution_id}/stream"
+        url = f"{self._config.endpoint}/api/v1/unified/executions/{execution_id}/stream"
 
         # Build headers for SSE
         headers = dict(self._http_client.headers)
