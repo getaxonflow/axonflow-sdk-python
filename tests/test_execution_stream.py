@@ -70,7 +70,7 @@ class TestStreamExecutionStatus:
 
         sse_body = _build_sse_response(*events)
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -103,7 +103,7 @@ class TestStreamExecutionStatus:
         from axonflow.exceptions import AxonFlowError
 
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/nonexistent/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/nonexistent/stream",
             status_code=404,
             content=b'{"error": "Execution not found"}',
         )
@@ -125,7 +125,7 @@ class TestStreamExecutionStatus:
         sse_body = f": keep-alive\n\n\n\ndata: {json.dumps(event)}\n\n"
 
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -149,7 +149,7 @@ class TestStreamExecutionStatus:
         sse_body = f"data: {{invalid json}}\n\ndata: {json.dumps(valid_event)}\n\n"
 
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -180,7 +180,7 @@ class TestStreamExecutionStatus:
 
         sse_body = _build_sse_response(*events)
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -208,7 +208,7 @@ class TestStreamExecutionStatus:
 
         sse_body = _build_sse_response(*events)
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -256,7 +256,7 @@ class TestStreamExecutionStatus:
 
         sse_body = _build_sse_response(event)
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -290,7 +290,7 @@ class TestStreamExecutionStatus:
 
         sse_body = _build_sse_response(event)
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
@@ -317,7 +317,7 @@ class TestStreamExecutionStatus:
         sse_body = f"data:{json.dumps(event)}\n\n"
 
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/executions/exec_stream_1/stream",
+            url="https://test.axonflow.com/api/v1/unified/executions/exec_stream_1/stream",
             content=sse_body.encode(),
             headers={"Content-Type": "text/event-stream"},
         )
