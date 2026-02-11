@@ -12,6 +12,9 @@ on:
         required: false
         default: 'https://staging-eu.getaxonflow.com'
 
+permissions:
+  contents: read
+
 env:
   # Note: github.event.inputs only available on workflow_dispatch, defaults used otherwise
   AXONFLOW_AGENT_URL: ${{ github.event.inputs.agent_url || 'https://staging-eu.getaxonflow.com' }}
