@@ -3602,18 +3602,23 @@ class AxonFlow:
             self._logger.debug("Listing HITL queue", path=path)
 
         response = await self._request("GET", path)
-        data = response.get("data", response) if isinstance(response, dict) else response
-        if isinstance(data, dict):
+        # Server returns {"success": true, "data": [...], "meta": {"total": N, "limit": N, "offset": N}}
+        data = response.get("data", []) if isinstance(response, dict) else []
+        if isinstance(data, list):
             items = [
                 HITLApprovalRequest.model_validate(item)
-                for item in data.get("items", [])
+                for item in data
             ]
-            return HITLQueueListResponse(
-                items=items,
-                total=data.get("total", len(items)),
-                has_more=data.get("has_more", False),
-            )
-        return HITLQueueListResponse()
+        else:
+            items = []
+        meta = response.get("meta", {}) if isinstance(response, dict) else {}
+        total = meta.get("total", len(items))
+        offset = meta.get("offset", 0)
+        return HITLQueueListResponse(
+            items=items,
+            total=total,
+            has_more=(offset + len(items)) < total,
+        )
 
     async def get_hitl_request(self, request_id: str) -> HITLApprovalRequest:
         """Get a specific HITL approval request.
