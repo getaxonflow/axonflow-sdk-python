@@ -86,6 +86,13 @@ from axonflow.masfeat import (
     RegistrySummary,
     SystemStatus,
 )
+from axonflow.hitl import (
+    HITLApprovalRequest,
+    HITLQueueListOptions,
+    HITLQueueListResponse,
+    HITLReviewInput,
+    HITLStats,
+)
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
     CreatePolicyOverrideRequest,
@@ -352,6 +359,12 @@ __all__ = [
     "FEATAssessment",
     "KillSwitch",
     "KillSwitchEvent",
+    # HITL Queue API types (Enterprise)
+    "HITLApprovalRequest",
+    "HITLQueueListOptions",
+    "HITLQueueListResponse",
+    "HITLReviewInput",
+    "HITLStats",
     # Unified Execution types (Issue #1075)
     "ExecutionType",
     "ExecutionStatusValue",
