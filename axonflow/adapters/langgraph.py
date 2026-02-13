@@ -307,6 +307,23 @@ class AxonFlowLangGraphAdapter:
 
         await self.client.abort_workflow(self.workflow_id, reason)
 
+    async def fail_workflow(self, reason: str | None = None) -> None:
+        """Fail the workflow.
+
+        Call this when your LangGraph workflow has encountered an unrecoverable error.
+
+        Args:
+            reason: Reason for the failure
+
+        Example:
+            >>> await adapter.fail_workflow("Pipeline stage crashed")
+        """
+        if not self.workflow_id:
+            msg = "Workflow not started. Call start_workflow() first."
+            raise ValueError(msg)
+
+        await self.client.fail_workflow(self.workflow_id, reason)
+
     async def wait_for_approval(
         self,
         step_id: str,

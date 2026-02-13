@@ -95,6 +95,13 @@ from axonflow.execution import (
     UnifiedStepStatus,
     UnifiedStepType,
 )
+from axonflow.hitl import (
+    HITLApprovalRequest,
+    HITLQueueListOptions,
+    HITLQueueListResponse,
+    HITLReviewInput,
+    HITLStats,
+)
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
     CreatePolicyOverrideRequest,
@@ -3254,6 +3261,8 @@ class AxonFlow:
             reason=response.get("reason"),
             policy_ids=response.get("policy_ids", []),
             approval_url=response.get("approval_url"),
+            policies_evaluated=response.get("policies_evaluated"),
+            policies_matched=response.get("policies_matched"),
         )
 
     async def mark_step_completed(
@@ -3333,6 +3342,29 @@ class AxonFlow:
 
         if self._config.debug:
             self._logger.debug("Workflow aborted", workflow_id=workflow_id, reason=reason)
+
+    async def fail_workflow(self, workflow_id: str, reason: str | None = None) -> None:
+        """Fail a workflow.
+
+        Call this when a workflow has failed due to an unrecoverable error.
+
+        Args:
+            workflow_id: Workflow ID
+            reason: Optional reason for the failure
+
+        Example:
+            >>> await client.fail_workflow("wf_123", "Pipeline stage crashed")
+        """
+        body = {"reason": reason} if reason else {}
+
+        await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/fail",
+            json_data=body,
+        )
+
+        if self._config.debug:
+            self._logger.debug("Workflow failed", workflow_id=workflow_id, reason=reason)
 
     async def resume_workflow(self, workflow_id: str) -> None:
         """Resume a workflow after approval.
@@ -3525,6 +3557,180 @@ class AxonFlow:
             approvals=approvals,
             total=response.get("total", len(approvals)),
         )
+
+    # =========================================================================
+    # HITL Queue API (Enterprise)
+    # =========================================================================
+
+    async def list_hitl_queue(
+        self,
+        opts: HITLQueueListOptions | None = None,
+    ) -> HITLQueueListResponse:
+        """List approval requests in the HITL queue.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Args:
+            opts: Optional filtering and pagination options
+
+        Returns:
+            HITLQueueListResponse with list of approval requests
+
+        Example:
+            >>> result = await client.list_hitl_queue(
+            ...     HITLQueueListOptions(status="pending", severity="critical", limit=10)
+            ... )
+            >>> for item in result.items:
+            ...     print(f"{item.request_id}: {item.original_query} [{item.severity}]")
+        """
+        params: list[str] = []
+        if opts:
+            if opts.status:
+                params.append(f"status={opts.status}")
+            if opts.severity:
+                params.append(f"severity={opts.severity}")
+            if opts.limit is not None:
+                params.append(f"limit={opts.limit}")
+            if opts.offset is not None:
+                params.append(f"offset={opts.offset}")
+
+        path = "/api/v1/hitl/queue"
+        if params:
+            path = f"{path}?{'&'.join(params)}"
+
+        if self._config.debug:
+            self._logger.debug("Listing HITL queue", path=path)
+
+        response = await self._request("GET", path)
+        # Server returns {success, data: [...items], meta: {total, limit, offset}}
+        data = response.get("data", []) if isinstance(response, dict) else []
+        if isinstance(data, list):
+            items = [HITLApprovalRequest.model_validate(item) for item in data]
+        else:
+            items = []
+        meta = response.get("meta", {}) if isinstance(response, dict) else {}
+        total = meta.get("total", len(items))
+        offset = meta.get("offset", 0)
+        return HITLQueueListResponse(
+            items=items,
+            total=total,
+            has_more=(offset + len(items)) < total,
+        )
+
+    async def get_hitl_request(self, request_id: str) -> HITLApprovalRequest:
+        """Get a specific HITL approval request.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Args:
+            request_id: ID of the approval request
+
+        Returns:
+            The HITL approval request
+
+        Example:
+            >>> request = await client.get_hitl_request("hitl-req-123")
+            >>> print(f"Policy: {request.triggered_policy_name}")
+            >>> print(f"Severity: {request.severity}")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting HITL request", request_id=request_id)
+
+        response = await self._request("GET", f"/api/v1/hitl/queue/{request_id}")
+        data = response.get("data", response) if isinstance(response, dict) else response
+        return HITLApprovalRequest.model_validate(data)
+
+    async def approve_hitl_request(
+        self,
+        request_id: str,
+        review: HITLReviewInput,
+    ) -> None:
+        """Approve a pending HITL approval request.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Args:
+            request_id: ID of the approval request to approve
+            review: Review input with reviewer details and optional comment
+
+        Example:
+            >>> await client.approve_hitl_request(
+            ...     "hitl-req-123",
+            ...     HITLReviewInput(
+            ...         reviewer_id="user-456",
+            ...         reviewer_email="admin@company.com",
+            ...         comment="Reviewed and approved - query is safe",
+            ...     ),
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Approving HITL request",
+                request_id=request_id,
+                reviewer_id=review.reviewer_id,
+            )
+
+        await self._request(
+            "POST",
+            f"/api/v1/hitl/queue/{request_id}/approve",
+            json_data=review.model_dump(exclude_none=True),
+        )
+
+    async def reject_hitl_request(
+        self,
+        request_id: str,
+        review: HITLReviewInput,
+    ) -> None:
+        """Reject a pending HITL approval request.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Args:
+            request_id: ID of the approval request to reject
+            review: Review input with reviewer details and optional comment
+
+        Example:
+            >>> await client.reject_hitl_request(
+            ...     "hitl-req-123",
+            ...     HITLReviewInput(
+            ...         reviewer_id="user-456",
+            ...         reviewer_email="admin@company.com",
+            ...         comment="Query contains sensitive data - rejected",
+            ...     ),
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Rejecting HITL request",
+                request_id=request_id,
+                reviewer_id=review.reviewer_id,
+            )
+
+        await self._request(
+            "POST",
+            f"/api/v1/hitl/queue/{request_id}/reject",
+            json_data=review.model_dump(exclude_none=True),
+        )
+
+    async def get_hitl_stats(self) -> HITLStats:
+        """Get HITL queue dashboard statistics.
+
+        Enterprise Feature: Requires AxonFlow Enterprise license.
+
+        Returns:
+            HITLStats with queue statistics
+
+        Example:
+            >>> stats = await client.get_hitl_stats()
+            >>> print(f"Pending: {stats.total_pending}")
+            >>> print(f"Critical: {stats.critical_priority}")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting HITL stats")
+
+        response = await self._request("GET", "/api/v1/hitl/stats")
+        data = response.get("data", response) if isinstance(response, dict) else response
+        return HITLStats.model_validate(data)
 
     # =========================================================================
     # Plan Rollback (Feature 7)
@@ -5818,6 +6024,10 @@ class SyncAxonFlow:
         """Abort a workflow with an optional reason."""
         return self._run_sync(self._async_client.abort_workflow(workflow_id, reason))
 
+    def fail_workflow(self, workflow_id: str, reason: str | None = None) -> None:
+        """Fail a workflow with an optional reason."""
+        return self._run_sync(self._async_client.fail_workflow(workflow_id, reason))
+
     def resume_workflow(self, workflow_id: str) -> None:
         """Resume a paused workflow."""
         return self._run_sync(self._async_client.resume_workflow(workflow_id))
@@ -5854,6 +6064,39 @@ class SyncAxonFlow:
     ) -> PendingApprovalsResponse:
         """Get all pending approvals across workflows."""
         return self._run_sync(self._async_client.get_pending_approvals(limit))
+
+    # HITL Queue API sync wrappers (Enterprise)
+
+    def list_hitl_queue(
+        self,
+        opts: HITLQueueListOptions | None = None,
+    ) -> HITLQueueListResponse:
+        """List approval requests in the HITL queue."""
+        return self._run_sync(self._async_client.list_hitl_queue(opts))
+
+    def get_hitl_request(self, request_id: str) -> HITLApprovalRequest:
+        """Get a specific HITL approval request."""
+        return self._run_sync(self._async_client.get_hitl_request(request_id))
+
+    def approve_hitl_request(
+        self,
+        request_id: str,
+        review: HITLReviewInput,
+    ) -> None:
+        """Approve a pending HITL approval request."""
+        return self._run_sync(self._async_client.approve_hitl_request(request_id, review))
+
+    def reject_hitl_request(
+        self,
+        request_id: str,
+        review: HITLReviewInput,
+    ) -> None:
+        """Reject a pending HITL approval request."""
+        return self._run_sync(self._async_client.reject_hitl_request(request_id, review))
+
+    def get_hitl_stats(self) -> HITLStats:
+        """Get HITL queue dashboard statistics."""
+        return self._run_sync(self._async_client.get_hitl_stats())
 
     # Plan Rollback sync wrapper (Feature 7)
 

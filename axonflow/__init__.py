@@ -70,6 +70,13 @@ from axonflow.execution import (
     UnifiedStepStatus,
     UnifiedStepType,
 )
+from axonflow.hitl import (
+    HITLApprovalRequest,
+    HITLQueueListOptions,
+    HITLQueueListResponse,
+    HITLReviewInput,
+    HITLStats,
+)
 from axonflow.masfeat import (
     # Types
     AISystemRegistry,
@@ -352,6 +359,12 @@ __all__ = [
     "FEATAssessment",
     "KillSwitch",
     "KillSwitchEvent",
+    # HITL Queue API types (Enterprise)
+    "HITLApprovalRequest",
+    "HITLQueueListOptions",
+    "HITLQueueListResponse",
+    "HITLReviewInput",
+    "HITLStats",
     # Unified Execution types (Issue #1075)
     "ExecutionType",
     "ExecutionStatusValue",

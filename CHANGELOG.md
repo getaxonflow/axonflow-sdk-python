@@ -5,6 +5,25 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-02-13
+
+### Added
+
+- **fail_workflow()** (#1187): Fail a workflow with optional reason
+  - `async fail_workflow(workflow_id, reason=None)` + sync wrapper
+  - Sends `POST /api/v1/workflows/{id}/fail`
+- **HITL Queue API** (Enterprise): Human-in-the-loop approval queue management
+  - `list_hitl_queue(opts)` — list pending approvals with filtering
+  - `get_hitl_request(request_id)` — get approval details
+  - `approve_hitl_request(request_id, review)` — approve a request
+  - `reject_hitl_request(request_id, review)` — reject a request
+  - `get_hitl_stats()` — dashboard statistics
+  - New models: `HITLApprovalRequest`, `HITLQueueListOptions`, `HITLQueueListResponse`, `HITLReviewInput`, `HITLStats`
+
+### Fixed
+
+- `StepGateResponse` now includes `policies_evaluated` and `policies_matched` fields from server response
+
 ## [3.3.1] - 2026-02-12
 
 ### Fixed
