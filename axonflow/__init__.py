@@ -199,7 +199,7 @@ from axonflow.workflow import (
     WorkflowStepInfo,
 )
 
-__version__ = "3.2.0"
+__version__ = "3.4.0"
 __all__ = [
     # Main client
     "AxonFlow",
