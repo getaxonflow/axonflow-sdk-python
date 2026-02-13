@@ -46,9 +46,7 @@ class HITLApprovalRequest(BaseModel):
     compliance_framework: str | None = Field(
         default=None, description="Compliance framework (e.g. GDPR, HIPAA, RBI)"
     )
-    risk_classification: str | None = Field(
-        default=None, description="Risk classification level"
-    )
+    risk_classification: str | None = Field(default=None, description="Risk classification level")
     status: str = Field(..., description="Current status (pending, approved, rejected, expired)")
     reviewer_id: str | None = Field(default=None, description="ID of the reviewer (if reviewed)")
     reviewer_email: str | None = Field(

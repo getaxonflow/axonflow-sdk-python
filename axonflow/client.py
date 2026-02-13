@@ -3605,10 +3605,7 @@ class AxonFlow:
         # Server returns {success, data: [...items], meta: {total, limit, offset}}
         data = response.get("data", []) if isinstance(response, dict) else []
         if isinstance(data, list):
-            items = [
-                HITLApprovalRequest.model_validate(item)
-                for item in data
-            ]
+            items = [HITLApprovalRequest.model_validate(item) for item in data]
         else:
             items = []
         meta = response.get("meta", {}) if isinstance(response, dict) else {}
