@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from pytest_httpx import HTTPXMock
 
@@ -18,7 +16,6 @@ from axonflow.hitl import (
     HITLReviewInput,
     HITLStats,
 )
-
 
 # =========================================================================
 # HITL Queue List Tests
@@ -39,46 +36,43 @@ class TestListHITLQueue:
             url="https://test.axonflow.com/api/v1/hitl/queue",
             json={
                 "success": True,
-                "data": {
-                    "items": [
-                        {
-                            "request_id": "hitl-req-001",
-                            "org_id": "org-1",
-                            "tenant_id": "tenant-1",
-                            "client_id": "client-1",
-                            "user_id": "user-1",
-                            "original_query": "What is the CEO salary?",
-                            "request_type": "chat",
-                            "triggered_policy_id": "pol-pii-001",
-                            "triggered_policy_name": "PII Salary Detection",
-                            "trigger_reason": "Query requests sensitive compensation data",
-                            "severity": "high",
-                            "compliance_framework": "GDPR",
-                            "status": "pending",
-                            "expires_at": "2026-02-13T10:00:00Z",
-                            "created_at": "2026-02-12T10:00:00Z",
-                            "updated_at": "2026-02-12T10:00:00Z",
-                        },
-                        {
-                            "request_id": "hitl-req-002",
-                            "org_id": "org-1",
-                            "tenant_id": "tenant-1",
-                            "client_id": "client-2",
-                            "original_query": "Delete all user records",
-                            "request_type": "chat",
-                            "triggered_policy_id": "pol-sec-001",
-                            "triggered_policy_name": "Destructive Operations",
-                            "trigger_reason": "Potential destructive database operation",
-                            "severity": "critical",
-                            "status": "pending",
-                            "expires_at": "2026-02-13T11:00:00Z",
-                            "created_at": "2026-02-12T11:00:00Z",
-                            "updated_at": "2026-02-12T11:00:00Z",
-                        },
-                    ],
-                    "total": 2,
-                    "has_more": False,
-                },
+                "data": [
+                    {
+                        "request_id": "hitl-req-001",
+                        "org_id": "org-1",
+                        "tenant_id": "tenant-1",
+                        "client_id": "client-1",
+                        "user_id": "user-1",
+                        "original_query": "What is the CEO salary?",
+                        "request_type": "chat",
+                        "triggered_policy_id": "pol-pii-001",
+                        "triggered_policy_name": "PII Salary Detection",
+                        "trigger_reason": "Query requests sensitive compensation data",
+                        "severity": "high",
+                        "compliance_framework": "GDPR",
+                        "status": "pending",
+                        "expires_at": "2026-02-13T10:00:00Z",
+                        "created_at": "2026-02-12T10:00:00Z",
+                        "updated_at": "2026-02-12T10:00:00Z",
+                    },
+                    {
+                        "request_id": "hitl-req-002",
+                        "org_id": "org-1",
+                        "tenant_id": "tenant-1",
+                        "client_id": "client-2",
+                        "original_query": "Delete all user records",
+                        "request_type": "chat",
+                        "triggered_policy_id": "pol-sec-001",
+                        "triggered_policy_name": "Destructive Operations",
+                        "trigger_reason": "Potential destructive database operation",
+                        "severity": "critical",
+                        "status": "pending",
+                        "expires_at": "2026-02-13T11:00:00Z",
+                        "created_at": "2026-02-12T11:00:00Z",
+                        "updated_at": "2026-02-12T11:00:00Z",
+                    },
+                ],
+                "meta": {"total": 2, "limit": 50, "offset": 0},
             },
         )
 
@@ -106,28 +100,25 @@ class TestListHITLQueue:
             url="https://test.axonflow.com/api/v1/hitl/queue?status=pending&severity=critical&limit=5&offset=0",
             json={
                 "success": True,
-                "data": {
-                    "items": [
-                        {
-                            "request_id": "hitl-req-002",
-                            "org_id": "org-1",
-                            "tenant_id": "tenant-1",
-                            "client_id": "client-2",
-                            "original_query": "Delete all user records",
-                            "request_type": "chat",
-                            "triggered_policy_id": "pol-sec-001",
-                            "triggered_policy_name": "Destructive Operations",
-                            "trigger_reason": "Potential destructive database operation",
-                            "severity": "critical",
-                            "status": "pending",
-                            "expires_at": "2026-02-13T11:00:00Z",
-                            "created_at": "2026-02-12T11:00:00Z",
-                            "updated_at": "2026-02-12T11:00:00Z",
-                        },
-                    ],
-                    "total": 1,
-                    "has_more": False,
-                },
+                "data": [
+                    {
+                        "request_id": "hitl-req-002",
+                        "org_id": "org-1",
+                        "tenant_id": "tenant-1",
+                        "client_id": "client-2",
+                        "original_query": "Delete all user records",
+                        "request_type": "chat",
+                        "triggered_policy_id": "pol-sec-001",
+                        "triggered_policy_name": "Destructive Operations",
+                        "trigger_reason": "Potential destructive database operation",
+                        "severity": "critical",
+                        "status": "pending",
+                        "expires_at": "2026-02-13T11:00:00Z",
+                        "created_at": "2026-02-12T11:00:00Z",
+                        "updated_at": "2026-02-12T11:00:00Z",
+                    },
+                ],
+                "meta": {"total": 1, "limit": 5, "offset": 0},
             },
         )
 
@@ -153,11 +144,8 @@ class TestListHITLQueue:
             url="https://test.axonflow.com/api/v1/hitl/queue",
             json={
                 "success": True,
-                "data": {
-                    "items": [],
-                    "total": 0,
-                    "has_more": False,
-                },
+                "data": [],
+                "meta": {"total": 0, "limit": 50, "offset": 0},
             },
         )
 
@@ -444,28 +432,25 @@ class TestHITLSyncWrappers:
         httpx_mock.add_response(
             json={
                 "success": True,
-                "data": {
-                    "items": [
-                        {
-                            "request_id": "hitl-req-001",
-                            "org_id": "org-1",
-                            "tenant_id": "tenant-1",
-                            "client_id": "client-1",
-                            "original_query": "What is the CEO salary?",
-                            "request_type": "chat",
-                            "triggered_policy_id": "pol-pii-001",
-                            "triggered_policy_name": "PII Salary Detection",
-                            "trigger_reason": "Sensitive data query",
-                            "severity": "high",
-                            "status": "pending",
-                            "expires_at": "2026-02-13T10:00:00Z",
-                            "created_at": "2026-02-12T10:00:00Z",
-                            "updated_at": "2026-02-12T10:00:00Z",
-                        },
-                    ],
-                    "total": 1,
-                    "has_more": False,
-                },
+                "data": [
+                    {
+                        "request_id": "hitl-req-001",
+                        "org_id": "org-1",
+                        "tenant_id": "tenant-1",
+                        "client_id": "client-1",
+                        "original_query": "What is the CEO salary?",
+                        "request_type": "chat",
+                        "triggered_policy_id": "pol-pii-001",
+                        "triggered_policy_name": "PII Salary Detection",
+                        "trigger_reason": "Sensitive data query",
+                        "severity": "high",
+                        "status": "pending",
+                        "expires_at": "2026-02-13T10:00:00Z",
+                        "created_at": "2026-02-12T10:00:00Z",
+                        "updated_at": "2026-02-12T10:00:00Z",
+                    },
+                ],
+                "meta": {"total": 1, "limit": 50, "offset": 0},
             },
         )
 
@@ -483,11 +468,8 @@ class TestHITLSyncWrappers:
         httpx_mock.add_response(
             json={
                 "success": True,
-                "data": {
-                    "items": [],
-                    "total": 0,
-                    "has_more": False,
-                },
+                "data": [],
+                "meta": {"total": 0, "limit": 5, "offset": 0},
             },
         )
 

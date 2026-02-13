@@ -70,6 +70,13 @@ from axonflow.execution import (
     UnifiedStepStatus,
     UnifiedStepType,
 )
+from axonflow.hitl import (
+    HITLApprovalRequest,
+    HITLQueueListOptions,
+    HITLQueueListResponse,
+    HITLReviewInput,
+    HITLStats,
+)
 from axonflow.masfeat import (
     # Types
     AISystemRegistry,
@@ -85,13 +92,6 @@ from axonflow.masfeat import (
     MaterialityClassification,
     RegistrySummary,
     SystemStatus,
-)
-from axonflow.hitl import (
-    HITLApprovalRequest,
-    HITLQueueListOptions,
-    HITLQueueListResponse,
-    HITLReviewInput,
-    HITLStats,
 )
 from axonflow.policies import (
     CreateDynamicPolicyRequest,

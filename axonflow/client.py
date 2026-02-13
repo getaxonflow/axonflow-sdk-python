@@ -83,13 +83,6 @@ from axonflow.exceptions import (
     TimeoutError,
     VersionConflictError,
 )
-from axonflow.hitl import (
-    HITLApprovalRequest,
-    HITLQueueListOptions,
-    HITLQueueListResponse,
-    HITLReviewInput,
-    HITLStats,
-)
 from axonflow.execution import (
     ExecutionStatus,
     ExecutionStatusValue,
@@ -101,6 +94,13 @@ from axonflow.execution import (
     UnifiedListExecutionsResponse,
     UnifiedStepStatus,
     UnifiedStepType,
+)
+from axonflow.hitl import (
+    HITLApprovalRequest,
+    HITLQueueListOptions,
+    HITLQueueListResponse,
+    HITLReviewInput,
+    HITLStats,
 )
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
@@ -3602,7 +3602,7 @@ class AxonFlow:
             self._logger.debug("Listing HITL queue", path=path)
 
         response = await self._request("GET", path)
-        # Server returns {"success": true, "data": [...], "meta": {"total": N, "limit": N, "offset": N}}
+        # Server returns {success, data: [...items], meta: {total, limit, offset}}
         data = response.get("data", []) if isinstance(response, dict) else []
         if isinstance(data, list):
             items = [

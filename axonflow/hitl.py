@@ -11,7 +11,7 @@ by policy enforcement.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -28,34 +28,36 @@ class HITLApprovalRequest(BaseModel):
     org_id: str = Field(..., description="Organization ID")
     tenant_id: str = Field(..., description="Tenant ID")
     client_id: str = Field(..., description="Client ID that triggered the request")
-    user_id: Optional[str] = Field(default=None, description="User ID (if available)")
+    user_id: str | None = Field(default=None, description="User ID (if available)")
     original_query: str = Field(..., description="The original query that triggered the approval")
     request_type: str = Field(..., description="Type of the original request (e.g. chat, code)")
-    request_context: Optional[dict[str, Any]] = Field(
+    request_context: dict[str, Any] | None = Field(
         default=None, description="Additional context from the original request"
     )
-    triggered_policy_id: str = Field(..., description="ID of the policy that triggered this request")
+    triggered_policy_id: str = Field(
+        ..., description="ID of the policy that triggered this request"
+    )
     triggered_policy_name: str = Field(..., description="Name of the triggering policy")
     trigger_reason: str = Field(..., description="Human-readable reason for the trigger")
     severity: str = Field(..., description="Severity level (critical, high, medium, low)")
-    eu_ai_act_article: Optional[str] = Field(
+    eu_ai_act_article: str | None = Field(
         default=None, description="EU AI Act article reference (if applicable)"
     )
-    compliance_framework: Optional[str] = Field(
+    compliance_framework: str | None = Field(
         default=None, description="Compliance framework (e.g. GDPR, HIPAA, RBI)"
     )
-    risk_classification: Optional[str] = Field(
+    risk_classification: str | None = Field(
         default=None, description="Risk classification level"
     )
     status: str = Field(..., description="Current status (pending, approved, rejected, expired)")
-    reviewer_id: Optional[str] = Field(default=None, description="ID of the reviewer (if reviewed)")
-    reviewer_email: Optional[str] = Field(
+    reviewer_id: str | None = Field(default=None, description="ID of the reviewer (if reviewed)")
+    reviewer_email: str | None = Field(
         default=None, description="Email of the reviewer (if reviewed)"
     )
-    review_comment: Optional[str] = Field(
+    review_comment: str | None = Field(
         default=None, description="Comment from the reviewer (if reviewed)"
     )
-    reviewed_at: Optional[str] = Field(
+    reviewed_at: str | None = Field(
         default=None, description="ISO timestamp of when the review occurred"
     )
     expires_at: str = Field(..., description="ISO timestamp of when the request expires")
@@ -66,14 +68,14 @@ class HITLApprovalRequest(BaseModel):
 class HITLQueueListOptions(BaseModel):
     """Options for filtering and paginating the HITL approval queue."""
 
-    status: Optional[str] = Field(
+    status: str | None = Field(
         default=None, description="Filter by status (pending, approved, rejected, expired)"
     )
-    severity: Optional[str] = Field(
+    severity: str | None = Field(
         default=None, description="Filter by severity (critical, high, medium, low)"
     )
-    limit: Optional[int] = Field(default=None, ge=1, description="Maximum number of results")
-    offset: Optional[int] = Field(default=None, ge=0, description="Offset for pagination")
+    limit: int | None = Field(default=None, ge=1, description="Maximum number of results")
+    offset: int | None = Field(default=None, ge=0, description="Offset for pagination")
 
 
 class HITLQueueListResponse(BaseModel):
@@ -91,10 +93,10 @@ class HITLReviewInput(BaseModel):
 
     reviewer_id: str = Field(..., description="ID of the reviewer performing the action")
     reviewer_email: str = Field(..., description="Email of the reviewer")
-    reviewer_role: Optional[str] = Field(
+    reviewer_role: str | None = Field(
         default=None, description="Role of the reviewer (e.g. admin, compliance_officer)"
     )
-    comment: Optional[str] = Field(
+    comment: str | None = Field(
         default=None, description="Optional comment explaining the decision"
     )
 
@@ -109,6 +111,6 @@ class HITLStats(BaseModel):
     critical_priority: int = Field(
         default=0, ge=0, description="Number of critical-severity pending requests"
     )
-    oldest_pending_hours: Optional[float] = Field(
+    oldest_pending_hours: float | None = Field(
         default=None, description="Age of the oldest pending request in hours"
     )
