@@ -58,9 +58,9 @@ Need more capacity than Community without moving to Enterprise? Evaluation uses 
 | Concurrent executions | 5 | 25 | Unlimited |
 | Pending execution approvals | 5 | 25 | Unlimited |
 
-Also includes higher limits for LLM providers and MAP planning.
+Concurrent executions applies to MAP and WCP executions per tenant. Pending execution approvals applies to MAP confirm/step mode and WCP approval queues.
 
-[Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Full tier matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise)
+[Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise)
 
 ## Quick Start
 
