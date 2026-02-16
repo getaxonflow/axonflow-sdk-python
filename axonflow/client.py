@@ -151,6 +151,7 @@ from axonflow.types import (
     ListExecutionsResponse,
     ListUsageRecordsOptions,
     ListWebhooksResponse,
+    MediaContent,
     Mode,
     PlanExecutionResponse,
     PlanResponse,
@@ -742,6 +743,100 @@ class AxonFlow:
                 "Executing query",
                 request_type=request_type,
                 query=query[:50] if query else "",
+            )
+
+        response_data = await self._request(
+            "POST",
+            "/api/request",
+            json_data=request.model_dump(),
+        )
+
+        response = ClientResponse.model_validate(response_data)
+
+        # Check for policy violation
+        if response.blocked:
+            # Extract policy name from policy_info if available
+            policy = None
+            if response.policy_info and response.policy_info.policies_evaluated:
+                policy = response.policy_info.policies_evaluated[0]
+            raise PolicyViolationError(
+                response.block_reason or "Request blocked by policy",
+                policy=policy,
+                block_reason=response.block_reason,
+            )
+
+        # Cache successful responses (skip mutations — plan operations)
+        if self._cache is not None and response.success and cache_key and not is_mutation:
+            self._cache[cache_key] = response
+
+        return response
+
+    async def proxy_llm_call_with_media(
+        self,
+        user_token: str,
+        query: str,
+        request_type: str,
+        media: list[MediaContent],
+        context: dict[str, Any] | None = None,
+    ) -> ClientResponse:
+        """Send a request with media content (images) for governance analysis.
+
+        Media items are analyzed for PII, content safety, biometric data, and
+        document classification before being forwarded to the LLM provider.
+
+        Args:
+            user_token: User authentication token.
+            query: The prompt/query text.
+            request_type: Type of request (e.g., "chat", "sql").
+            media: List of MediaContent items (images) to analyze.
+            context: Optional additional context.
+
+        Returns:
+            ClientResponse with media_analysis field populated.
+
+        Raises:
+            PolicyViolationError: If request is blocked by policy
+            AuthenticationError: If credentials are invalid
+            TimeoutError: If request times out
+        """
+        # Default to "anonymous" if user_token is empty (community mode)
+        if not user_token:
+            user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
+
+        # Plan operations are mutations and must not be cached
+        is_mutation = request_type in (
+            "execute-plan",
+            "generate-plan",
+            "cancel-plan",
+            "update-plan",
+        )
+
+        # Check cache (skip for mutations)
+        if self._cache is not None and not is_mutation:
+            cache_key = self._get_cache_key(request_type, query, user_token)
+            if cache_key in self._cache:
+                if self._config.debug:
+                    self._logger.debug("Cache hit", query=query[:50])
+                cached_result: ClientResponse = self._cache[cache_key]
+                return cached_result
+        else:
+            cache_key = ""
+
+        request = ClientRequest(
+            query=query,
+            user_token=user_token,
+            client_id=self._config.client_id,
+            request_type=request_type,
+            context=context or {},
+            media=media,
+        )
+
+        if self._config.debug:
+            self._logger.debug(
+                "Executing multimodal query",
+                request_type=request_type,
+                query=query[:50] if query else "",
+                media_count=len(media),
             )
 
         response_data = await self._request(
