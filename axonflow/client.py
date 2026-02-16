@@ -5706,8 +5706,8 @@ class SyncAxonFlow:
         user_token: str,
         query: str,
         request_type: str,
-        media: list,
-        context: dict | None = None,
+        media: list[MediaContent],
+        context: dict[str, str] | None = None,
     ) -> ClientResponse:
         """Send a request with media content (images) for governance analysis.
 
