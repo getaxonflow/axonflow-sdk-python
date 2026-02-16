@@ -105,7 +105,8 @@ class MediaAnalysisResult(BaseModel):
     is_sensitive_document: bool = Field(default=False, description="Sensitive document flag")
     has_pii: bool = Field(default=False, description="PII detected in image text via OCR")
     pii_types: list[str] = Field(default_factory=list, description="Types of PII detected")
-    extracted_text: str = Field(default="", description="Text extracted from image via OCR")
+    has_extracted_text: bool = Field(default=False, description="Whether text was extracted from image via OCR")
+    extracted_text_length: int = Field(default=0, ge=0, description="Length of extracted text in characters")
     estimated_cost_usd: float = Field(default=0.0, ge=0, description="Analysis cost for this item")
     warnings: list[str] = Field(default_factory=list, description="Governance warnings")
 
