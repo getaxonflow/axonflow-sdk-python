@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -80,7 +80,7 @@ class AxonFlowConfig(BaseModel):
 class MediaContent(BaseModel):
     """Media content (image) to include with a request for governance analysis."""
 
-    source: str = Field(..., description="How media is provided: 'base64' or 'url'")
+    source: Literal["base64", "url"] = Field(..., description="How media is provided: 'base64' or 'url'")
     base64_data: str | None = Field(default=None, description="Base64-encoded image data")
     url: str | None = Field(default=None, description="Image URL")
     mime_type: str = Field(..., description="Media content type (e.g., 'image/jpeg')")
@@ -103,6 +103,7 @@ class MediaAnalysisResult(BaseModel):
     is_sensitive_document: bool = Field(default=False, description="Sensitive document flag")
     has_pii: bool = Field(default=False, description="PII detected in image text via OCR")
     pii_types: list[str] = Field(default_factory=list, description="Types of PII detected")
+    extracted_text: str = Field(default="", description="Text extracted from image via OCR")
     estimated_cost_usd: float = Field(default=0.0, ge=0, description="Analysis cost for this item")
     warnings: list[str] = Field(default_factory=list, description="Governance warnings")
 

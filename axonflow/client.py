@@ -803,24 +803,9 @@ class AxonFlow:
         if not user_token:
             user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
 
-        # Plan operations are mutations and must not be cached
-        is_mutation = request_type in (
-            "execute-plan",
-            "generate-plan",
-            "cancel-plan",
-            "update-plan",
-        )
-
-        # Check cache (skip for mutations)
-        if self._cache is not None and not is_mutation:
-            cache_key = self._get_cache_key(request_type, query, user_token)
-            if cache_key in self._cache:
-                if self._config.debug:
-                    self._logger.debug("Cache hit", query=query[:50])
-                cached_result: ClientResponse = self._cache[cache_key]
-                return cached_result
-        else:
-            cache_key = ""
+        # Media requests must skip cache: analysis is non-deterministic and
+        # cache keys don't incorporate binary image data.
+        cache_key = ""
 
         request = ClientRequest(
             query=query,
@@ -859,9 +844,7 @@ class AxonFlow:
                 block_reason=response.block_reason,
             )
 
-        # Cache successful responses (skip mutations — plan operations)
-        if self._cache is not None and response.success and cache_key and not is_mutation:
-            self._cache[cache_key] = response
+        # Media requests are never cached (cache_key is always empty above).
 
         return response
 
@@ -5718,6 +5701,25 @@ class SyncAxonFlow:
         """
         return self._run_sync(
             self._async_client.proxy_llm_call(user_token, query, request_type, context)
+        )
+
+    def proxy_llm_call_with_media(
+        self,
+        user_token: str,
+        query: str,
+        request_type: str,
+        media: list,
+        context: dict | None = None,
+    ) -> ClientResponse:
+        """Send a request with media content (images) for governance analysis.
+
+        This is Proxy Mode with multimodal support - media items are analyzed
+        for PII, content safety, biometric data, and document classification.
+        """
+        return self._run_sync(
+            self._async_client.proxy_llm_call_with_media(
+                user_token, query, request_type, media, context
+            )
         )
 
     def list_connectors(self) -> list[ConnectorMetadata]:
