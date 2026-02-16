@@ -803,10 +803,8 @@ class AxonFlow:
         if not user_token:
             user_token = "anonymous"  # noqa: S105 - not a password, just a placeholder
 
-        # Media requests must skip cache: analysis is non-deterministic and
+        # Media requests skip cache: analysis is non-deterministic and
         # cache keys don't incorporate binary image data.
-        cache_key = ""
-
         request = ClientRequest(
             query=query,
             user_token=user_token,

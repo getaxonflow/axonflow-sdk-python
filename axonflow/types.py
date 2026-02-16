@@ -80,7 +80,9 @@ class AxonFlowConfig(BaseModel):
 class MediaContent(BaseModel):
     """Media content (image) to include with a request for governance analysis."""
 
-    source: Literal["base64", "url"] = Field(..., description="How media is provided: 'base64' or 'url'")
+    source: Literal["base64", "url"] = Field(
+        ..., description="How media is provided: 'base64' or 'url'"
+    )
     base64_data: str | None = Field(default=None, description="Base64-encoded image data")
     url: str | None = Field(default=None, description="Image URL")
     mime_type: str = Field(..., description="Media content type (e.g., 'image/jpeg')")
