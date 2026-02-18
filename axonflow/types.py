@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -77,6 +77,54 @@ class AxonFlowConfig(BaseModel):
     cache: CacheConfig = Field(default_factory=CacheConfig)
 
 
+class MediaContent(BaseModel):
+    """Media content (image) to include with a request for governance analysis."""
+
+    source: Literal["base64", "url"] = Field(
+        ..., description="How media is provided: 'base64' or 'url'"
+    )
+    base64_data: str | None = Field(default=None, description="Base64-encoded image data")
+    url: str | None = Field(default=None, description="Image URL")
+    mime_type: str = Field(..., description="Media content type (e.g., 'image/jpeg')")
+
+
+class MediaAnalysisResult(BaseModel):
+    """Analysis results for a single media item."""
+
+    media_index: int = Field(default=0, description="Index in the request media array")
+    sha256_hash: str = Field(default="", description="SHA-256 hash of the image data")
+    has_faces: bool = Field(default=False, description="Whether faces were detected")
+    face_count: int = Field(default=0, ge=0, description="Number of faces detected")
+    has_biometric_data: bool = Field(
+        default=False, description="Biometric data detected (GDPR Art. 9)"
+    )
+    nsfw_score: float = Field(default=0.0, ge=0, le=1, description="NSFW content score")
+    violence_score: float = Field(default=0.0, ge=0, le=1, description="Violence content score")
+    content_safe: bool = Field(default=True, description="Aggregated content safety flag")
+    document_type: str | None = Field(default=None, description="Classified document type")
+    is_sensitive_document: bool = Field(default=False, description="Sensitive document flag")
+    has_pii: bool = Field(default=False, description="PII detected in image text via OCR")
+    pii_types: list[str] = Field(default_factory=list, description="Types of PII detected")
+    has_extracted_text: bool = Field(
+        default=False, description="Whether text was extracted from image via OCR"
+    )
+    extracted_text_length: int = Field(
+        default=0, ge=0, description="Length of extracted text in characters"
+    )
+    estimated_cost_usd: float = Field(default=0.0, ge=0, description="Analysis cost for this item")
+    warnings: list[str] = Field(default_factory=list, description="Governance warnings")
+
+
+class MediaAnalysisResponse(BaseModel):
+    """Aggregated media analysis results in the response."""
+
+    results: list[MediaAnalysisResult] = Field(
+        default_factory=list, description="Per-item analysis results"
+    )
+    total_cost_usd: float = Field(default=0.0, ge=0, description="Total analysis cost")
+    analysis_time_ms: int = Field(default=0, ge=0, description="Total analysis time (ms)")
+
+
 class ClientRequest(BaseModel):
     """Request to AxonFlow Agent."""
 
@@ -85,6 +133,9 @@ class ClientRequest(BaseModel):
     client_id: str | None = Field(default=None, description="Client ID (optional)")
     request_type: str = Field(..., description="Request type")
     context: dict[str, Any] = Field(default_factory=dict, description="Additional context")
+    media: list[MediaContent] | None = Field(
+        default=None, description="Optional media for multimodal governance"
+    )
 
 
 class CodeArtifact(BaseModel):
@@ -148,6 +199,9 @@ class ClientResponse(BaseModel):
     block_reason: str | None = Field(default=None, description="Block reason")
     policy_info: PolicyEvaluationInfo | None = Field(default=None)
     budget_info: BudgetInfo | None = Field(default=None, description="Budget status (Issue #1082)")
+    media_analysis: MediaAnalysisResponse | None = Field(
+        default=None, description="Media governance results"
+    )
 
     def model_post_init(self, __context: Any) -> None:
         """Detect nested data.success=false and surface error."""

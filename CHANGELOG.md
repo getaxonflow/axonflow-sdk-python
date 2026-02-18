@@ -5,6 +5,19 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-02-18
+
+### Added
+
+- **Media Governance Types**: `MediaContent`, `MediaAnalysisResult`, `MediaAnalysisResponse` for multimodal image governance
+- **`proxy_llm_call_with_media()`**: Async + sync methods to send images (base64 or URL) alongside queries for governance analysis before LLM routing
+
+### Breaking
+
+- `MediaAnalysisResult.extracted_text` replaced by `has_extracted_text` (bool) and `extracted_text_length` (int). Raw extracted text is no longer exposed in API responses.
+
+---
+
 ## [3.4.0] - 2026-02-13
 
 ### Added
@@ -13,11 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `async fail_workflow(workflow_id, reason=None)` + sync wrapper
   - Sends `POST /api/v1/workflows/{id}/fail`
 - **HITL Queue API** (Enterprise): Human-in-the-loop approval queue management
-  - `list_hitl_queue(opts)` — list pending approvals with filtering
-  - `get_hitl_request(request_id)` — get approval details
-  - `approve_hitl_request(request_id, review)` — approve a request
-  - `reject_hitl_request(request_id, review)` — reject a request
-  - `get_hitl_stats()` — dashboard statistics
+  - `list_hitl_queue(opts)`: list pending approvals with filtering
+  - `get_hitl_request(request_id)`: get approval details
+  - `approve_hitl_request(request_id, review)`: approve a request
+  - `reject_hitl_request(request_id, review)`: reject a request
+  - `get_hitl_stats()`: dashboard statistics
   - New models: `HITLApprovalRequest`, `HITLQueueListOptions`, `HITLQueueListResponse`, `HITLReviewInput`, `HITLStats`
 
 ### Fixed

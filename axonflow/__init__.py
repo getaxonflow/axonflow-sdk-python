@@ -148,6 +148,9 @@ from axonflow.types import (
     ListExecutionsResponse,
     ListUsageRecordsOptions,
     ListWebhooksResponse,
+    MediaAnalysisResponse,
+    MediaAnalysisResult,
+    MediaContent,
     Mode,
     ModelPricing,
     PlanExecutionResponse,
@@ -213,6 +216,10 @@ __all__ = [
     "ClientResponse",
     "PolicyEvaluationInfo",
     "CodeArtifact",
+    # Multimodal Image Governance types
+    "MediaContent",
+    "MediaAnalysisResult",
+    "MediaAnalysisResponse",
     # Connector types
     "ConnectorMetadata",
     "ConnectorInstallRequest",
