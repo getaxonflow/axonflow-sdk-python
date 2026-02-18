@@ -1028,3 +1028,59 @@ class ListWebhooksResponse(BaseModel):
         default_factory=list, description="List of webhook subscriptions"
     )
     total: int = Field(default=0, ge=0, description="Total count of webhooks")
+
+
+# =========================================================================
+# Media Governance Config Types
+# =========================================================================
+
+
+class MediaGovernanceConfig(BaseModel):
+    """Per-tenant media governance configuration.
+
+    Controls whether media analysis is enabled and which analyzers
+    are allowed for a given tenant.
+    """
+
+    tenant_id: str = Field(default="", description="Tenant ID")
+    enabled: bool = Field(default=False, description="Whether media analysis is enabled")
+    allowed_analyzers: list[str] = Field(
+        default_factory=list, description="List of allowed analyzer IDs"
+    )
+    updated_at: str = Field(default="", description="Last updated timestamp")
+    updated_by: str = Field(default="", description="User who last updated the config")
+
+
+class MediaGovernanceStatus(BaseModel):
+    """Platform-level media governance status.
+
+    Reports availability and default configuration for media governance.
+    """
+
+    available: bool = Field(default=False, description="Whether media governance is available")
+    enabled_by_default: bool = Field(
+        default=False, description="Whether media governance is enabled by default for new tenants"
+    )
+    per_tenant_control: bool = Field(
+        default=False, description="Whether per-tenant media governance control is supported"
+    )
+    tier: str = Field(default="", description="License tier (community, enterprise, etc.)")
+
+
+class UpdateMediaGovernanceConfigRequest(BaseModel):
+    """Request to update per-tenant media governance configuration."""
+
+    enabled: bool | None = Field(default=None, description="Enable or disable media analysis")
+    allowed_analyzers: list[str] | None = Field(
+        default=None, description="List of allowed analyzer IDs"
+    )
+
+
+# =========================================================================
+# Media Governance Category Constants
+# =========================================================================
+
+CATEGORY_MEDIA_SAFETY: str = "media-safety"
+CATEGORY_MEDIA_BIOMETRIC: str = "media-biometric"
+CATEGORY_MEDIA_DOCUMENT: str = "media-document"
+CATEGORY_MEDIA_PII: str = "media-pii"
