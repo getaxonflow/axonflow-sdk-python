@@ -4001,7 +4001,9 @@ class AxonFlow:
         Example:
             >>> from axonflow import UpdateMediaGovernanceConfigRequest
             >>> config = await client.update_media_governance_config(
-            ...     UpdateMediaGovernanceConfigRequest(enabled=True, allowed_analyzers=["nsfw", "pii"])
+            ...     UpdateMediaGovernanceConfigRequest(
+            ...         enabled=True, allowed_analyzers=["nsfw", "pii"]
+            ...     )
             ... )
             >>> print(f"Enabled: {config.enabled}")
         """
