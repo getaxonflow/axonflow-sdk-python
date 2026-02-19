@@ -14,6 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update version in source
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
+          sed -i "s/^__version__ = .*/__version__ = \"${VERSION}\"/" axonflow/__init__.py
+          echo "Updated version to ${VERSION}"
+          grep version pyproject.toml | head -1
+          grep __version__ axonflow/__init__.py
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -87,3 +100,29 @@ jobs:
 
             See [CHANGELOG.md](https://github.com/getaxonflow/axonflow-sdk-python/blob/main/CHANGELOG.md) for full release details.
           generate_release_notes: false
+
+  verify-publish:
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Wait for PyPI propagation
+        run: sleep 30
+
+      - name: Verify package on PyPI
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          for i in 1 2 3 4 5; do
+            echo "Attempt $i: Checking PyPI for axonflow==${VERSION}..."
+            if pip install --dry-run axonflow==${VERSION} 2>&1 | grep -q "Would install"; then
+              echo "SUCCESS: axonflow ${VERSION} is available on PyPI"
+              exit 0
+            fi
+            echo "Not yet available, waiting 30 seconds..."
+            sleep 30
+          done
+          echo "FAILURE: axonflow ${VERSION} not found on PyPI after 5 attempts"
+          exit 1
