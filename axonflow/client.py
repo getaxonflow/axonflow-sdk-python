@@ -3369,6 +3369,12 @@ class AxonFlow:
         body = {}
         if request:
             body = {"output": request.output, "metadata": request.metadata}
+            if request.tokens_in is not None:
+                body["tokens_in"] = request.tokens_in
+            if request.tokens_out is not None:
+                body["tokens_out"] = request.tokens_out
+            if request.cost_usd is not None:
+                body["cost_usd"] = request.cost_usd
 
         await self._orchestrator_request(
             "POST",

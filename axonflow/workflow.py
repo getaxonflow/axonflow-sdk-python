@@ -211,6 +211,9 @@ class MarkStepCompletedRequest(BaseModel):
 
     output: dict[str, Any] = Field(default_factory=dict, description="Output data from the step")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    tokens_in: int | None = Field(default=None, description="Input tokens consumed by this step")
+    tokens_out: int | None = Field(default=None, description="Output tokens produced by this step")
+    cost_usd: float | None = Field(default=None, description="Cost in USD for this step execution")
 
 
 class AbortWorkflowRequest(BaseModel):
