@@ -32,6 +32,7 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
+from axonflow.types import CATEGORY_MEDIA_SAFETY
 
 # Sample test data
 SAMPLE_STATIC_POLICY = {
@@ -493,6 +494,16 @@ class TestPolicyTypes:
         assert request.name == "Org Policy"
         assert request.tier == PolicyTier.ORGANIZATION
         assert request.organization_id == "org_12345"
+
+    def test_create_static_policy_request_with_media_category_constant(self) -> None:
+        """Test media category constants are valid for static policy requests."""
+        request = CreateStaticPolicyRequest(
+            name="Media Safety Policy",
+            category=CATEGORY_MEDIA_SAFETY,
+            pattern=r"media.nsfw_score > 0.8",
+            severity=PolicySeverity.HIGH,
+        )
+        assert request.category == PolicyCategory.MEDIA_SAFETY
 
     def test_create_dynamic_policy_request(self) -> None:
         """Test create dynamic policy request model."""
