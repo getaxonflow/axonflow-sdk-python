@@ -3366,7 +3366,7 @@ class AxonFlow:
             ...     MarkStepCompletedRequest(output={"result": "Code generated"})
             ... )
         """
-        body = {}
+        body: dict[str, Any] = {}
         if request:
             body = {"output": request.output, "metadata": request.metadata}
             if request.tokens_in is not None:
