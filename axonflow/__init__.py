@@ -117,6 +117,10 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.types import (
+    CATEGORY_MEDIA_BIOMETRIC,
+    CATEGORY_MEDIA_DOCUMENT,
+    CATEGORY_MEDIA_PII,
+    CATEGORY_MEDIA_SAFETY,
     AuditResult,
     Budget,
     BudgetAlert,
@@ -151,6 +155,8 @@ from axonflow.types import (
     MediaAnalysisResponse,
     MediaAnalysisResult,
     MediaContent,
+    MediaGovernanceConfig,
+    MediaGovernanceStatus,
     Mode,
     ModelPricing,
     PlanExecutionResponse,
@@ -170,6 +176,7 @@ from axonflow.types import (
     TimelineEntry,
     TokenUsage,
     UpdateBudgetRequest,
+    UpdateMediaGovernanceConfigRequest,
     UpdatePlanRequest,
     UpdatePlanResponse,
     UsageBreakdown,
@@ -202,7 +209,7 @@ from axonflow.workflow import (
     WorkflowStepInfo,
 )
 
-__version__ = "3.5.0"
+__version__ = "3.6.0"
 __all__ = [
     # Main client
     "AxonFlow",
@@ -220,6 +227,15 @@ __all__ = [
     "MediaContent",
     "MediaAnalysisResult",
     "MediaAnalysisResponse",
+    # Media Governance Config types
+    "MediaGovernanceConfig",
+    "MediaGovernanceStatus",
+    "UpdateMediaGovernanceConfigRequest",
+    # Media Governance Category constants
+    "CATEGORY_MEDIA_SAFETY",
+    "CATEGORY_MEDIA_BIOMETRIC",
+    "CATEGORY_MEDIA_DOCUMENT",
+    "CATEGORY_MEDIA_PII",
     # Connector types
     "ConnectorMetadata",
     "ConnectorInstallRequest",

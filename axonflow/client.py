@@ -152,6 +152,8 @@ from axonflow.types import (
     ListUsageRecordsOptions,
     ListWebhooksResponse,
     MediaContent,
+    MediaGovernanceConfig,
+    MediaGovernanceStatus,
     Mode,
     PlanExecutionResponse,
     PlanResponse,
@@ -167,6 +169,7 @@ from axonflow.types import (
     TimelineEntry,
     TokenUsage,
     UpdateBudgetRequest,
+    UpdateMediaGovernanceConfigRequest,
     UpdatePlanRequest,
     UpdatePlanResponse,
     UsageBreakdown,
@@ -3363,9 +3366,15 @@ class AxonFlow:
             ...     MarkStepCompletedRequest(output={"result": "Code generated"})
             ... )
         """
-        body = {}
+        body: dict[str, Any] = {}
         if request:
             body = {"output": request.output, "metadata": request.metadata}
+            if request.tokens_in is not None:
+                body["tokens_in"] = request.tokens_in
+            if request.tokens_out is not None:
+                body["tokens_out"] = request.tokens_out
+            if request.cost_usd is not None:
+                body["cost_usd"] = request.cost_usd
 
         await self._orchestrator_request(
             "POST",
@@ -3965,6 +3974,64 @@ class AxonFlow:
             webhooks=webhooks,
             total=response.get("total", len(webhooks)),
         )
+
+    # =========================================================================
+    # MEDIA GOVERNANCE CONFIG
+    # =========================================================================
+
+    async def get_media_governance_config(self) -> MediaGovernanceConfig:
+        """Get the media governance configuration for the current tenant.
+
+        Returns:
+            MediaGovernanceConfig with current tenant media governance settings
+
+        Example:
+            >>> config = await client.get_media_governance_config()
+            >>> print(f"Enabled: {config.enabled}, Analyzers: {config.allowed_analyzers}")
+        """
+        response = await self._request("GET", "/api/v1/media-governance/config")
+        return MediaGovernanceConfig.model_validate(response)
+
+    async def update_media_governance_config(
+        self,
+        request: UpdateMediaGovernanceConfigRequest,
+    ) -> MediaGovernanceConfig:
+        """Update the media governance configuration for the current tenant.
+
+        Args:
+            request: Update request with fields to change
+
+        Returns:
+            Updated MediaGovernanceConfig
+
+        Example:
+            >>> from axonflow import UpdateMediaGovernanceConfigRequest
+            >>> config = await client.update_media_governance_config(
+            ...     UpdateMediaGovernanceConfigRequest(
+            ...         enabled=True, allowed_analyzers=["nsfw", "pii"]
+            ...     )
+            ... )
+            >>> print(f"Enabled: {config.enabled}")
+        """
+        response = await self._request(
+            "PUT",
+            "/api/v1/media-governance/config",
+            json_data=request.model_dump(exclude_none=True),
+        )
+        return MediaGovernanceConfig.model_validate(response)
+
+    async def get_media_governance_status(self) -> MediaGovernanceStatus:
+        """Get the platform-level media governance status.
+
+        Returns:
+            MediaGovernanceStatus with availability and default configuration
+
+        Example:
+            >>> status = await client.get_media_governance_status()
+            >>> print(f"Available: {status.available}, Tier: {status.tier}")
+        """
+        response = await self._request("GET", "/api/v1/media-governance/status")
+        return MediaGovernanceStatus.model_validate(response)
 
     # =========================================================================
     # MAS FEAT COMPLIANCE (Enterprise)
@@ -6390,6 +6457,23 @@ class SyncAxonFlow:
     ) -> PricingListResponse:
         """Get pricing information for models."""
         return self._run_sync(self._async_client.get_pricing(provider, model))
+
+    # Media Governance Config sync wrappers
+
+    def get_media_governance_config(self) -> MediaGovernanceConfig:
+        """Get the media governance configuration for the current tenant."""
+        return self._run_sync(self._async_client.get_media_governance_config())
+
+    def update_media_governance_config(
+        self,
+        request: UpdateMediaGovernanceConfigRequest,
+    ) -> MediaGovernanceConfig:
+        """Update the media governance configuration for the current tenant."""
+        return self._run_sync(self._async_client.update_media_governance_config(request))
+
+    def get_media_governance_status(self) -> MediaGovernanceStatus:
+        """Get the platform-level media governance status."""
+        return self._run_sync(self._async_client.get_media_governance_status())
 
     # =========================================================================
     # MAS FEAT Compliance sync wrappers (Enterprise)

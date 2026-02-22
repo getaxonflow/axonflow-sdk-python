@@ -45,6 +45,12 @@ class PolicyCategory(str, Enum):
     DYNAMIC_COST = "dynamic-cost"
     DYNAMIC_ACCESS = "dynamic-access"
 
+    # Media governance categories
+    MEDIA_SAFETY = "media-safety"
+    MEDIA_BIOMETRIC = "media-biometric"
+    MEDIA_DOCUMENT = "media-document"
+    MEDIA_PII = "media-pii"
+
 
 class PolicyTier(str, Enum):
     """Policy tiers determine where policies apply."""
