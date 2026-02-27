@@ -358,6 +358,45 @@ class ConnectorResponse(BaseModel):
         return self.redacted
 
 
+class MCPCheckInputRequest(BaseModel):
+    """Request to validate input against MCP policies."""
+
+    connector_type: str
+    statement: str
+    parameters: dict[str, Any] | None = Field(default=None)
+    operation: str = Field(default="query")
+
+
+class MCPCheckInputResponse(BaseModel):
+    """Result of input policy evaluation."""
+
+    allowed: bool
+    block_reason: str | None = Field(default=None)
+    policies_evaluated: int = Field(default=0, ge=0)
+    policy_info: ConnectorPolicyInfo | None = Field(default=None)
+
+
+class MCPCheckOutputRequest(BaseModel):
+    """Request to validate output against MCP policies."""
+
+    connector_type: str
+    response_data: list[dict[str, Any]] | None = Field(default=None)
+    message: str | None = Field(default=None)
+    metadata: dict[str, Any] | None = Field(default=None)
+    row_count: int = Field(default=0, ge=0)
+
+
+class MCPCheckOutputResponse(BaseModel):
+    """Result of output policy evaluation."""
+
+    allowed: bool
+    block_reason: str | None = Field(default=None)
+    redacted_data: Any | None = Field(default=None)
+    policies_evaluated: int = Field(default=0, ge=0)
+    exfiltration_info: ExfiltrationCheckInfo | None = Field(default=None)
+    policy_info: ConnectorPolicyInfo | None = Field(default=None)
+
+
 class PlanStep(BaseModel):
     """A step in a multi-agent plan."""
 
