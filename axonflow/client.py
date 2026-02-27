@@ -5958,9 +5958,7 @@ class SyncAxonFlow:
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it."""
         return self._run_sync(
-            self._async_client.mcp_check_input(
-                connector_type, statement, operation, parameters
-            )
+            self._async_client.mcp_check_input(connector_type, statement, operation, parameters)
         )
 
     def mcp_check_output(
