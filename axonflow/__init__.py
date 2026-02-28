@@ -152,6 +152,10 @@ from axonflow.types import (
     ListExecutionsResponse,
     ListUsageRecordsOptions,
     ListWebhooksResponse,
+    MCPCheckInputRequest,
+    MCPCheckInputResponse,
+    MCPCheckOutputRequest,
+    MCPCheckOutputResponse,
     MediaAnalysisResponse,
     MediaAnalysisResult,
     MediaContent,
@@ -240,6 +244,11 @@ __all__ = [
     "ConnectorMetadata",
     "ConnectorInstallRequest",
     "ConnectorResponse",
+    # MCP Policy Check types
+    "MCPCheckInputRequest",
+    "MCPCheckInputResponse",
+    "MCPCheckOutputRequest",
+    "MCPCheckOutputResponse",
     # Planning types
     "PlanStep",
     "PlanResponse",

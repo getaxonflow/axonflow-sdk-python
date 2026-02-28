@@ -151,6 +151,8 @@ from axonflow.types import (
     ListExecutionsResponse,
     ListUsageRecordsOptions,
     ListWebhooksResponse,
+    MCPCheckInputResponse,
+    MCPCheckOutputResponse,
     MediaContent,
     MediaGovernanceConfig,
     MediaGovernanceStatus,
@@ -1075,6 +1077,110 @@ class AxonFlow:
         Same as mcp_query but follows the naming convention of other execute* methods.
         """
         return await self.mcp_query(connector, statement, options)
+
+    async def mcp_check_input(
+        self,
+        connector_type: str,
+        statement: str,
+        operation: str = "query",
+        parameters: dict[str, Any] | None = None,
+    ) -> MCPCheckInputResponse:
+        """Validate an MCP request against configured policies without executing it.
+
+        Use this when an external orchestrator (e.g., LangGraph, CrewAI) manages MCP
+        execution but needs AxonFlow policy enforcement as a pre-execution gate.
+
+        Args:
+            connector_type: Type of MCP connector (e.g., "postgres", "snowflake").
+            statement: The SQL query or command to validate.
+            operation: Operation type - "query" (default) or "execute".
+            parameters: Optional query parameters.
+
+        Returns:
+            MCPCheckInputResponse with allowed status, block reason, and policy info.
+
+        Raises:
+            ConnectorError: If the request fails (non-403 errors only).
+        """
+        url = f"{self._config.endpoint}/api/v1/mcp/check-input"
+        body: dict[str, Any] = {
+            "connector_type": connector_type,
+            "statement": statement,
+            "operation": operation,
+        }
+        if parameters:
+            body["parameters"] = parameters
+
+        if self._config.debug:
+            self._logger.debug(
+                "MCP check-input",
+                connector_type=connector_type,
+                statement=statement[:50],
+            )
+
+        response = await self._http_client.post(url, json=body)
+        data = response.json()
+
+        if not response.is_success and response.status_code != 403:  # noqa: PLR2004
+            error_msg = data.get("error", "MCP check-input failed")
+            raise ConnectorError(error_msg, connector_type, "check-input")
+
+        return MCPCheckInputResponse(**data)
+
+    async def mcp_check_output(
+        self,
+        connector_type: str,
+        response_data: list[dict[str, Any]] | None = None,
+        message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        row_count: int = 0,
+    ) -> MCPCheckOutputResponse:
+        """Validate MCP response data against configured policies.
+
+        Use this when an external orchestrator manages MCP execution but needs AxonFlow
+        policy enforcement as a post-execution gate (PII redaction, exfiltration limits).
+
+        Args:
+            connector_type: Type of MCP connector (e.g., "postgres", "snowflake").
+            response_data: Array of row objects from a query response.
+            message: Execute-style response message (e.g., "5 rows affected").
+            metadata: Connector metadata for SQLi scanning.
+            row_count: Total number of rows returned.
+
+        Returns:
+            MCPCheckOutputResponse with allowed status, redacted data, and policy info.
+
+        Raises:
+            ConnectorError: If the request fails (non-403 errors only).
+        """
+        url = f"{self._config.endpoint}/api/v1/mcp/check-output"
+        body: dict[str, Any] = {
+            "connector_type": connector_type,
+        }
+        if response_data is not None:
+            body["response_data"] = response_data
+        if message is not None:
+            body["message"] = message
+        if metadata is not None:
+            body["metadata"] = metadata
+        if row_count > 0:
+            body["row_count"] = row_count
+
+        if self._config.debug:
+            self._logger.debug(
+                "MCP check-output",
+                connector_type=connector_type,
+                row_count=row_count,
+            )
+
+        response = await self._http_client.post(url, json=body)
+        data = response.json()
+
+        if not response.is_success and response.status_code != 403:  # noqa: PLR2004
+            error_msg = data.get("error", "MCP check-output failed")
+            raise ConnectorError(error_msg, connector_type, "check-output")
+
+        return MCPCheckOutputResponse(**data)
 
     async def generate_plan(
         self,
@@ -5842,6 +5948,33 @@ class SyncAxonFlow:
     ) -> ConnectorResponse:
         """Execute a statement against an MCP connector (alias for mcp_query)."""
         return self._run_sync(self._async_client.mcp_execute(connector, statement, options))
+
+    def mcp_check_input(
+        self,
+        connector_type: str,
+        statement: str,
+        operation: str = "query",
+        parameters: dict[str, Any] | None = None,
+    ) -> MCPCheckInputResponse:
+        """Validate an MCP request against configured policies without executing it."""
+        return self._run_sync(
+            self._async_client.mcp_check_input(connector_type, statement, operation, parameters)
+        )
+
+    def mcp_check_output(
+        self,
+        connector_type: str,
+        response_data: list[dict[str, Any]] | None = None,
+        message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        row_count: int = 0,
+    ) -> MCPCheckOutputResponse:
+        """Validate MCP response data against configured policies."""
+        return self._run_sync(
+            self._async_client.mcp_check_output(
+                connector_type, response_data, message, metadata, row_count
+            )
+        )
 
     def generate_plan(
         self,

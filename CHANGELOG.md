@@ -5,6 +5,19 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-02-28
+
+### Added
+
+- **MCP Policy-Check Endpoints** (Platform v4.6.0+): Standalone policy validation for external orchestrators (LangGraph, CrewAI) to enforce AxonFlow policies without executing connector queries
+  - `mcp_check_input(connector_type, statement)`: Validate SQL/commands against input policies (SQLi detection, dangerous query blocking, PII in queries, dynamic policies). Returns `allowed=True` or raises with `block_reason`
+  - `mcp_check_output(connector_type, response_data)`: Validate MCP response data against output policies (PII redaction, exfiltration limits, dynamic policies). Returns original or redacted data with `policy_info`
+  - New types: `MCPCheckInputRequest`, `MCPCheckInputResponse`, `MCPCheckOutputRequest`, `MCPCheckOutputResponse`
+  - Async methods with sync wrappers (`mcp_check_input_sync`, `mcp_check_output_sync`)
+  - Supports both query-style (`response_data`) and execute-style (`message` + `metadata`) output validation
+
+---
+
 ## [3.6.0] - 2026-02-22
 
 ### Added
