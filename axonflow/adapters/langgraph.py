@@ -213,7 +213,8 @@ class AxonFlowLangGraphAdapter:
         # Generate step ID if not provided
         if step_id is None:
             self._step_counter += 1
-            step_id = f"step-{self._step_counter}-{step_name.lower().replace(' ', '-')}"
+            safe_name = step_name.lower().replace(' ', '-').replace('/', '-')
+            step_id = f"step-{self._step_counter}-{safe_name}"
 
         request = StepGateRequest(
             step_name=step_name,
@@ -281,7 +282,8 @@ class AxonFlowLangGraphAdapter:
 
         # Generate step ID if not provided (must match check_gate)
         if step_id is None:
-            step_id = f"step-{self._step_counter}-{step_name.lower().replace(' ', '-')}"
+            safe_name = step_name.lower().replace(' ', '-').replace('/', '-')
+            step_id = f"step-{self._step_counter}-{safe_name}"
 
         request = MarkStepCompletedRequest(
             output=output or {},
