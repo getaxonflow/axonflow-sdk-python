@@ -81,6 +81,10 @@ class CreateWorkflowRequest(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the workflow"
     )
+    trace_id: str | None = Field(
+        default=None,
+        description="External trace ID for correlation (Langsmith, Datadog, OTel)",
+    )
 
 
 class CreateWorkflowResponse(BaseModel):
@@ -91,6 +95,15 @@ class CreateWorkflowResponse(BaseModel):
     source: WorkflowSource = Field(..., description="Source orchestrator")
     status: WorkflowStatus = Field(..., description="Current status (always 'in_progress' for new)")
     created_at: datetime = Field(..., description="When the workflow was created")
+    trace_id: str | None = None
+
+
+class ToolContext(BaseModel):
+    """Tool-level context for per-tool governance within tool_call steps."""
+
+    tool_name: str
+    tool_type: str | None = Field(default=None, description="Tool type: function, mcp, api")
+    tool_input: dict[str, Any] = Field(default_factory=dict)
 
 
 class StepGateRequest(BaseModel):
@@ -105,6 +118,7 @@ class StepGateRequest(BaseModel):
     )
     model: str | None = Field(default=None, description="LLM model being used (if applicable)")
     provider: str | None = Field(default=None, description="LLM provider (if applicable)")
+    tool_context: ToolContext | None = None
 
 
 class StepGateResponse(BaseModel):
@@ -178,6 +192,7 @@ class WorkflowStatusResponse(BaseModel):
     steps: list[WorkflowStepInfo] = Field(
         default_factory=list, description="List of steps in the workflow"
     )
+    trace_id: str | None = None
 
     def is_terminal(self) -> bool:
         """Check if the workflow is in a terminal state (completed, aborted, or failed)."""
@@ -191,6 +206,7 @@ class ListWorkflowsOptions(BaseModel):
 
     status: WorkflowStatus | None = Field(default=None, description="Filter by workflow status")
     source: WorkflowSource | None = Field(default=None, description="Filter by source")
+    trace_id: str | None = Field(default=None, description="Filter by external trace ID")
     limit: int = Field(default=50, ge=1, le=100, description="Maximum number of results to return")
     offset: int = Field(default=0, ge=0, description="Offset for pagination")
 

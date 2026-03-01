@@ -207,6 +207,7 @@ from axonflow.workflow import (
     StepGateRequest,
     StepGateResponse,
     StepType,
+    ToolContext,
     WorkflowSource,
     WorkflowStatus,
     WorkflowStatusResponse,
@@ -368,6 +369,7 @@ __all__ = [
     "MarkStepCompletedRequest",
     "AbortWorkflowRequest",
     "PolicyMatch",
+    "ToolContext",
     # WCP Approval types (Feature 5)
     "ApproveStepResponse",
     "RejectStepResponse",

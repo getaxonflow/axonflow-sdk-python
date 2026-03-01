@@ -3606,6 +3606,8 @@ class AxonFlow:
                 params.append(f"status={options.status.value}")
             if options.source:
                 params.append(f"source={options.source.value}")
+            if options.trace_id:
+                params.append(f"trace_id={options.trace_id}")
             if options.limit:
                 params.append(f"limit={options.limit}")
             if options.offset:
