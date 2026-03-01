@@ -32,6 +32,7 @@ import json
 import os
 import re
 from collections.abc import AsyncIterator, Coroutine, Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -235,6 +236,41 @@ def _parse_datetime(value: str) -> datetime:
 # TypeVar for generic _run_sync method in SyncAxonFlow
 T = TypeVar("T")
 
+# SDK version — must match axonflow/__init__.py __version__
+_SDK_VERSION = "3.8.0"
+
+
+@dataclass
+class PlatformCapability:
+    """Describes a feature supported by the platform."""
+
+    name: str
+    since: str
+    description: str
+
+
+@dataclass
+class SDKCompatibility:
+    """SDK version compatibility information."""
+
+    min_sdk_version: str
+    recommended_sdk_version: str
+
+
+@dataclass
+class HealthResponse:
+    """Detailed health check response from the platform."""
+
+    status: str
+    service: str
+    version: str
+    capabilities: list[PlatformCapability]
+    sdk_compatibility: SDKCompatibility | None = None
+
+    def has_capability(self, name: str) -> bool:
+        """Check if the platform supports a named capability."""
+        return any(c.name == name for c in self.capabilities)
+
 
 class AxonFlow:
     """Main AxonFlow client for AI governance.
@@ -323,6 +359,7 @@ class AxonFlow:
         # Build headers
         headers: dict[str, str] = {
             "Content-Type": "application/json",
+            "User-Agent": f"axonflow-sdk-python/{_SDK_VERSION}",
         }
         # Add authentication and tenant headers
         # client_id is always required for policy APIs (sets X-Tenant-ID)
@@ -659,6 +696,48 @@ class AxonFlow:
             return response.get("status") == "healthy"
         except AxonFlowError:
             return False
+
+    async def health_check_detailed(self) -> HealthResponse:
+        """Get detailed health info including capabilities and version.
+
+        Returns:
+            HealthResponse with platform version, capabilities, and SDK compatibility.
+
+        Raises:
+            AxonFlowError: If the health check request fails.
+        """
+        response = await self._request("GET", "/health")
+        caps = [
+            PlatformCapability(
+                name=c.get("name", ""),
+                since=c.get("since", ""),
+                description=c.get("description", ""),
+            )
+            for c in response.get("capabilities", [])
+        ]
+        compat_data = response.get("sdk_compatibility")
+        compat = None
+        if compat_data:
+            compat = SDKCompatibility(
+                min_sdk_version=compat_data.get("min_sdk_version", ""),
+                recommended_sdk_version=compat_data.get("recommended_sdk_version", ""),
+            )
+        health = HealthResponse(
+            status=response.get("status", "unknown"),
+            service=response.get("service", ""),
+            version=response.get("version", ""),
+            capabilities=caps,
+            sdk_compatibility=compat,
+        )
+        if compat and compat.min_sdk_version and _SDK_VERSION < compat.min_sdk_version:
+            import logging
+
+            logging.getLogger("axonflow").warning(
+                "SDK version %s is below minimum supported version %s. Please upgrade.",
+                _SDK_VERSION,
+                compat.min_sdk_version,
+            )
+        return health
 
     async def orchestrator_health_check(self) -> bool:
         """Check if AxonFlow Orchestrator is healthy.
@@ -5851,6 +5930,10 @@ class SyncAxonFlow:
     def health_check(self) -> bool:
         """Check if AxonFlow Agent is healthy."""
         return self._run_sync(self._async_client.health_check())
+
+    def health_check_detailed(self) -> HealthResponse:
+        """Get detailed health info including capabilities and version."""
+        return self._run_sync(self._async_client.health_check_detailed())
 
     def orchestrator_health_check(self) -> bool:
         """Check if AxonFlow Orchestrator is healthy."""
