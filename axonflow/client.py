@@ -58,6 +58,7 @@ from tenacity import (
 )
 
 from axonflow import masfeat
+from axonflow._version import __version__ as _SDK_VERSION
 from axonflow.code_governance import (
     CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
@@ -237,13 +238,18 @@ def _parse_datetime(value: str) -> datetime:
 # TypeVar for generic _run_sync method in SyncAxonFlow
 T = TypeVar("T")
 
-# SDK version — must match axonflow/__init__.py __version__
-_SDK_VERSION = "3.8.0"
-
 
 def _parse_version(v: str) -> tuple[int, ...]:
     """Parse a semver string into a tuple of ints for correct numeric comparison."""
-    return tuple(int(x) for x in v.split("."))
+    parts: list[int] = []
+    for part in v.split("."):
+        # Strip pre-release suffix (e.g., "0-beta" -> "0")
+        numeric = part.split("-")[0].split("+")[0]
+        try:
+            parts.append(int(numeric))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
 
 
 @dataclass
@@ -3513,11 +3519,13 @@ class AxonFlow:
             "provider": request.provider,
         }
         if request.tool_context:
-            body["tool_context"] = {
+            tc: dict[str, Any] = {
                 "tool_name": request.tool_context.tool_name,
-                "tool_type": request.tool_context.tool_type,
                 "tool_input": request.tool_context.tool_input,
             }
+            if request.tool_context.tool_type is not None:
+                tc["tool_type"] = request.tool_context.tool_type
+            body["tool_context"] = tc
 
         if self._config.debug:
             self._logger.debug(

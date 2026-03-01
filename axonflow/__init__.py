@@ -25,6 +25,7 @@ Example:
     >>> result = client.proxy_llm_call("user-token", "What is AI?", "chat")
 """
 
+from axonflow._version import __version__
 from axonflow.client import (
     AxonFlow,
     HealthResponse,
@@ -220,8 +221,9 @@ from axonflow.workflow import (
     WorkflowStepInfo,
 )
 
-__version__ = "3.8.0"
 __all__ = [
+    # Version
+    "__version__",
     # Main client
     "AxonFlow",
     "SyncAxonFlow",

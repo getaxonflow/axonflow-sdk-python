@@ -101,6 +101,8 @@ class CreateWorkflowResponse(BaseModel):
 class ToolContext(BaseModel):
     """Tool-level context for per-tool governance within tool_call steps."""
 
+    model_config = ConfigDict(frozen=True)
+
     tool_name: str
     tool_type: str | None = Field(default=None, description="Tool type: function, mcp, api")
     tool_input: dict[str, Any] = Field(default_factory=dict)
