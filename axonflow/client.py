@@ -3431,6 +3431,8 @@ class AxonFlow:
             "total_steps": request.total_steps,
             "metadata": request.metadata,
         }
+        if request.trace_id:
+            body["trace_id"] = request.trace_id
 
         if self._config.debug:
             self._logger.debug("Creating workflow", workflow_name=request.workflow_name)
@@ -3446,6 +3448,7 @@ class AxonFlow:
             source=WorkflowSource(response["source"]),
             status=WorkflowStatus(response["status"]),
             created_at=_parse_datetime(response["created_at"]),
+            trace_id=response.get("trace_id"),
         )
 
     async def get_workflow(self, workflow_id: str) -> WorkflowStatusResponse:
@@ -3509,6 +3512,12 @@ class AxonFlow:
             "model": request.model,
             "provider": request.provider,
         }
+        if request.tool_context:
+            body["tool_context"] = {
+                "tool_name": request.tool_context.tool_name,
+                "tool_type": request.tool_context.tool_type,
+                "tool_input": request.tool_context.tool_input,
+            }
 
         if self._config.debug:
             self._logger.debug(
@@ -5244,6 +5253,7 @@ class AxonFlow:
             completed_at=(
                 _parse_datetime(data["completed_at"]) if data.get("completed_at") else None
             ),
+            trace_id=data.get("trace_id"),
             steps=steps,
         )
 
