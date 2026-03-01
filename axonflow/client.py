@@ -735,14 +735,14 @@ class AxonFlow:
             capabilities=caps,
             sdk_compatibility=compat,
         )
-        sdk_below_min = (
+        if (
             compat
             and compat.min_sdk_version
             and _parse_version(_SDK_VERSION) < _parse_version(compat.min_sdk_version)
-        )
-        if sdk_below_min:
+        ):
             logging.getLogger("axonflow").warning(
-                "SDK version %s is below minimum supported version %s. Please upgrade.",
+                "SDK version %s is below minimum supported version %s. "
+                "Please upgrade.",
                 _SDK_VERSION,
                 compat.min_sdk_version,
             )
