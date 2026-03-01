@@ -240,6 +240,11 @@ T = TypeVar("T")
 _SDK_VERSION = "3.8.0"
 
 
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse a semver string into a tuple of ints for correct numeric comparison."""
+    return tuple(int(x) for x in v.split("."))
+
+
 @dataclass
 class PlatformCapability:
     """Describes a feature supported by the platform."""
@@ -729,7 +734,7 @@ class AxonFlow:
             capabilities=caps,
             sdk_compatibility=compat,
         )
-        if compat and compat.min_sdk_version and _SDK_VERSION < compat.min_sdk_version:
+        if compat and compat.min_sdk_version and _parse_version(_SDK_VERSION) < _parse_version(compat.min_sdk_version):
             import logging
 
             logging.getLogger("axonflow").warning(
