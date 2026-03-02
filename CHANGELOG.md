@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - User-Agent header (`axonflow-sdk-python/{version}`) sent on all HTTP requests
 - Version mismatch warning logged when SDK version is below platform's `min_sdk_version`
 - `PlatformCapability`, `SDKCompatibility`, `HealthResponse` dataclasses
+- `trace_id` field on `CreateWorkflowRequest`, `CreateWorkflowResponse`, `WorkflowStatusResponse`, and `ListWorkflowsOptions` for distributed tracing correlation
+- `ToolContext` dataclass for per-tool governance within workflow steps
+- `tool_context` field on `StepGateRequest` for tool-level policy enforcement
+- `check_tool_gate()` method on LangGraph adapter for per-tool governance gate checks
+- `tool_completed()` method on LangGraph adapter for per-tool step completion
+- `list_workflows()` now supports `trace_id` filter parameter
 
 ### Fixed
 
