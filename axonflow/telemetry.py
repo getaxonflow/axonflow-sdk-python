@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_CHECKPOINT_URL = "https://checkpoint.getaxonflow.com/v1/ping"
 _TIMEOUT_SECONDS = 3
+_HTTP_OK = 200
 
 
 def _is_telemetry_enabled(
@@ -74,10 +75,10 @@ def _do_ping(url: str, payload: dict, debug: bool) -> None:
     """Execute the HTTP POST (runs inside a daemon thread)."""
     try:
         resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
-        if resp.status_code == 200:
+        if resp.status_code == _HTTP_OK:
             try:
                 body = resp.json()
-            except Exception:
+            except (ValueError, KeyError):
                 return
             latest = body.get("latest_version")
             if latest and latest != _SDK_VERSION:
@@ -89,7 +90,7 @@ def _do_ping(url: str, payload: dict, debug: bool) -> None:
                 )
             if debug:
                 logger.debug("Telemetry ping successful: %s", body)
-    except Exception:
+    except (httpx.HTTPError, OSError, ValueError):
         # Silent failure -- never disrupt the caller.
         if debug:
             logger.debug("Telemetry ping failed (non-fatal)", exc_info=True)
@@ -97,7 +98,7 @@ def _do_ping(url: str, payload: dict, debug: bool) -> None:
 
 def send_telemetry_ping(
     mode: str,
-    endpoint: str,
+    endpoint: str,  # noqa: ARG001  kept for future platform_version detection
     telemetry_enabled: bool | None,
     debug: bool = False,
 ) -> None:
@@ -105,8 +106,8 @@ def send_telemetry_ping(
 
     Args:
         mode: SDK operation mode (``"production"`` or ``"sandbox"``).
-        endpoint: The AxonFlow agent endpoint (unused in the ping itself but
-            kept for future use / consistency with other SDK implementations).
+        endpoint: The AxonFlow agent endpoint (reserved for future
+            platform_version detection).
         telemetry_enabled: Explicit config override.  ``None`` means use the
             mode-based default.
         debug: When ``True``, log debug-level messages about the ping.

@@ -122,6 +122,7 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
+from axonflow.telemetry import send_telemetry_ping
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,
@@ -426,8 +427,6 @@ class AxonFlow:
             )
 
         # Send telemetry ping (fire-and-forget).
-        from axonflow.telemetry import send_telemetry_ping
-
         send_telemetry_ping(
             mode=self._config.mode.value,
             endpoint=self._config.endpoint,
