@@ -70,6 +70,10 @@ class AxonFlowConfig(BaseModel):
     client_secret: str | None = Field(default=None, description="Client secret (optional)")
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
+    telemetry: bool | None = Field(
+        default=None,
+        description="Enable/disable anonymous telemetry (None = mode default)",
+    )
     timeout: float = Field(default=60.0, gt=0, description="Request timeout (seconds)")
     map_timeout: float = Field(default=120.0, gt=0, description="MAP operations timeout (seconds)")
     insecure_skip_verify: bool = Field(default=False, description="Skip TLS verify")

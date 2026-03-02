@@ -312,6 +312,7 @@ class AxonFlow:
         *,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
+        telemetry: bool | None = None,
         timeout: float = 60.0,
         map_timeout: float = 120.0,
         insecure_skip_verify: bool = False,
@@ -328,6 +329,9 @@ class AxonFlow:
             client_secret: Client secret (optional for community/self-hosted mode)
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
+            telemetry: Enable/disable anonymous telemetry. ``None`` uses mode default
+                (ON for production, OFF for sandbox). Set ``DO_NOT_TRACK=1`` or
+                ``AXONFLOW_TELEMETRY=off`` to opt out via environment.
             timeout: Request timeout in seconds
             map_timeout: Timeout for MAP operations in seconds (default: 120s)
                         MAP operations involve multiple LLM calls and need longer timeouts
@@ -420,6 +424,16 @@ class AxonFlow:
                 "AxonFlow client initialized",
                 endpoint=endpoint,
             )
+
+        # Send telemetry ping (fire-and-forget).
+        from axonflow.telemetry import send_telemetry_ping
+
+        send_telemetry_ping(
+            mode=self._config.mode.value,
+            endpoint=self._config.endpoint,
+            telemetry_enabled=telemetry,
+            debug=debug,
+        )
 
     @property
     def masfeat(self) -> MASFEATNamespace:
