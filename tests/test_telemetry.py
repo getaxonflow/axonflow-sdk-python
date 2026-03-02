@@ -258,9 +258,10 @@ class TestSendTelemetryPing:
         mock_response.json.return_value = {"latest_version": "99.0.0", "alerts": []}
         mock_httpx.post.return_value = mock_response
 
-        with patch.dict("os.environ", {}, clear=True), patch(
-            "axonflow.telemetry.logger"
-        ) as mock_logger:
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("axonflow.telemetry.logger") as mock_logger,
+        ):
             send_telemetry_ping(
                 mode="production",
                 endpoint="https://agent.axonflow.com",

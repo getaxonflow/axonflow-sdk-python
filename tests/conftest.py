@@ -22,6 +22,7 @@ def _disable_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable telemetry in all tests to prevent unexpected HTTP calls."""
     monkeypatch.setenv("DO_NOT_TRACK", "1")
 
+
 # ============================================================================
 # Fixture Loading Utilities
 # ============================================================================
