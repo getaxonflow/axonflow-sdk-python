@@ -56,7 +56,7 @@ def _is_telemetry_enabled(
     return mode != "sandbox"
 
 
-def _build_payload(mode: str) -> dict:
+def _build_payload(mode: str) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping."""
     return {
         "sdk": "python",
@@ -71,7 +71,7 @@ def _build_payload(mode: str) -> dict:
     }
 
 
-def _do_ping(url: str, payload: dict, debug: bool) -> None:
+def _do_ping(url: str, payload: dict[str, object], debug: bool) -> None:
     """Execute the HTTP POST (runs inside a daemon thread)."""
     try:
         resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
