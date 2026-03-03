@@ -7,6 +7,7 @@ This module provides fixtures for both unit tests (mocked) and contract tests
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -14,6 +15,13 @@ import pytest
 import pytest_asyncio
 
 from axonflow import AxonFlow
+
+
+@pytest.fixture(autouse=True)
+def _disable_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable telemetry in all tests to prevent unexpected HTTP calls."""
+    monkeypatch.setenv("DO_NOT_TRACK", "1")
+
 
 # ============================================================================
 # Fixture Loading Utilities

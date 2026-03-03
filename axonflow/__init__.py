@@ -25,7 +25,14 @@ Example:
     >>> result = client.proxy_llm_call("user-token", "What is AI?", "chat")
 """
 
-from axonflow.client import AxonFlow, SyncAxonFlow
+from axonflow._version import __version__
+from axonflow.client import (
+    AxonFlow,
+    HealthResponse,
+    PlatformCapability,
+    SDKCompatibility,
+    SyncAxonFlow,
+)
 from axonflow.code_governance import (
     CodeFile,
     CodeGovernanceMetrics,
@@ -207,17 +214,23 @@ from axonflow.workflow import (
     StepGateRequest,
     StepGateResponse,
     StepType,
+    ToolContext,
     WorkflowSource,
     WorkflowStatus,
     WorkflowStatusResponse,
     WorkflowStepInfo,
 )
 
-__version__ = "3.6.0"
 __all__ = [
+    # Version
+    "__version__",
     # Main client
     "AxonFlow",
     "SyncAxonFlow",
+    # Version discovery types
+    "PlatformCapability",
+    "SDKCompatibility",
+    "HealthResponse",
     # Configuration
     "Mode",
     "RetryConfig",
@@ -368,6 +381,7 @@ __all__ = [
     "MarkStepCompletedRequest",
     "AbortWorkflowRequest",
     "PolicyMatch",
+    "ToolContext",
     # WCP Approval types (Feature 5)
     "ApproveStepResponse",
     "RejectStepResponse",

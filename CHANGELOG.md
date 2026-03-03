@@ -5,6 +5,31 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-03-03
+
+### Added
+
+- `health_check_detailed()` method (async + sync) returning `HealthResponse` with platform version, capabilities, and SDK compatibility info
+- `has_capability(name)` method on `HealthResponse` to check if platform supports a specific feature
+- User-Agent header (`axonflow-sdk-python/{version}`) sent on all HTTP requests
+- Version mismatch warning logged when SDK version is below platform's `min_sdk_version`
+- `PlatformCapability`, `SDKCompatibility`, `HealthResponse` dataclasses
+- `trace_id` field on `CreateWorkflowRequest`, `CreateWorkflowResponse`, `WorkflowStatusResponse`, and `ListWorkflowsOptions` for distributed tracing correlation
+- `ToolContext` dataclass for per-tool governance within workflow steps
+- `tool_context` field on `StepGateRequest` for tool-level policy enforcement
+- `check_tool_gate()` method on LangGraph adapter for per-tool governance gate checks
+- `tool_completed()` method on LangGraph adapter for per-tool step completion
+- `list_workflows()` now supports `trace_id` filter parameter
+- Anonymous runtime telemetry for version adoption tracking and feature usage signals
+- `TelemetryEnabled` / `telemetry` configuration option to explicitly control telemetry
+- `AXONFLOW_TELEMETRY=off` and `DO_NOT_TRACK=1` environment variable opt-out support
+
+### Fixed
+
+- `__version__` corrected from `3.6.0` to `3.8.0`
+
+---
+
 ## [3.7.0] - 2026-02-28
 
 ### Added

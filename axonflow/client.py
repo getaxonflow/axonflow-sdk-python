@@ -29,9 +29,11 @@ import concurrent.futures
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import re
 from collections.abc import AsyncIterator, Coroutine, Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -56,6 +58,7 @@ from tenacity import (
 )
 
 from axonflow import masfeat
+from axonflow._version import __version__ as _SDK_VERSION
 from axonflow.code_governance import (
     CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
@@ -119,6 +122,7 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
+from axonflow.telemetry import send_telemetry_ping
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,
@@ -236,6 +240,51 @@ def _parse_datetime(value: str) -> datetime:
 T = TypeVar("T")
 
 
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse a semver string into a tuple of ints for correct numeric comparison."""
+    parts: list[int] = []
+    for part in v.split("."):
+        # Strip pre-release suffix (e.g., "0-beta" -> "0")
+        numeric = part.split("-")[0].split("+")[0]
+        try:
+            parts.append(int(numeric))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
+@dataclass
+class PlatformCapability:
+    """Describes a feature supported by the platform."""
+
+    name: str
+    since: str
+    description: str
+
+
+@dataclass
+class SDKCompatibility:
+    """SDK version compatibility information."""
+
+    min_sdk_version: str
+    recommended_sdk_version: str
+
+
+@dataclass
+class HealthResponse:
+    """Detailed health check response from the platform."""
+
+    status: str
+    service: str
+    version: str
+    capabilities: list[PlatformCapability]
+    sdk_compatibility: SDKCompatibility | None = None
+
+    def has_capability(self, name: str) -> bool:
+        """Check if the platform supports a named capability."""
+        return any(c.name == name for c in self.capabilities)
+
+
 class AxonFlow:
     """Main AxonFlow client for AI governance.
 
@@ -264,6 +313,7 @@ class AxonFlow:
         *,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
+        telemetry: bool | None = None,
         timeout: float = 60.0,
         map_timeout: float = 120.0,
         insecure_skip_verify: bool = False,
@@ -280,6 +330,9 @@ class AxonFlow:
             client_secret: Client secret (optional for community/self-hosted mode)
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
+            telemetry: Enable/disable anonymous telemetry. ``None`` uses mode default
+                (ON for production, OFF for sandbox). Set ``DO_NOT_TRACK=1`` or
+                ``AXONFLOW_TELEMETRY=off`` to opt out via environment.
             timeout: Request timeout in seconds
             map_timeout: Timeout for MAP operations in seconds (default: 120s)
                         MAP operations involve multiple LLM calls and need longer timeouts
@@ -323,6 +376,7 @@ class AxonFlow:
         # Build headers
         headers: dict[str, str] = {
             "Content-Type": "application/json",
+            "User-Agent": f"axonflow-sdk-python/{_SDK_VERSION}",
         }
         # Add authentication and tenant headers
         # client_id is always required for policy APIs (sets X-Tenant-ID)
@@ -371,6 +425,15 @@ class AxonFlow:
                 "AxonFlow client initialized",
                 endpoint=endpoint,
             )
+
+        # Send telemetry ping (fire-and-forget).
+        send_telemetry_ping(
+            mode=self._config.mode.value,
+            endpoint=self._config.endpoint,
+            telemetry_enabled=telemetry,
+            has_credentials=bool(client_id and client_secret),
+            debug=debug,
+        )
 
     @property
     def masfeat(self) -> MASFEATNamespace:
@@ -659,6 +722,50 @@ class AxonFlow:
             return response.get("status") == "healthy"
         except AxonFlowError:
             return False
+
+    async def health_check_detailed(self) -> HealthResponse:
+        """Get detailed health info including capabilities and version.
+
+        Returns:
+            HealthResponse with platform version, capabilities, and SDK compatibility.
+
+        Raises:
+            AxonFlowError: If the health check request fails.
+        """
+        response = await self._request("GET", "/health")
+        caps = [
+            PlatformCapability(
+                name=c.get("name", ""),
+                since=c.get("since", ""),
+                description=c.get("description", ""),
+            )
+            for c in response.get("capabilities", [])
+        ]
+        compat_data = response.get("sdk_compatibility")
+        compat = None
+        if compat_data:
+            compat = SDKCompatibility(
+                min_sdk_version=compat_data.get("min_sdk_version", ""),
+                recommended_sdk_version=compat_data.get("recommended_sdk_version", ""),
+            )
+        health = HealthResponse(
+            status=response.get("status", "unknown"),
+            service=response.get("service", ""),
+            version=response.get("version", ""),
+            capabilities=caps,
+            sdk_compatibility=compat,
+        )
+        if (
+            compat
+            and compat.min_sdk_version
+            and _parse_version(_SDK_VERSION) < _parse_version(compat.min_sdk_version)
+        ):
+            logging.getLogger("axonflow").warning(
+                "SDK version %s is below minimum supported version %s. Please upgrade.",
+                _SDK_VERSION,
+                compat.min_sdk_version,
+            )
+        return health
 
     async def orchestrator_health_check(self) -> bool:
         """Check if AxonFlow Orchestrator is healthy.
@@ -3344,6 +3451,8 @@ class AxonFlow:
             "total_steps": request.total_steps,
             "metadata": request.metadata,
         }
+        if request.trace_id:
+            body["trace_id"] = request.trace_id
 
         if self._config.debug:
             self._logger.debug("Creating workflow", workflow_name=request.workflow_name)
@@ -3359,6 +3468,7 @@ class AxonFlow:
             source=WorkflowSource(response["source"]),
             status=WorkflowStatus(response["status"]),
             created_at=_parse_datetime(response["created_at"]),
+            trace_id=response.get("trace_id"),
         )
 
     async def get_workflow(self, workflow_id: str) -> WorkflowStatusResponse:
@@ -3422,6 +3532,14 @@ class AxonFlow:
             "model": request.model,
             "provider": request.provider,
         }
+        if request.tool_context:
+            tc: dict[str, Any] = {
+                "tool_name": request.tool_context.tool_name,
+                "tool_input": request.tool_context.tool_input,
+            }
+            if request.tool_context.tool_type is not None:
+                tc["tool_type"] = request.tool_context.tool_type
+            body["tool_context"] = tc
 
         if self._config.debug:
             self._logger.debug(
@@ -3606,6 +3724,8 @@ class AxonFlow:
                 params.append(f"status={options.status.value}")
             if options.source:
                 params.append(f"source={options.source.value}")
+            if options.trace_id:
+                params.append(f"trace_id={options.trace_id}")
             if options.limit:
                 params.append(f"limit={options.limit}")
             if options.offset:
@@ -5155,6 +5275,7 @@ class AxonFlow:
             completed_at=(
                 _parse_datetime(data["completed_at"]) if data.get("completed_at") else None
             ),
+            trace_id=data.get("trace_id"),
             steps=steps,
         )
 
@@ -5851,6 +5972,10 @@ class SyncAxonFlow:
     def health_check(self) -> bool:
         """Check if AxonFlow Agent is healthy."""
         return self._run_sync(self._async_client.health_check())
+
+    def health_check_detailed(self) -> HealthResponse:
+        """Get detailed health info including capabilities and version."""
+        return self._run_sync(self._async_client.health_check_detailed())
 
     def orchestrator_health_check(self) -> bool:
         """Check if AxonFlow Orchestrator is healthy."""
