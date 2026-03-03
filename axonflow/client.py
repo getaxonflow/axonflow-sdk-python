@@ -431,6 +431,7 @@ class AxonFlow:
             mode=self._config.mode.value,
             endpoint=self._config.endpoint,
             telemetry_enabled=telemetry,
+            has_credentials=bool(client_id and client_secret),
             debug=debug,
         )
 

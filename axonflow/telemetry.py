@@ -33,6 +33,7 @@ _HTTP_OK = 200
 def _is_telemetry_enabled(
     mode: str,
     telemetry_enabled: bool | None,
+    has_credentials: bool,
 ) -> bool:
     """Determine whether telemetry should fire.
 
@@ -40,7 +41,8 @@ def _is_telemetry_enabled(
     1. ``DO_NOT_TRACK=1`` environment variable  -> disabled
     2. ``AXONFLOW_TELEMETRY=off`` environment variable -> disabled
     3. Explicit config value (``telemetry_enabled``) -> use that
-    4. Mode-based default: OFF for sandbox, ON for production
+    4. Default: OFF for sandbox or self-hosted (no credentials), ON for
+       production with credentials (managed cloud)
     """
     # Environment-level opt-out always wins.
     if os.environ.get("DO_NOT_TRACK", "").strip() == "1":
@@ -52,8 +54,11 @@ def _is_telemetry_enabled(
     if telemetry_enabled is not None:
         return telemetry_enabled
 
-    # Default: off for sandbox, on for production.
-    return mode != "sandbox"
+    # Default: off for sandbox or community (no credentials), on for
+    # production with credentials (managed cloud).
+    if mode == "sandbox":
+        return False
+    return has_credentials
 
 
 def _build_payload(mode: str) -> dict[str, object]:
@@ -100,6 +105,7 @@ def send_telemetry_ping(
     mode: str,
     endpoint: str,  # noqa: ARG001  kept for future platform_version detection
     telemetry_enabled: bool | None,
+    has_credentials: bool = False,
     debug: bool = False,
 ) -> None:
     """Fire-and-forget telemetry ping. Runs in a daemon thread.
@@ -110,9 +116,12 @@ def send_telemetry_ping(
             platform_version detection).
         telemetry_enabled: Explicit config override.  ``None`` means use the
             mode-based default.
+        has_credentials: Whether the client was initialized with credentials
+            (clientId + clientSecret). Used to distinguish managed cloud from
+            self-hosted/community deployments for the default behavior.
         debug: When ``True``, log debug-level messages about the ping.
     """
-    if not _is_telemetry_enabled(mode, telemetry_enabled):
+    if not _is_telemetry_enabled(mode, telemetry_enabled, has_credentials):
         return
 
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip() or _DEFAULT_CHECKPOINT_URL

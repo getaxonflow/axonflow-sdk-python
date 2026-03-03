@@ -29,48 +29,53 @@ class TestIsTelemetryEnabled:
     def test_disabled_by_env_do_not_track(self) -> None:
         """DO_NOT_TRACK=1 disables telemetry regardless of other settings."""
         with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}):
-            assert _is_telemetry_enabled("production", None) is False
-            assert _is_telemetry_enabled("production", True) is False
+            assert _is_telemetry_enabled("production", None, True) is False
+            assert _is_telemetry_enabled("production", True, True) is False
 
     def test_disabled_by_env_axonflow(self) -> None:
         """AXONFLOW_TELEMETRY=off disables telemetry."""
         with patch.dict("os.environ", {"AXONFLOW_TELEMETRY": "off"}):
-            assert _is_telemetry_enabled("production", None) is False
+            assert _is_telemetry_enabled("production", None, True) is False
 
     def test_disabled_by_env_axonflow_case_insensitive(self) -> None:
         """AXONFLOW_TELEMETRY=OFF (uppercase) also disables."""
         with patch.dict("os.environ", {"AXONFLOW_TELEMETRY": "OFF"}):
-            assert _is_telemetry_enabled("production", None) is False
+            assert _is_telemetry_enabled("production", None, True) is False
 
     def test_disabled_sandbox_mode(self) -> None:
         """Default OFF for sandbox mode when no explicit config."""
         with patch.dict("os.environ", {}, clear=True):
-            assert _is_telemetry_enabled("sandbox", None) is False
+            assert _is_telemetry_enabled("sandbox", None, True) is False
 
-    def test_enabled_production_mode(self) -> None:
-        """Default ON for production mode when no explicit config."""
+    def test_enabled_production_with_credentials(self) -> None:
+        """Default ON for production mode with credentials."""
         with patch.dict("os.environ", {}, clear=True):
-            assert _is_telemetry_enabled("production", None) is True
+            assert _is_telemetry_enabled("production", None, True) is True
+
+    def test_disabled_production_without_credentials(self) -> None:
+        """Default OFF for production mode without credentials (self-hosted)."""
+        with patch.dict("os.environ", {}, clear=True):
+            assert _is_telemetry_enabled("production", None, False) is False
 
     def test_config_override_true(self) -> None:
         """Explicit True enables even in sandbox mode."""
         with patch.dict("os.environ", {}, clear=True):
-            assert _is_telemetry_enabled("sandbox", True) is True
+            assert _is_telemetry_enabled("sandbox", True, False) is True
 
     def test_config_override_false(self) -> None:
         """Explicit False disables even in production mode."""
         with patch.dict("os.environ", {}, clear=True):
-            assert _is_telemetry_enabled("production", False) is False
+            assert _is_telemetry_enabled("production", False, True) is False
 
     def test_env_do_not_track_beats_config_true(self) -> None:
         """Environment opt-out always wins over config=True."""
         with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}):
-            assert _is_telemetry_enabled("production", True) is False
+            assert _is_telemetry_enabled("production", True, True) is False
 
     def test_env_axonflow_telemetry_beats_config_true(self) -> None:
         """AXONFLOW_TELEMETRY=off beats config=True."""
         with patch.dict("os.environ", {"AXONFLOW_TELEMETRY": "off"}):
-            assert _is_telemetry_enabled("production", True) is False
+            assert _is_telemetry_enabled("production", True, True) is False
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +135,7 @@ class TestSendTelemetryPing:
                 mode="production",
                 endpoint="https://agent.axonflow.com",
                 telemetry_enabled=None,
+                has_credentials=True,
             )
             # Wait for daemon thread to complete.
             _wait_for_threads()
@@ -208,6 +214,7 @@ class TestSendTelemetryPing:
                 mode="production",
                 endpoint="https://agent.axonflow.com",
                 telemetry_enabled=None,
+                has_credentials=True,
             )
         _wait_for_threads()
         # No exception = pass.
@@ -222,6 +229,7 @@ class TestSendTelemetryPing:
                 mode="production",
                 endpoint="https://agent.axonflow.com",
                 telemetry_enabled=None,
+                has_credentials=True,
             )
         _wait_for_threads()
 
@@ -266,6 +274,7 @@ class TestSendTelemetryPing:
                 mode="production",
                 endpoint="https://agent.axonflow.com",
                 telemetry_enabled=None,
+                has_credentials=True,
             )
             _wait_for_threads()
 
@@ -286,6 +295,7 @@ class TestSendTelemetryPing:
                 mode="production",
                 endpoint="https://agent.axonflow.com",
                 telemetry_enabled=None,
+                has_credentials=True,
             )
         _wait_for_threads()
 
@@ -304,6 +314,7 @@ class TestSendTelemetryPing:
                 mode="production",
                 endpoint="https://agent.axonflow.com",
                 telemetry_enabled=None,
+                has_credentials=True,
             )
         _wait_for_threads()
         # No exception = pass.
