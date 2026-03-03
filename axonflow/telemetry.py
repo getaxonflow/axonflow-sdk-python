@@ -33,7 +33,7 @@ _HTTP_OK = 200
 def _is_telemetry_enabled(
     mode: str,
     telemetry_enabled: bool | None,
-    has_credentials: bool,
+    has_credentials: bool,  # noqa: ARG001  kept for API compat
 ) -> bool:
     """Determine whether telemetry should fire.
 
