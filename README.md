@@ -422,7 +422,7 @@ No email required. Optional contact if you want a response.
 
 This SDK sends anonymous usage telemetry (SDK version, OS, enabled features) to help improve AxonFlow.
 No prompts, payloads, or PII are ever collected. Opt out: `AXONFLOW_TELEMETRY=off` or `DO_NOT_TRACK=1`.
-See [Telemetry Documentation](https://getaxonflow.com/docs/telemetry) for full details.
+See [Telemetry Documentation](https://docs.getaxonflow.com/docs/telemetry) for full details.
 
 ## License
 
