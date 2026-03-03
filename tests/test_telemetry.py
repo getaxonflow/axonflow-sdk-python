@@ -52,10 +52,10 @@ class TestIsTelemetryEnabled:
         with patch.dict("os.environ", {}, clear=True):
             assert _is_telemetry_enabled("production", None, True) is True
 
-    def test_disabled_production_without_credentials(self) -> None:
-        """Default OFF for production mode without credentials (self-hosted)."""
+    def test_enabled_production_without_credentials(self) -> None:
+        """Default ON for production mode even without credentials."""
         with patch.dict("os.environ", {}, clear=True):
-            assert _is_telemetry_enabled("production", None, False) is False
+            assert _is_telemetry_enabled("production", None, False) is True
 
     def test_config_override_true(self) -> None:
         """Explicit True enables even in sandbox mode."""

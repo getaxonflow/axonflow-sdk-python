@@ -41,8 +41,7 @@ def _is_telemetry_enabled(
     1. ``DO_NOT_TRACK=1`` environment variable  -> disabled
     2. ``AXONFLOW_TELEMETRY=off`` environment variable -> disabled
     3. Explicit config value (``telemetry_enabled``) -> use that
-    4. Default: OFF for sandbox or self-hosted (no credentials), ON for
-       production with credentials (managed cloud)
+    4. Default: ON for all modes except sandbox
     """
     # Environment-level opt-out always wins.
     if os.environ.get("DO_NOT_TRACK", "").strip() == "1":
@@ -54,11 +53,8 @@ def _is_telemetry_enabled(
     if telemetry_enabled is not None:
         return telemetry_enabled
 
-    # Default: off for sandbox or community (no credentials), on for
-    # production with credentials (managed cloud).
-    if mode == "sandbox":
-        return False
-    return has_credentials
+    # Default: ON everywhere except sandbox mode.
+    return mode != "sandbox"
 
 
 def _build_payload(mode: str) -> dict[str, object]:
