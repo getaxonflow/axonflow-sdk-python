@@ -16,6 +16,7 @@ permissions:
   contents: read
 
 env:
+  DO_NOT_TRACK: '1'
   # Note: github.event.inputs only available on workflow_dispatch, defaults used otherwise
   AXONFLOW_AGENT_URL: ${{ github.event.inputs.agent_url || 'https://staging-eu.getaxonflow.com' }}
   AXONFLOW_CLIENT_ID: ${{ secrets.AXONFLOW_CLIENT_ID || 'demo-client' }}
