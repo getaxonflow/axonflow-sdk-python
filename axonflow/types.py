@@ -368,7 +368,7 @@ class MCPCheckInputRequest(BaseModel):
     connector_type: str
     statement: str
     parameters: dict[str, Any] | None = Field(default=None)
-    operation: str = Field(default="query")
+    operation: str = Field(default="execute")
 
 
 class MCPCheckInputResponse(BaseModel):

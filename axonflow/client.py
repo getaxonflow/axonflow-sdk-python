@@ -1189,7 +1189,7 @@ class AxonFlow:
         self,
         connector_type: str,
         statement: str,
-        operation: str = "query",
+        operation: str = "execute",
         parameters: dict[str, Any] | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it.
@@ -1200,7 +1200,7 @@ class AxonFlow:
         Args:
             connector_type: Type of MCP connector (e.g., "postgres", "snowflake").
             statement: The SQL query or command to validate.
-            operation: Operation type - "query" (default) or "execute".
+            operation: Operation type - "query" or "execute" (default).
             parameters: Optional query parameters.
 
         Returns:
@@ -6078,7 +6078,7 @@ class SyncAxonFlow:
         self,
         connector_type: str,
         statement: str,
-        operation: str = "query",
+        operation: str = "execute",
         parameters: dict[str, Any] | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it."""
