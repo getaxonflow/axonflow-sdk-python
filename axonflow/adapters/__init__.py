@@ -1,8 +1,15 @@
 """AxonFlow adapters for external orchestrators."""
 
-from axonflow.adapters.langgraph import AxonFlowLangGraphAdapter, WorkflowBlockedError
+from axonflow.adapters.langgraph import (
+    AxonFlowLangGraphAdapter,
+    MCPInterceptorOptions,
+    WorkflowApprovalRequiredError,
+    WorkflowBlockedError,
+)
 
 __all__ = [
     "AxonFlowLangGraphAdapter",
+    "MCPInterceptorOptions",
+    "WorkflowApprovalRequiredError",
     "WorkflowBlockedError",
 ]
