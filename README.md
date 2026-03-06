@@ -427,5 +427,3 @@ See [Telemetry Documentation](https://docs.getaxonflow.com/docs/telemetry) for f
 ## License
 
 MIT - See [LICENSE](LICENSE) for details.
-
-<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=fbda6e64-1812-428b-b135-ed2b548ce50d" />
