@@ -5,6 +5,18 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-03-05
+
+### Added
+
+- **`AxonFlowLangGraphAdapter.mcp_tool_interceptor()`**: Factory method returning an async callable ready for use with `MultiServerMCPClient(tool_interceptors=[...])`. Enforces AxonFlow input and output policies around every MCP tool call: `mcp_check_input → handler() → mcp_check_output`. Handles policy blocks and returns redacted output when `mcp_check_output` applies redaction.
+  - **`MCPInterceptorOptions`**: Configuration dataclass accepted by `mcp_tool_interceptor()` with two fields:
+    - `connector_type_fn`: Optional callable to override the default `"{server_name}.{tool_name}"` connector type mapping
+    - `operation`: Operation type forwarded to `mcp_check_input` (default: `"execute"`; use `"query"` for known read-only tool calls)
+  - `MCPInterceptorOptions` and `WorkflowApprovalRequiredError` are now exported from `axonflow.adapters`
+
+---
+
 ## [3.8.0] - 2026-03-03
 
 ### Added

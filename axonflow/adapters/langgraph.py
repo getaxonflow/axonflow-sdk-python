@@ -33,8 +33,10 @@ Example:
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Callable
 
+from axonflow.exceptions import PolicyViolationError
 from axonflow.workflow import (
     ApprovalStatus,
     CreateWorkflowRequest,
@@ -80,6 +82,21 @@ class WorkflowApprovalRequiredError(Exception):
         self.step_id = step_id
         self.approval_url = approval_url
         self.reason = reason
+
+
+@dataclass
+class MCPInterceptorOptions:
+    """Options for :meth:`AxonFlowLangGraphAdapter.mcp_tool_interceptor`.
+
+    Attributes:
+        connector_type_fn: Optional callable that maps an MCP request to a
+            connector type string. Defaults to ``"{server_name}.{tool_name}"``.
+        operation: Operation type passed to ``mcp_check_input``. Defaults to
+            ``"execute"``. Set to ``"query"`` for known read-only tool calls.
+    """
+
+    connector_type_fn: Callable[[Any], str] | None = field(default=None)
+    operation: str = field(default="execute")
 
 
 class AxonFlowLangGraphAdapter:
@@ -489,6 +506,76 @@ class AxonFlowLangGraphAdapter:
 
         msg = f"Approval timeout after {timeout}s for step {step_id}"
         raise TimeoutError(msg)
+
+    def mcp_tool_interceptor(
+        self,
+        options: MCPInterceptorOptions | None = None,
+    ) -> Callable[..., Any]:
+        """Return an async MCP tool interceptor for use with MultiServerMCPClient.
+
+        The interceptor enforces AxonFlow input and output policies around every
+        MCP tool call. Pass the result directly to MultiServerMCPClient's
+        ``tool_interceptors`` parameter:
+
+        Example:
+            >>> mcp_client = MultiServerMCPClient(
+            ...     {"my-server": {"url": "...", "transport": "http"}},
+            ...     tool_interceptors=[adapter.mcp_tool_interceptor()],
+            ... )
+
+        With custom options:
+
+        Example:
+            >>> opts = MCPInterceptorOptions(
+            ...     connector_type_fn=lambda req: req.server_name,
+            ...     operation="query",
+            ... )
+            >>> tool_interceptors=[adapter.mcp_tool_interceptor(opts)]
+
+        Args:
+            options: Optional :class:`MCPInterceptorOptions` controlling connector
+                type derivation and operation type. Uses defaults if not provided.
+
+        Returns:
+            An async callable ``(request, handler) -> result`` suitable for
+            ``MultiServerMCPClient(tool_interceptors=[...])``.
+        """
+        opts = options or MCPInterceptorOptions()
+
+        def _default_connector_type(request: Any) -> str:
+            return f"{request.server_name}.{request.name}"
+
+        resolve_connector_type = opts.connector_type_fn or _default_connector_type
+
+        async def _interceptor(request: Any, handler: Callable[..., Any]) -> Any:
+            connector_type = resolve_connector_type(request)
+            statement = f"{connector_type}({request.args!r})"
+
+            pre_check = await self.client.mcp_check_input(
+                connector_type=connector_type,
+                statement=statement,
+                operation=opts.operation,
+                parameters=request.args,
+            )
+            if not pre_check.allowed:
+                raise PolicyViolationError(pre_check.block_reason or "Tool call blocked by policy")
+
+            result = await handler(request)
+
+            output_check = await self.client.mcp_check_output(
+                connector_type=connector_type,
+                message=f"{{result: {result!r}}}",
+            )
+            if not output_check.allowed:
+                raise PolicyViolationError(
+                    output_check.block_reason or "Tool result blocked by policy"
+                )
+            if output_check.redacted_data is not None:
+                return output_check.redacted_data
+
+            return result
+
+        return _interceptor
 
     async def __aenter__(self) -> AxonFlowLangGraphAdapter:
         """Context manager entry."""
