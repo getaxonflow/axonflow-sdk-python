@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -87,6 +88,9 @@ class TestMCPToolInterceptor:
         call_kwargs = client.mcp_check_input.call_args.kwargs
         assert call_kwargs["connector_type"] == "srv.tool"
         assert call_kwargs["parameters"] == request.args
+        # Statement uses JSON serialization, not Python repr
+        expected_args = json.dumps(request.args, default=str)
+        assert call_kwargs["statement"] == f"srv.tool({expected_args})"
 
     @pytest.mark.asyncio
     async def test_same_connector_type_sent_to_check_output(
@@ -99,6 +103,18 @@ class TestMCPToolInterceptor:
 
         call_kwargs = client.mcp_check_output.call_args.kwargs
         assert call_kwargs["connector_type"] == "srv.tool"
+
+    @pytest.mark.asyncio
+    async def test_output_message_uses_json_serialization(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        result_data = {"rows": [{"id": 1, "name": "test"}]}
+        handler = AsyncMock(return_value=result_data)
+
+        await adapter.mcp_tool_interceptor()(_make_request(), handler)
+
+        call_kwargs = client.mcp_check_output.call_args.kwargs
+        assert call_kwargs["message"] == json.dumps(result_data, default=str)
 
     # --- operation ---
 

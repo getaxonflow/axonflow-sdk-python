@@ -5,7 +5,7 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.9.0] - 2026-03-05
+## [3.9.0] - 2026-03-06
 
 ### Added
 
@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `connector_type_fn`: Optional callable to override the default `"{server_name}.{tool_name}"` connector type mapping
     - `operation`: Operation type forwarded to `mcp_check_input` (default: `"execute"`; use `"query"` for known read-only tool calls)
   - `MCPInterceptorOptions` and `WorkflowApprovalRequiredError` are now exported from `axonflow.adapters`
+
+### Changed
+
+- `mcp_check_input()` default `operation` changed from `"query"` to `"execute"` to better reflect the default MCP tool call pattern where side effects are unknown
+
+### Fixed
+
+- `mcp_tool_interceptor()` now uses JSON serialization (`json.dumps`) for `statement` and output `message` fields instead of Python `repr()`, ensuring the policy engine receives valid structured data
 
 ---
 
