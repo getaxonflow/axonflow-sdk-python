@@ -5,6 +5,22 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - Unreleased
+
+### Breaking Changes
+
+- **Removed `total_steps` from `CreateWorkflowRequest`**. Requires Platform v4.5.0+ (recommended v5.0.0+).
+  Total steps are auto-computed when the workflow reaches a terminal state.
+- **`mcp_check_input()` default `operation` changed from `"query"` to `"execute"`**. Callers relying on
+  the implicit `"query"` default must now pass `operation="query"` explicitly.
+
+### Note
+
+`MediaAnalysisResult.extracted_text` was replaced by `has_extracted_text` + `extracted_text_length`
+in v3.5.0. This major version formally acknowledges that breaking change.
+
+---
+
 ## [3.9.0] - 2026-03-06
 
 ### Added

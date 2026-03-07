@@ -865,7 +865,6 @@ class TestCreateWorkflow:
         request = CreateWorkflowRequest(
             workflow_name="customer-support",
             source=WorkflowSource.LANGGRAPH,
-            total_steps=3,
             metadata={"customer_id": "cust-1"},
         )
         result = await client.create_workflow(request)

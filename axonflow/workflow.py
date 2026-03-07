@@ -75,9 +75,6 @@ class CreateWorkflowRequest(BaseModel):
     source: WorkflowSource | None = Field(
         default=None, description="Source orchestrator running the workflow"
     )
-    total_steps: int | None = Field(
-        default=None, ge=0, description="Total number of steps in the workflow (if known)"
-    )
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata for the workflow"
     )

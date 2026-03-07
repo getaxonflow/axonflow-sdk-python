@@ -115,7 +115,7 @@ class AxonFlowLangGraphAdapter:
 
     Example:
         >>> adapter = AxonFlowLangGraphAdapter(client, "code-review-pipeline")
-        >>> await adapter.start_workflow(total_steps=5)
+        >>> await adapter.start_workflow()
         >>>
         >>> # Before each LangGraph node execution
         >>> if await adapter.check_gate("analyze", "llm_call"):
@@ -149,7 +149,6 @@ class AxonFlowLangGraphAdapter:
 
     async def start_workflow(
         self,
-        total_steps: int | None = None,
         metadata: dict[str, Any] | None = None,
         trace_id: str | None = None,
     ) -> str:
@@ -158,7 +157,6 @@ class AxonFlowLangGraphAdapter:
         Call this at the start of your LangGraph workflow execution.
 
         Args:
-            total_steps: Total number of steps (if known)
             metadata: Additional workflow metadata
             trace_id: External trace ID for correlation (Langsmith, Datadog, OTel)
 
@@ -167,7 +165,6 @@ class AxonFlowLangGraphAdapter:
 
         Example:
             >>> workflow_id = await adapter.start_workflow(
-            ...     total_steps=5,
             ...     metadata={"customer_id": "cust-123"},
             ...     trace_id="langsmith-run-abc123",
             ... )
@@ -175,7 +172,6 @@ class AxonFlowLangGraphAdapter:
         request = CreateWorkflowRequest(
             workflow_name=self.workflow_name,
             source=self.source,
-            total_steps=total_steps,
             metadata=metadata or {},
             trace_id=trace_id,
         )

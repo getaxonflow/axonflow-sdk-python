@@ -3439,7 +3439,6 @@ class AxonFlow:
             ...     CreateWorkflowRequest(
             ...         workflow_name="customer-support-agent",
             ...         source=WorkflowSource.LANGGRAPH,
-            ...         total_steps=5,
             ...         metadata={"customer_id": "cust-123"}
             ...     )
             ... )
@@ -3448,7 +3447,6 @@ class AxonFlow:
         body = {
             "workflow_name": request.workflow_name,
             "source": request.source.value if request.source else "external",
-            "total_steps": request.total_steps,
             "metadata": request.metadata,
         }
         if request.trace_id:
