@@ -15,10 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `operation`: Operation type forwarded to `mcp_check_input` (default: `"execute"`; use `"query"` for known read-only tool calls)
   - `MCPInterceptorOptions` and `WorkflowApprovalRequiredError` are now exported from `axonflow.adapters`
 
-### Changed
-
-- `mcp_check_input()` default `operation` changed from `"query"` to `"execute"` to better reflect the default MCP tool call pattern where side effects are unknown
-
 ### Fixed
 
 - `mcp_tool_interceptor()` now uses JSON serialization (`json.dumps`) for `statement` and output `message` fields instead of Python `repr()`, ensuring the policy engine receives valid structured data
