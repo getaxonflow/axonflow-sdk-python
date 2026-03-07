@@ -33,6 +33,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -549,7 +550,8 @@ class AxonFlowLangGraphAdapter:
 
         async def _interceptor(request: Any, handler: Callable[..., Any]) -> Any:
             connector_type = resolve_connector_type(request)
-            statement = f"{connector_type}({request.args!r})"
+            args_str = json.dumps(request.args, default=str) if request.args else "{}"
+            statement = f"{connector_type}({args_str})"
 
             pre_check = await self.client.mcp_check_input(
                 connector_type=connector_type,
@@ -562,9 +564,13 @@ class AxonFlowLangGraphAdapter:
 
             result = await handler(request)
 
+            try:
+                result_str = json.dumps(result, default=str)
+            except (TypeError, ValueError):
+                result_str = str(result)
             output_check = await self.client.mcp_check_output(
                 connector_type=connector_type,
-                message=f"{{result: {result!r}}}",
+                message=result_str,
             )
             if not output_check.allowed:
                 raise PolicyViolationError(
