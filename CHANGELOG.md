@@ -5,23 +5,15 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.0.0] - Unreleased
+## [4.0.0] - 2026-03-09
 
 ### Breaking Changes
 
 - **Removed `total_steps` from `CreateWorkflowRequest`**. Requires Platform v4.5.0+ (recommended v5.0.0+).
   Total steps are auto-computed when the workflow reaches a terminal state.
 - **`mcp_check_input()` default `operation` changed from `"query"` to `"execute"`**. Callers relying on
-  the implicit `"query"` default must now pass `operation="query"` explicitly.
-
-### Note
-
-`MediaAnalysisResult.extracted_text` was replaced by `has_extracted_text` + `extracted_text_length`
-in v3.5.0. This major version formally acknowledges that breaking change.
-
----
-
-## [3.9.0] - 2026-03-06
+  the implicit `"query"` default must now pass `operation="query"` explicitly. This better reflects the
+  default MCP tool call pattern where side effects are unknown.
 
 ### Added
 
@@ -31,13 +23,20 @@ in v3.5.0. This major version formally acknowledges that breaking change.
     - `operation`: Operation type forwarded to `mcp_check_input` (default: `"execute"`; use `"query"` for known read-only tool calls)
   - `MCPInterceptorOptions` and `WorkflowApprovalRequiredError` are now exported from `axonflow.adapters`
 
-### Changed
-
-- `mcp_check_input()` default `operation` changed from `"query"` to `"execute"` to better reflect the default MCP tool call pattern where side effects are unknown
-
 ### Fixed
 
 - `mcp_tool_interceptor()` now uses JSON serialization (`json.dumps`) for `statement` and output `message` fields instead of Python `repr()`, ensuring the policy engine receives valid structured data
+
+### Changed
+
+- Removed Scarf tracking pixel from README (GitHub's camo proxy strips viewer identity, making the pixel unattributable)
+- Disabled SDK telemetry in CI workflows with `DO_NOT_TRACK=1` to prevent test runs from polluting checkpoint data
+- Added pip dependency caching to CI and release workflows for faster builds
+
+### Note
+
+`MediaAnalysisResult.extracted_text` was replaced by `has_extracted_text` + `extracted_text_length`
+in v3.5.0. This major version formally acknowledges that breaking change.
 
 ---
 
