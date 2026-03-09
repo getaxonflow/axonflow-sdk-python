@@ -27,12 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `mcp_tool_interceptor()` now uses JSON serialization (`json.dumps`) for `statement` and output `message` fields instead of Python `repr()`, ensuring the policy engine receives valid structured data
 
-### Changed
-
-- Removed Scarf tracking pixel from README (GitHub's camo proxy strips viewer identity, making the pixel unattributable)
-- Disabled SDK telemetry in CI workflows with `DO_NOT_TRACK=1` to prevent test runs from polluting checkpoint data
-- Added pip dependency caching to CI and release workflows for faster builds
-
 ### Note
 
 `MediaAnalysisResult.extracted_text` was replaced by `has_extracted_text` + `extracted_text_length`
