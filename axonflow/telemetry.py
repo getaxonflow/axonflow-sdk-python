@@ -69,7 +69,7 @@ def _detect_platform_version(endpoint: str) -> str | None:
             version = body.get("version")
             if isinstance(version, str) and version:
                 return version
-    except (httpx.HTTPError, OSError, ValueError, KeyError):
+    except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError, AttributeError):
         pass
     return None
 
