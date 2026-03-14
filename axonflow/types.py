@@ -1127,3 +1127,36 @@ CATEGORY_MEDIA_SAFETY: str = "media-safety"
 CATEGORY_MEDIA_BIOMETRIC: str = "media-biometric"
 CATEGORY_MEDIA_DOCUMENT: str = "media-document"
 CATEGORY_MEDIA_PII: str = "media-pii"
+
+
+# =========================================================================
+# Audit Tool Call Types
+# =========================================================================
+
+
+class AuditToolCallRequest(BaseModel):
+    """Request to record a non-LLM tool call in the audit trail."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    tool_name: str = Field(description="Name of the tool that was called")
+    tool_type: str | None = Field(default=None, description="Type of tool (e.g., mcp, api, function)")
+    input: dict[str, Any] | None = Field(default=None, alias="input", description="Tool input data")
+    output: dict[str, Any] | None = Field(default=None, alias="output", description="Tool output data")
+    workflow_id: str | None = Field(default=None, description="Associated workflow ID")
+    step_id: str | None = Field(default=None, description="Associated step ID")
+    user_id: str | None = Field(default=None, description="User who triggered the tool call")
+    duration_ms: int | None = Field(default=None, description="Duration of the tool call in milliseconds")
+    policies_applied: list[str] | None = Field(
+        default=None, description="List of policies applied to this tool call"
+    )
+    success: bool | None = Field(default=None, description="Whether the tool call succeeded")
+    error_message: str | None = Field(default=None, description="Error message if the tool call failed")
+
+
+class AuditToolCallResponse(BaseModel):
+    """Response from recording a tool call audit entry."""
+
+    audit_id: str = Field(description="Unique ID for the audit entry")
+    status: str = Field(description="Recording status (e.g., recorded)")
+    timestamp: str = Field(description="Timestamp when the audit entry was recorded")

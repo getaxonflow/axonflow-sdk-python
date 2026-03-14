@@ -133,6 +133,8 @@ from axonflow.types import (
     AuditResult,
     AuditSearchRequest,
     AuditSearchResponse,
+    AuditToolCallRequest,
+    AuditToolCallResponse,
     Budget,
     BudgetAlert,
     BudgetAlertsResponse,
@@ -290,6 +292,9 @@ __all__ = [
     "AuditSearchResponse",
     "AuditLogEntry",
     "AuditQueryOptions",
+    # Audit Tool Call types (Issue #1260)
+    "AuditToolCallRequest",
+    "AuditToolCallResponse",
     # Execution Replay types
     "ExecutionSummary",
     "ExecutionSnapshot",
