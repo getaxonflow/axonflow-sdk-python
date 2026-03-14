@@ -74,6 +74,16 @@ def _detect_platform_version(endpoint: str) -> str | None:
     return None
 
 
+def _is_localhost(endpoint: str) -> bool:
+    """Check whether the endpoint is a localhost address."""
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(endpoint).hostname or ""
+        return host in ("localhost", "127.0.0.1", "::1")
+    except Exception:
+        return False
+
+
 def _normalize_arch(arch: str) -> str:
     """Normalize architecture names to match other SDKs."""
     if arch == "aarch64":
@@ -146,6 +156,10 @@ def send_telemetry_ping(
         debug: When ``True``, log debug-level messages about the ping.
     """
     if not _is_telemetry_enabled(mode, telemetry_enabled, has_credentials):
+        return
+
+    # Suppress telemetry for localhost endpoints unless explicitly enabled.
+    if telemetry_enabled is not True and _is_localhost(endpoint):
         return
 
     logger.info(
