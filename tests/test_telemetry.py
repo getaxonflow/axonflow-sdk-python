@@ -15,6 +15,7 @@ from axonflow.telemetry import (
     _DEFAULT_CHECKPOINT_URL,
     _build_payload,
     _is_telemetry_enabled,
+    _normalize_arch,
     send_telemetry_ping,
 )
 

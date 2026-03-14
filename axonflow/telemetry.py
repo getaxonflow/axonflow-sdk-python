@@ -74,6 +74,15 @@ def _detect_platform_version(endpoint: str) -> str | None:
     return None
 
 
+def _normalize_arch(arch: str) -> str:
+    """Normalize architecture names to match other SDKs."""
+    if arch == "aarch64":
+        return "arm64"
+    if arch == "x86_64":
+        return "x64"
+    return arch
+
+
 def _build_payload(mode: str, platform_version: str | None = None) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping."""
     return {
@@ -81,7 +90,7 @@ def _build_payload(mode: str, platform_version: str | None = None) -> dict[str, 
         "sdk_version": _SDK_VERSION,
         "platform_version": platform_version,
         "os": platform.system().lower(),
-        "arch": platform.machine(),
+        "arch": _normalize_arch(platform.machine()),
         "runtime_version": platform.python_version(),
         "deployment_mode": mode,
         "features": [],
@@ -89,19 +98,16 @@ def _build_payload(mode: str, platform_version: str | None = None) -> dict[str, 
     }
 
 
-def _do_ping(url: str, payload: dict[str, object], debug: bool, endpoint: str = "") -> None:
+def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
     """Execute the HTTP POST (runs inside a daemon thread)."""
     try:
-        # Detect platform version before sending
-        if endpoint:
-            pv = _detect_platform_version(endpoint)
-            if pv:
-                payload["platform_version"] = pv
+        platform_version = _detect_platform_version(endpoint) if endpoint else None
+        payload = _build_payload(mode, platform_version)
         resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
         if resp.status_code == _HTTP_OK:
             try:
                 body = resp.json()
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, TypeError, AttributeError):
                 return
             latest = body.get("latest_version")
             if latest and latest != _SDK_VERSION:
@@ -113,7 +119,7 @@ def _do_ping(url: str, payload: dict[str, object], debug: bool, endpoint: str = 
                 )
             if debug:
                 logger.debug("Telemetry ping successful: %s", body)
-    except (httpx.HTTPError, OSError, ValueError):
+    except (httpx.HTTPError, OSError, ValueError, TypeError, AttributeError):
         # Silent failure -- never disrupt the caller.
         if debug:
             logger.debug("Telemetry ping failed (non-fatal)", exc_info=True)
@@ -148,7 +154,6 @@ def send_telemetry_ping(
     )
 
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip() or _DEFAULT_CHECKPOINT_URL
-    payload = _build_payload(mode)
 
-    t = threading.Thread(target=_do_ping, args=(url, payload, debug, endpoint), daemon=True)
+    t = threading.Thread(target=_do_ping, args=(url, mode, endpoint, debug), daemon=True)
     t.start()
