@@ -128,7 +128,11 @@ from axonflow.types import (
     CATEGORY_MEDIA_DOCUMENT,
     CATEGORY_MEDIA_PII,
     CATEGORY_MEDIA_SAFETY,
+    AuditLogEntry,
+    AuditQueryOptions,
     AuditResult,
+    AuditSearchRequest,
+    AuditSearchResponse,
     Budget,
     BudgetAlert,
     BudgetAlertsResponse,
@@ -281,6 +285,11 @@ __all__ = [
     "PolicyApprovalResult",
     "TokenUsage",
     "AuditResult",
+    # Audit Log Read types (Issue #878)
+    "AuditSearchRequest",
+    "AuditSearchResponse",
+    "AuditLogEntry",
+    "AuditQueryOptions",
     # Execution Replay types
     "ExecutionSummary",
     "ExecutionSnapshot",
