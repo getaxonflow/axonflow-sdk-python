@@ -1143,9 +1143,7 @@ class AuditToolCallRequest(BaseModel):
     tool_type: str | None = Field(
         default=None, description="Type of tool (e.g., mcp, api, function)"
     )
-    input: dict[str, Any] | None = Field(
-        default=None, alias="input", description="Tool input data"
-    )
+    input: dict[str, Any] | None = Field(default=None, alias="input", description="Tool input data")
     output: dict[str, Any] | None = Field(
         default=None, alias="output", description="Tool output data"
     )
