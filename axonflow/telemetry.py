@@ -77,11 +77,13 @@ def _detect_platform_version(endpoint: str) -> str | None:
 def _is_localhost(endpoint: str) -> bool:
     """Check whether the endpoint is a localhost address."""
     try:
-        from urllib.parse import urlparse
+        from urllib.parse import urlparse  # noqa: PLC0415
+
         host = urlparse(endpoint).hostname or ""
-        return host in ("localhost", "127.0.0.1", "::1")
-    except Exception:
+    except ValueError:
         return False
+    else:
+        return host in ("localhost", "127.0.0.1", "::1")
 
 
 def _normalize_arch(arch: str) -> str:

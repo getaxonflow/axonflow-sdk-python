@@ -1820,7 +1820,8 @@ class AxonFlow:
             >>> print(result.audit_id)
         """
         if not request.tool_name or not request.tool_name.strip():
-            raise ValueError("tool_name is required and cannot be empty")
+            msg = "tool_name is required and cannot be empty"
+            raise ValueError(msg)
 
         request_body = request.model_dump(by_alias=True, exclude_none=True)
 
