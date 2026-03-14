@@ -129,6 +129,8 @@ from axonflow.types import (
     AuditResult,
     AuditSearchRequest,
     AuditSearchResponse,
+    AuditToolCallRequest,
+    AuditToolCallResponse,
     AxonFlowConfig,
     Budget,
     BudgetAlertsResponse,
@@ -1781,6 +1783,71 @@ class AxonFlow:
         return AuditResult(
             success=response["success"],
             audit_id=response["audit_id"],
+        )
+
+    async def audit_tool_call(
+        self,
+        request: AuditToolCallRequest,
+    ) -> AuditToolCallResponse:
+        """Record a non-LLM tool call in the audit trail.
+
+        Use this to audit tool invocations (MCP tools, API calls, function
+        calls) that are not LLM calls but should still appear in the audit
+        trail for governance and compliance.
+
+        Args:
+            request: Tool call details including tool name, type, input/output,
+                and associated workflow/step information.
+
+        Returns:
+            AuditToolCallResponse confirming the audit entry was recorded.
+
+        Raises:
+            ValueError: If tool_name is empty.
+            AxonFlowError: If audit recording fails.
+
+        Example:
+            >>> from axonflow.types import AuditToolCallRequest
+            >>> result = await client.audit_tool_call(
+            ...     AuditToolCallRequest(
+            ...         tool_name="getUserInfo",
+            ...         tool_type="mcp",
+            ...         workflow_id="wf_abc123",
+            ...         success=True,
+            ...         duration_ms=45,
+            ...     )
+            ... )
+            >>> print(result.audit_id)
+        """
+        if not request.tool_name or not request.tool_name.strip():
+            msg = "tool_name is required and cannot be empty"
+            raise ValueError(msg)
+
+        request_body = request.model_dump(by_alias=True, exclude_none=True)
+
+        if self._config.debug:
+            self._logger.debug(
+                "Audit tool call request",
+                tool_name=request.tool_name,
+                tool_type=request.tool_type,
+            )
+
+        response = await self._request(
+            "POST",
+            "/api/v1/audit/tool-call",
+            json_data=request_body,
+        )
+
+        if self._config.debug:
+            self._logger.debug(
+                "Audit tool call complete",
+                audit_id=response.get("audit_id"),
+            )
+
+        return AuditToolCallResponse(
+            audit_id=response["audit_id"],
+            status=response["status"],
+            timestamp=response["timestamp"],
         )
 
     # =========================================================================
@@ -6196,6 +6263,13 @@ class SyncAxonFlow:
                 context_id, response_summary, provider, model, token_usage, latency_ms, metadata
             )
         )
+
+    def audit_tool_call(
+        self,
+        request: AuditToolCallRequest,
+    ) -> AuditToolCallResponse:
+        """Record a non-LLM tool call in the audit trail."""
+        return self._run_sync(self._async_client.audit_tool_call(request))
 
     # Policy CRUD sync wrappers
 

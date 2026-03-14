@@ -57,14 +57,52 @@ def _is_telemetry_enabled(
     return mode != "sandbox"
 
 
-def _build_payload(mode: str) -> dict[str, object]:
+def _detect_platform_version(endpoint: str) -> str | None:
+    """Detect platform version by calling the agent's /health endpoint.
+
+    Returns the version string or None on any failure.
+    """
+    try:
+        resp = httpx.get(f"{endpoint}/health", timeout=2)
+        if resp.status_code == _HTTP_OK:
+            body = resp.json()
+            version = body.get("version")
+            if isinstance(version, str) and version:
+                return version
+    except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    return None
+
+
+def _is_localhost(endpoint: str) -> bool:
+    """Check whether the endpoint is a localhost address."""
+    try:
+        from urllib.parse import urlparse  # noqa: PLC0415
+
+        host = urlparse(endpoint).hostname or ""
+    except ValueError:
+        return False
+    else:
+        return host in ("localhost", "127.0.0.1", "::1")
+
+
+def _normalize_arch(arch: str) -> str:
+    """Normalize architecture names to match other SDKs."""
+    if arch == "aarch64":
+        return "arm64"
+    if arch == "x86_64":
+        return "x64"
+    return arch
+
+
+def _build_payload(mode: str, platform_version: str | None = None) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping."""
     return {
         "sdk": "python",
         "sdk_version": _SDK_VERSION,
-        "platform_version": None,
-        "os": platform.system(),
-        "arch": platform.machine(),
+        "platform_version": platform_version,
+        "os": platform.system().lower(),
+        "arch": _normalize_arch(platform.machine()),
         "runtime_version": platform.python_version(),
         "deployment_mode": mode,
         "features": [],
@@ -72,14 +110,16 @@ def _build_payload(mode: str) -> dict[str, object]:
     }
 
 
-def _do_ping(url: str, payload: dict[str, object], debug: bool) -> None:
+def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
     """Execute the HTTP POST (runs inside a daemon thread)."""
     try:
+        platform_version = _detect_platform_version(endpoint) if endpoint else None
+        payload = _build_payload(mode, platform_version)
         resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
         if resp.status_code == _HTTP_OK:
             try:
                 body = resp.json()
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, TypeError, AttributeError):
                 return
             latest = body.get("latest_version")
             if latest and latest != _SDK_VERSION:
@@ -91,7 +131,7 @@ def _do_ping(url: str, payload: dict[str, object], debug: bool) -> None:
                 )
             if debug:
                 logger.debug("Telemetry ping successful: %s", body)
-    except (httpx.HTTPError, OSError, ValueError):
+    except (httpx.HTTPError, OSError, ValueError, TypeError, AttributeError):
         # Silent failure -- never disrupt the caller.
         if debug:
             logger.debug("Telemetry ping failed (non-fatal)", exc_info=True)
@@ -99,7 +139,7 @@ def _do_ping(url: str, payload: dict[str, object], debug: bool) -> None:
 
 def send_telemetry_ping(
     mode: str,
-    endpoint: str,  # noqa: ARG001  kept for future platform_version detection
+    endpoint: str,
     telemetry_enabled: bool | None,
     has_credentials: bool = False,
     debug: bool = False,
@@ -108,8 +148,8 @@ def send_telemetry_ping(
 
     Args:
         mode: SDK operation mode (``"production"`` or ``"sandbox"``).
-        endpoint: The AxonFlow agent endpoint (reserved for future
-            platform_version detection).
+        endpoint: The AxonFlow agent endpoint, used to detect the platform
+            version via ``/health``.
         telemetry_enabled: Explicit config override.  ``None`` means use the
             mode-based default.
         has_credentials: Whether the client was initialized with credentials
@@ -120,13 +160,16 @@ def send_telemetry_ping(
     if not _is_telemetry_enabled(mode, telemetry_enabled, has_credentials):
         return
 
+    # Suppress telemetry for localhost endpoints unless explicitly enabled.
+    if telemetry_enabled is not True and _is_localhost(endpoint):
+        return
+
     logger.info(
         "AxonFlow: anonymous telemetry enabled. "
         "Opt out: AXONFLOW_TELEMETRY=off | https://docs.getaxonflow.com/telemetry"
     )
 
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip() or _DEFAULT_CHECKPOINT_URL
-    payload = _build_payload(mode)
 
-    t = threading.Thread(target=_do_ping, args=(url, payload, debug), daemon=True)
+    t = threading.Thread(target=_do_ping, args=(url, mode, endpoint, debug), daemon=True)
     t.start()

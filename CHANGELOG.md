@@ -5,6 +5,20 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-03-14
+
+### Added
+
+- `audit_tool_call()` — record non-LLM tool calls (API, MCP, function) in the audit trail. Returns audit ID, status, and timestamp. Requires Platform v5.1.0+
+- `get_audit_logs_by_tenant()` — retrieve audit logs for a tenant with optional pagination
+- `search_audit_logs()` — search audit logs with filters (client ID, request type, limit)
+
+### Fixed
+
+- Telemetry pings now suppressed for localhost/127.0.0.1/::1 endpoints unless `telemetry_enabled` is explicitly set to `True`. Prevents telemetry noise during local development.
+
+---
+
 ## [4.0.0] - 2026-03-09
 
 ### Breaking Changes
