@@ -404,8 +404,8 @@ For enterprise features, contact [sales@getaxonflow.com](mailto:sales@getaxonflo
 
 ## Documentation
 
-- [Getting Started](https://docs.getaxonflow.com/sdk/python-getting-started)
-- [Gateway Mode Guide](https://docs.getaxonflow.com/sdk/gateway-mode)
+- [Getting Started](https://docs.getaxonflow.com/docs/sdk/python-getting-started)
+- [Gateway Mode Guide](https://docs.getaxonflow.com/docs/sdk/gateway-mode)
 
 ## Support
 
