@@ -70,7 +70,7 @@ all = [
 
 [project.urls]
 Homepage = "https://getaxonflow.com"
-Documentation = "https://docs.getaxonflow.com/sdk/python-getting-started"
+Documentation = "https://docs.getaxonflow.com/docs/sdk/python-getting-started"
 Repository = "https://github.com/getaxonflow/axonflow-sdk-python"
 Changelog = "https://github.com/getaxonflow/axonflow-sdk-python/blob/main/CHANGELOG.md"
 Issues = "https://github.com/getaxonflow/axonflow-sdk-python/issues"

@@ -166,7 +166,7 @@ def send_telemetry_ping(
 
     logger.info(
         "AxonFlow: anonymous telemetry enabled. "
-        "Opt out: AXONFLOW_TELEMETRY=off | https://docs.getaxonflow.com/telemetry"
+        "Opt out: AXONFLOW_TELEMETRY=off | https://docs.getaxonflow.com/docs/telemetry"
     )
 
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip() or _DEFAULT_CHECKPOINT_URL
