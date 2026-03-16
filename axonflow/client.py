@@ -390,6 +390,7 @@ class AxonFlow:
         # client_secret is optional for community mode but required for enterprise
         if client_id:
             headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
+            headers["X-Org-ID"] = client_id  # circuit breaker endpoints require org context
             # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
             if client_secret:
                 credentials = f"{client_id}:{client_secret}"
@@ -1884,7 +1885,7 @@ class AxonFlow:
         data = response.get("data", response)
 
         return CircuitBreakerStatusResponse(
-            active_circuits=data.get("active_circuits", []),
+            active_circuits=data.get("active_circuits") or [],
             count=data.get("count", 0),
             emergency_stop_active=data.get("emergency_stop_active", False),
         )
@@ -1926,7 +1927,7 @@ class AxonFlow:
         data = response.get("data", response)
 
         history = [
-            CircuitBreakerHistoryEntry(**entry) for entry in data.get("history", [])
+            CircuitBreakerHistoryEntry(**entry) for entry in (data.get("history") or [])
         ]
 
         return CircuitBreakerHistoryResponse(
