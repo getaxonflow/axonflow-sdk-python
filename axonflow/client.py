@@ -140,6 +140,11 @@ from axonflow.types import (
     BudgetStatus,
     CacheConfig,
     CancelPlanResponse,
+    CircuitBreakerConfig,
+    CircuitBreakerConfigUpdate,
+    CircuitBreakerHistoryEntry,
+    CircuitBreakerHistoryResponse,
+    CircuitBreakerStatusResponse,
     ClientRequest,
     ClientResponse,
     ConnectorHealthStatus,
@@ -1849,6 +1854,171 @@ class AxonFlow:
             status=response["status"],
             timestamp=response["timestamp"],
         )
+
+    # =========================================================================
+    # Circuit Breaker Observability Methods
+    # =========================================================================
+
+    async def get_circuit_breaker_status(self) -> CircuitBreakerStatusResponse:
+        """Get all active circuit breaker circuits.
+
+        Returns the current state of all circuit breakers, including which
+        circuits are open (tripped) and whether any emergency stop is active.
+
+        Returns:
+            CircuitBreakerStatusResponse with active circuits and counts.
+
+        Raises:
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> status = await client.get_circuit_breaker_status()
+            >>> print(f"{status.count} active circuits")
+            >>> if status.emergency_stop_active:
+            ...     print("Emergency stop is active!")
+        """
+        if self._config.debug:
+            self._logger.debug("Getting circuit breaker status")
+
+        response = await self._request("GET", "/api/v1/circuit-breaker/status")
+        data = response.get("data", response)
+
+        return CircuitBreakerStatusResponse(
+            active_circuits=data.get("active_circuits") or [],
+            count=data.get("count", 0),
+            emergency_stop_active=data.get("emergency_stop_active", False),
+        )
+
+    async def get_circuit_breaker_history(
+        self,
+        limit: int | None = None,
+    ) -> CircuitBreakerHistoryResponse:
+        """Get circuit breaker history for audit trail.
+
+        Returns the history of circuit breaker state transitions, including
+        trips, resets, and auto-recovery events.
+
+        Args:
+            limit: Maximum number of history entries to return.
+
+        Returns:
+            CircuitBreakerHistoryResponse with history entries.
+
+        Raises:
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> history = await client.get_circuit_breaker_history(limit=50)
+            >>> for entry in history.history:
+            ...     print(f"{entry.scope}/{entry.scope_id}: {entry.state}")
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Getting circuit breaker history",
+                limit=limit,
+            )
+
+        path = "/api/v1/circuit-breaker/history"
+        if limit is not None:
+            path = f"{path}?limit={limit}"
+
+        response = await self._request("GET", path)
+        data = response.get("data", response)
+
+        history = [CircuitBreakerHistoryEntry(**entry) for entry in (data.get("history") or [])]
+
+        return CircuitBreakerHistoryResponse(
+            history=history,
+            count=data.get("count", 0),
+        )
+
+    async def get_circuit_breaker_config(
+        self,
+        tenant_id: str | None = None,
+    ) -> CircuitBreakerConfig:
+        """Get circuit breaker configuration (global or tenant-specific).
+
+        Args:
+            tenant_id: If provided, returns tenant-specific config with
+                any overrides applied. Otherwise returns global defaults.
+
+        Returns:
+            CircuitBreakerConfig with thresholds and recovery settings.
+
+        Raises:
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> config = await client.get_circuit_breaker_config()
+            >>> print(f"Error threshold: {config.error_threshold}")
+            >>> tenant_config = await client.get_circuit_breaker_config(
+            ...     tenant_id="tenant-123"
+            ... )
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Getting circuit breaker config",
+                tenant_id=tenant_id,
+            )
+
+        path = "/api/v1/circuit-breaker/config"
+        if tenant_id is not None:
+            path = f"{path}?tenant_id={tenant_id}"
+
+        response = await self._request("GET", path)
+        data = response.get("data", response)
+
+        return CircuitBreakerConfig(**data)
+
+    async def update_circuit_breaker_config(
+        self,
+        config: CircuitBreakerConfigUpdate,
+    ) -> dict[str, Any]:
+        """Update per-tenant circuit breaker configuration.
+
+        Sets tenant-specific overrides for circuit breaker thresholds and
+        recovery behavior.
+
+        Args:
+            config: Configuration update with tenant_id and override values.
+
+        Returns:
+            Server response confirming the update.
+
+        Raises:
+            ValueError: If tenant_id is empty.
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> from axonflow.types import CircuitBreakerConfigUpdate
+            >>> result = await client.update_circuit_breaker_config(
+            ...     CircuitBreakerConfigUpdate(
+            ...         tenant_id="tenant-123",
+            ...         error_threshold=10,
+            ...         violation_threshold=5,
+            ...     )
+            ... )
+        """
+        if not config.tenant_id or not config.tenant_id.strip():
+            msg = "tenant_id is required and cannot be empty"
+            raise ValueError(msg)
+
+        if self._config.debug:
+            self._logger.debug(
+                "Updating circuit breaker config",
+                tenant_id=config.tenant_id,
+            )
+
+        request_body = config.model_dump(by_alias=True, exclude_none=True)
+
+        response = await self._request(
+            "PUT",
+            "/api/v1/circuit-breaker/config",
+            json_data=request_body,
+        )
+
+        result: dict[str, Any] = response.get("data", response)
+        return result
 
     # =========================================================================
     # Audit Log Read Methods
@@ -6270,6 +6440,33 @@ class SyncAxonFlow:
     ) -> AuditToolCallResponse:
         """Record a non-LLM tool call in the audit trail."""
         return self._run_sync(self._async_client.audit_tool_call(request))
+
+    # Circuit Breaker Observability sync wrappers
+
+    def get_circuit_breaker_status(self) -> CircuitBreakerStatusResponse:
+        """Get all active circuit breaker circuits."""
+        return self._run_sync(self._async_client.get_circuit_breaker_status())
+
+    def get_circuit_breaker_history(
+        self,
+        limit: int | None = None,
+    ) -> CircuitBreakerHistoryResponse:
+        """Get circuit breaker history for audit trail."""
+        return self._run_sync(self._async_client.get_circuit_breaker_history(limit=limit))
+
+    def get_circuit_breaker_config(
+        self,
+        tenant_id: str | None = None,
+    ) -> CircuitBreakerConfig:
+        """Get circuit breaker config (global or tenant-specific)."""
+        return self._run_sync(self._async_client.get_circuit_breaker_config(tenant_id=tenant_id))
+
+    def update_circuit_breaker_config(
+        self,
+        config: CircuitBreakerConfigUpdate,
+    ) -> dict[str, Any]:
+        """Update per-tenant circuit breaker config."""
+        return self._run_sync(self._async_client.update_circuit_breaker_config(config))
 
     # Policy CRUD sync wrappers
 

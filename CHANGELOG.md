@@ -5,6 +5,17 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2026-03-16
+
+### Added
+
+- `get_circuit_breaker_status()` — query active circuit breaker circuits and emergency stop state
+- `get_circuit_breaker_history(limit)` — retrieve circuit breaker trip/reset audit trail
+- `get_circuit_breaker_config(tenant_id)` — get effective circuit breaker config (global or tenant-specific)
+- `update_circuit_breaker_config(config)` — update per-tenant circuit breaker thresholds
+
+---
+
 ## [4.1.0] - 2026-03-14
 
 ### Added

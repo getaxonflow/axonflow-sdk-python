@@ -152,6 +152,11 @@ from axonflow.types import (
     BudgetStatus,
     CacheConfig,
     CancelPlanResponse,
+    CircuitBreakerConfig,
+    CircuitBreakerConfigUpdate,
+    CircuitBreakerHistoryEntry,
+    CircuitBreakerHistoryResponse,
+    CircuitBreakerStatusResponse,
     ClientRequest,
     ClientResponse,
     CodeArtifact,
@@ -312,6 +317,12 @@ __all__ = [
     # Audit Tool Call types (Issue #1260)
     "AuditToolCallRequest",
     "AuditToolCallResponse",
+    # Circuit Breaker Observability types (Issue #1176)
+    "CircuitBreakerStatusResponse",
+    "CircuitBreakerHistoryEntry",
+    "CircuitBreakerHistoryResponse",
+    "CircuitBreakerConfig",
+    "CircuitBreakerConfigUpdate",
     # Execution Replay types
     "ExecutionSummary",
     "ExecutionSnapshot",

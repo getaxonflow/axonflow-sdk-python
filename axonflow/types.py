@@ -1168,3 +1168,85 @@ class AuditToolCallResponse(BaseModel):
     audit_id: str = Field(description="Unique ID for the audit entry")
     status: str = Field(description="Recording status (e.g., recorded)")
     timestamp: str = Field(description="Timestamp when the audit entry was recorded")
+
+
+# =========================================================================
+# Circuit Breaker Observability Types
+# =========================================================================
+
+
+class CircuitBreakerStatusResponse(BaseModel):
+    """Response from circuit breaker status endpoint."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    active_circuits: list[dict[str, Any]] = Field(
+        default_factory=list, description="List of active (open) circuits"
+    )
+    count: int = Field(description="Number of active circuits")
+    emergency_stop_active: bool = Field(description="Whether any circuit is open")
+
+
+class CircuitBreakerHistoryEntry(BaseModel):
+    """A single circuit breaker history entry."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(description="Circuit ID")
+    org_id: str = Field(description="Organization ID")
+    scope: str = Field(description="Circuit scope (global, tenant, client, policy)")
+    scope_id: str = Field(default="", description="Scope identifier")
+    state: str = Field(description="Circuit state (closed, open, half_open)")
+    trip_reason: str | None = Field(default=None, description="Why the circuit was tripped")
+    tripped_by: str | None = Field(default=None, description="Who/what tripped the circuit")
+    tripped_at: str | None = Field(default=None, description="When the circuit was tripped")
+    expires_at: str | None = Field(default=None, description="When the circuit will auto-reset")
+    reset_by: str | None = Field(default=None, description="Who reset the circuit")
+    reset_at: str | None = Field(default=None, description="When the circuit was reset")
+    error_count: int = Field(default=0, description="Number of errors in current window")
+    violation_count: int = Field(default=0, description="Number of violations in current window")
+
+
+class CircuitBreakerHistoryResponse(BaseModel):
+    """Response from circuit breaker history endpoint."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    history: list[CircuitBreakerHistoryEntry] = Field(
+        default_factory=list, description="Circuit history entries"
+    )
+    count: int = Field(description="Number of history entries")
+
+
+class CircuitBreakerConfig(BaseModel):
+    """Circuit breaker configuration (effective for a tenant or global)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    source: str = Field(description="Config source: 'global' or 'tenant'")
+    error_threshold: int = Field(description="Error threshold for auto-trip")
+    violation_threshold: int = Field(description="Policy violation threshold")
+    window_seconds: int = Field(description="Sliding window duration in seconds")
+    default_timeout_seconds: int = Field(description="Default circuit open timeout in seconds")
+    max_timeout_seconds: int = Field(description="Maximum allowed timeout in seconds")
+    enable_auto_recovery: bool = Field(description="Whether auto-recovery is enabled")
+    tenant_id: str | None = Field(default=None, description="Tenant ID if tenant-specific")
+    overrides: dict[str, Any] | None = Field(default=None, description="Tenant-specific overrides")
+
+
+class CircuitBreakerConfigUpdate(BaseModel):
+    """Request to update per-tenant circuit breaker config."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    tenant_id: str = Field(description="Tenant ID to configure")
+    error_threshold: int | None = Field(default=None, description="Override error threshold")
+    violation_threshold: int | None = Field(
+        default=None, description="Override violation threshold"
+    )
+    window_seconds: int | None = Field(default=None, description="Override window duration")
+    default_timeout_seconds: int | None = Field(
+        default=None, description="Override default timeout"
+    )
+    max_timeout_seconds: int | None = Field(default=None, description="Override max timeout")
+    enable_auto_recovery: bool | None = Field(default=None, description="Override auto-recovery")
