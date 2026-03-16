@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 # Python's datetime.fromisoformat requires exactly 6 fractional digits
 _MICROSECOND_PRECISION = 6
@@ -121,8 +121,8 @@ class Finding:
     category: str
     description: str
     status: FindingStatus
-    remediation: Optional[str] = None
-    due_date: Optional[datetime] = None
+    remediation: str | None = None
+    due_date: datetime | None = None
 
 
 # ===========================================================================
@@ -140,18 +140,18 @@ class AISystemRegistry:
     system_name: str
     use_case: AISystemUseCase
     owner_team: str
-    customer_impact: Optional[int]
-    model_complexity: Optional[int]
-    human_reliance: Optional[int]
+    customer_impact: int | None
+    model_complexity: int | None
+    human_reliance: int | None
     materiality: MaterialityClassification
     status: SystemStatus
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-    description: Optional[str] = None
-    technical_owner: Optional[str] = None
-    business_owner: Optional[str] = None
-    metadata: Optional[dict[str, Any]] = None
-    created_by: Optional[str] = None
+    created_at: datetime | None
+    updated_at: datetime | None
+    description: str | None = None
+    technical_owner: str | None = None
+    business_owner: str | None = None
+    metadata: dict[str, Any] | None = None
+    created_by: str | None = None
 
 
 @dataclass
@@ -181,25 +181,25 @@ class FEATAssessment:
     system_id: str
     assessment_type: str
     status: FEATAssessmentStatus
-    assessment_date: Optional[datetime]
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-    valid_until: Optional[datetime] = None
-    fairness_score: Optional[int] = None
-    ethics_score: Optional[int] = None
-    accountability_score: Optional[int] = None
-    transparency_score: Optional[int] = None
-    overall_score: Optional[int] = None
-    fairness_details: Optional[dict[str, Any]] = None
-    ethics_details: Optional[dict[str, Any]] = None
-    accountability_details: Optional[dict[str, Any]] = None
-    transparency_details: Optional[dict[str, Any]] = None
-    findings: Optional[list[Finding]] = None
-    recommendations: Optional[list[str]] = None
-    assessors: Optional[list[str]] = None
-    approved_by: Optional[str] = None
-    approved_at: Optional[datetime] = None
-    created_by: Optional[str] = None
+    assessment_date: datetime | None
+    created_at: datetime | None
+    updated_at: datetime | None
+    valid_until: datetime | None = None
+    fairness_score: int | None = None
+    ethics_score: int | None = None
+    accountability_score: int | None = None
+    transparency_score: int | None = None
+    overall_score: int | None = None
+    fairness_details: dict[str, Any] | None = None
+    ethics_details: dict[str, Any] | None = None
+    accountability_details: dict[str, Any] | None = None
+    transparency_details: dict[str, Any] | None = None
+    findings: list[Finding] | None = None
+    recommendations: list[str] | None = None
+    assessors: list[str] | None = None
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    created_by: str | None = None
 
 
 # ===========================================================================
@@ -216,16 +216,16 @@ class KillSwitch:
     system_id: str
     status: KillSwitchStatus
     auto_trigger_enabled: bool
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
-    accuracy_threshold: Optional[float] = None
-    bias_threshold: Optional[float] = None
-    error_rate_threshold: Optional[float] = None
-    triggered_at: Optional[datetime] = None
-    triggered_by: Optional[str] = None
-    triggered_reason: Optional[str] = None
-    restored_at: Optional[datetime] = None
-    restored_by: Optional[str] = None
+    created_at: datetime | None
+    updated_at: datetime | None
+    accuracy_threshold: float | None = None
+    bias_threshold: float | None = None
+    error_rate_threshold: float | None = None
+    triggered_at: datetime | None = None
+    triggered_by: str | None = None
+    triggered_reason: str | None = None
+    restored_at: datetime | None = None
+    restored_by: str | None = None
 
 
 @dataclass
@@ -235,9 +235,9 @@ class KillSwitchEvent:
     id: str
     kill_switch_id: str
     event_type: KillSwitchEventType
-    created_at: Optional[datetime]
-    event_data: Optional[dict[str, Any]] = None
-    created_by: Optional[str] = None
+    created_at: datetime | None
+    event_data: dict[str, Any] | None = None
+    created_by: str | None = None
 
 
 # ===========================================================================
@@ -245,7 +245,7 @@ class KillSwitchEvent:
 # ===========================================================================
 
 
-def _parse_datetime(value: Any) -> Optional[datetime]:
+def _parse_datetime(value: Any) -> datetime | None:
     """Parse datetime from API response."""
     if value is None:
         return None
@@ -358,7 +358,7 @@ def finding_to_dict(finding: Finding) -> dict[str, Any]:
     return result
 
 
-def _parse_findings(data: Optional[list[dict[str, Any]]]) -> Optional[list[Finding]]:
+def _parse_findings(data: list[dict[str, Any]] | None) -> list[Finding] | None:
     """Parse list of findings from API response."""
     if data is None:
         return None

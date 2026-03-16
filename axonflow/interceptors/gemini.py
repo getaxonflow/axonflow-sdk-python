@@ -22,8 +22,9 @@ Example:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from axonflow.exceptions import PolicyViolationError
 from axonflow.interceptors.base import BaseInterceptor
