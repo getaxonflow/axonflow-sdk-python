@@ -1925,9 +1925,7 @@ class AxonFlow:
         response = await self._request("GET", path)
         data = response.get("data", response)
 
-        history = [
-            CircuitBreakerHistoryEntry(**entry) for entry in (data.get("history") or [])
-        ]
+        history = [CircuitBreakerHistoryEntry(**entry) for entry in (data.get("history") or [])]
 
         return CircuitBreakerHistoryResponse(
             history=history,
@@ -6453,27 +6451,21 @@ class SyncAxonFlow:
         limit: int | None = None,
     ) -> CircuitBreakerHistoryResponse:
         """Get circuit breaker history for audit trail."""
-        return self._run_sync(
-            self._async_client.get_circuit_breaker_history(limit=limit)
-        )
+        return self._run_sync(self._async_client.get_circuit_breaker_history(limit=limit))
 
     def get_circuit_breaker_config(
         self,
         tenant_id: str | None = None,
     ) -> CircuitBreakerConfig:
         """Get circuit breaker config (global or tenant-specific)."""
-        return self._run_sync(
-            self._async_client.get_circuit_breaker_config(tenant_id=tenant_id)
-        )
+        return self._run_sync(self._async_client.get_circuit_breaker_config(tenant_id=tenant_id))
 
     def update_circuit_breaker_config(
         self,
         config: CircuitBreakerConfigUpdate,
     ) -> dict[str, Any]:
         """Update per-tenant circuit breaker config."""
-        return self._run_sync(
-            self._async_client.update_circuit_breaker_config(config)
-        )
+        return self._run_sync(self._async_client.update_circuit_breaker_config(config))
 
     # Policy CRUD sync wrappers
 
