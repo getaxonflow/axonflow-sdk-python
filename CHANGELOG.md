@@ -5,6 +5,14 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2026-03-19
+
+### Fixed
+
+- `mcp_tool_interceptor()` now wraps redacted output in a `CallToolResult` instead of returning a plain `str`. Previously, when `mcp_check_output` applied redaction, the interceptor returned the redacted string directly, causing `AttributeError: 'str' object has no attribute 'content'` in `langchain-mcp-adapters`. Adds `mcp>=1.0.0` as a new `langgraph` optional extra (`pip install 'axonflow[langgraph]'`).
+
+---
+
 ## [5.0.0] - 2026-03-16
 
 ### Breaking Changes
