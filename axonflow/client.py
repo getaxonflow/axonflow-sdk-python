@@ -390,7 +390,6 @@ class AxonFlow:
         # client_secret is optional for community mode but required for enterprise
         if client_id:
             headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
-            headers["X-Org-ID"] = client_id  # circuit breaker endpoints require org context
             # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
             if client_secret:
                 credentials = f"{client_id}:{client_secret}"
