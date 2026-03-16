@@ -2017,7 +2017,8 @@ class AxonFlow:
             json_data=request_body,
         )
 
-        return response.get("data", response)
+        result: dict[str, Any] = response.get("data", response)
+        return result
 
     # =========================================================================
     # Audit Log Read Methods
