@@ -5,6 +5,19 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.0] - 2026-03-16
+
+### Breaking Changes
+
+- **Dropped Python 3.9 support.** Python 3.9 reached end-of-life in October 2025. The minimum supported version is now Python 3.10. Users on 3.9 should pin to `axonflow<5.0.0`.
+
+### Changed
+
+- Removed `eval_type_backport` dependency (was only required for Python 3.9).
+- Modernized type annotations across the codebase: `Optional[X]` → `X | None`, `typing.Callable` → `collections.abc.Callable` (now valid without `from __future__ import annotations` on 3.10+).
+
+---
+
 ## [4.2.0] - 2026-03-16
 
 ### Added
