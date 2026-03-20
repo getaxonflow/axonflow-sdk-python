@@ -170,7 +170,6 @@ show_column_numbers = true
 module = "tests.*"
 disallow_untyped_defs = false
 
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

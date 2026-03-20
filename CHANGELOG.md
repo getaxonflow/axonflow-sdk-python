@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.1.0] - 2026-03-19
 
+### Added
+
+- New `langgraph` optional extra for MCP tool interception: `pip install 'axonflow[langgraph]'`. The `mcp` package is now an opt-in dependency rather than being imported unconditionally at the package level.
+
 ### Fixed
 
-- `mcp_tool_interceptor()` now wraps redacted output in a `CallToolResult` instead of returning a plain `str`. Previously, when `mcp_check_output` applied redaction, the interceptor returned the redacted string directly, causing `AttributeError: 'str' object has no attribute 'content'` in `langchain-mcp-adapters`. Adds `mcp>=1.0.0` as a new `langgraph` optional extra (`pip install 'axonflow[langgraph]'`).
+- `mcp_tool_interceptor()` now wraps redacted output in a `CallToolResult` instead of returning a plain `str`. Previously, when `mcp_check_output` applied redaction, the interceptor returned the redacted string directly, causing `AttributeError: 'str' object has no attribute 'content'` in `langchain-mcp-adapters`.
 
 ---
 
