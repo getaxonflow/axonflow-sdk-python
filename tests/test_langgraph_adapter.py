@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 
 from axonflow import AxonFlow
 from axonflow.adapters.langgraph import AxonFlowLangGraphAdapter, MCPInterceptorOptions
@@ -192,7 +193,10 @@ class TestMCPToolInterceptor:
 
         result = await adapter.mcp_tool_interceptor()(MagicMock(), handler)
 
-        assert result == "[REDACTED]"
+        assert isinstance(result, CallToolResult)
+        assert len(result.content) == 1
+        assert isinstance(result.content[0], TextContent)
+        assert result.content[0].text == "[REDACTED]"
 
     @pytest.mark.asyncio
     async def test_returns_original_result_when_no_redaction(

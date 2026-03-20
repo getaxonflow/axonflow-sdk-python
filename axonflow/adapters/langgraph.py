@@ -538,6 +538,15 @@ class AxonFlowLangGraphAdapter:
             An async callable ``(request, handler) -> result`` suitable for
             ``MultiServerMCPClient(tool_interceptors=[...])``.
         """
+        try:
+            from mcp.types import CallToolResult, TextContent  # noqa: PLC0415
+        except ImportError as exc:
+            msg = (
+                "The 'mcp' package is required to use mcp_tool_interceptor. "
+                "Install it with: pip install 'axonflow[langgraph]'"
+            )
+            raise ImportError(msg) from exc
+
         opts = options or MCPInterceptorOptions()
 
         def _default_connector_type(request: Any) -> str:
@@ -574,7 +583,9 @@ class AxonFlowLangGraphAdapter:
                     output_check.block_reason or "Tool result blocked by policy"
                 )
             if output_check.redacted_data is not None:
-                return output_check.redacted_data
+                return CallToolResult(
+                    content=[TextContent(type="text", text=output_check.redacted_data)]
+                )
 
             return result
 
