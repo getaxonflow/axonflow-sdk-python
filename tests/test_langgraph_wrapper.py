@@ -628,6 +628,31 @@ class TestErrorHandling:
         # complete_workflow should NOT have been called
         client.complete_workflow.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_approval_required_does_not_abort(self):
+        """WorkflowApprovalRequiredError must NOT abort the workflow.
+
+        The workflow should remain in a resumable state so the user
+        can approve the step and retry.
+        """
+        client = _mock_client(gate_decision=GateDecision.REQUIRE_APPROVAL)
+        client.step_gate.return_value = StepGateResponse(
+            decision=GateDecision.REQUIRE_APPROVAL,
+            step_id="step-1-plan",
+            reason="Requires manager approval",
+            approval_url="https://portal.example.com/approve/step-1",
+        )
+        graph = MockCompiledGraph(nodes=["plan"])
+        governed = wrap_langgraph(graph, client=client, workflow_name="test-wf")
+
+        with pytest.raises(WorkflowApprovalRequiredError):
+            await governed.ainvoke({"query": "hello"})
+
+        # abort_workflow must NOT be called — workflow should stay resumable
+        client.abort_workflow.assert_not_called()
+        # complete_workflow also should not be called
+        client.complete_workflow.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # TestSyncInvoke

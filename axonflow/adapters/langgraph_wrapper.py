@@ -330,7 +330,6 @@ class GovernedGraph:
         *,
         client: AxonFlow,
         workflow_name: str,
-        auto_block: bool = True,
         source: WorkflowSource = WorkflowSource.LANGGRAPH,
         metadata: dict[str, Any] | None = None,
         trace_id: str | None = None,
@@ -342,7 +341,6 @@ class GovernedGraph:
         self._graph = graph
         self._client = client
         self._workflow_name = workflow_name
-        self._auto_block = auto_block
         self._source = source
         self._metadata = metadata
         self._trace_id = trace_id
@@ -351,11 +349,13 @@ class GovernedGraph:
         self._govern_tools = govern_tools
 
     def _make_adapter(self) -> AxonFlowLangGraphAdapter:
+        # Always auto_block=True — the wrapper uses callbacks which cannot
+        # return False to the graph, so non-blocking semantics are unsafe.
         return AxonFlowLangGraphAdapter(
             self._client,
             self._workflow_name,
             source=self._source,
-            auto_block=self._auto_block,
+            auto_block=True,
         )
 
     def _make_callback(self, adapter: AxonFlowLangGraphAdapter) -> Any:
@@ -410,8 +410,12 @@ class GovernedGraph:
 
         try:
             result = await self._graph.ainvoke(input, config=merged_config, **kwargs)
-        except (WorkflowBlockedError, WorkflowApprovalRequiredError):
+        except WorkflowBlockedError:
             await adapter.abort_workflow(reason="Governance block")
+            raise
+        except WorkflowApprovalRequiredError:
+            # Do NOT abort — leave the workflow resumable so the user
+            # can approve the step and call adapter.wait_for_approval()
             raise
         except Exception as exc:
             await adapter.fail_workflow(reason=f"Exception: {exc}")
@@ -458,8 +462,11 @@ class GovernedGraph:
             async for chunk in self._graph.astream(input, config=merged_config, **kwargs):
                 yield chunk
             await adapter.complete_workflow()
-        except (WorkflowBlockedError, WorkflowApprovalRequiredError):
+        except WorkflowBlockedError:
             await adapter.abort_workflow(reason="Governance block")
+            raise
+        except WorkflowApprovalRequiredError:
+            # Do NOT abort — leave resumable for approval flow
             raise
         except Exception as exc:
             await adapter.fail_workflow(reason=f"Exception: {exc}")
@@ -471,7 +478,6 @@ def wrap_langgraph(
     *,
     client: AxonFlow,
     workflow_name: str,
-    auto_block: bool = True,
     source: WorkflowSource = WorkflowSource.LANGGRAPH,
     metadata: dict[str, Any] | None = None,
     trace_id: str | None = None,
@@ -484,14 +490,14 @@ def wrap_langgraph(
     Returns a :class:`GovernedGraph` whose ``ainvoke`` / ``invoke`` /
     ``astream`` methods enforce policy gates at every node transition.
 
+    Blocked nodes raise :class:`WorkflowBlockedError`; nodes requiring
+    approval raise :class:`WorkflowApprovalRequiredError` (the workflow
+    is left in a resumable state so the caller can approve and retry).
+
     Args:
         graph: A compiled LangGraph ``StateGraph`` (from ``graph.compile()``).
         client: An :class:`~axonflow.AxonFlow` client instance.
         workflow_name: Human-readable workflow name registered with AxonFlow.
-        auto_block: If ``True`` (default), raise
-            :class:`~axonflow.adapters.langgraph.WorkflowBlockedError` when a
-            node is blocked.  If ``False``, the callback returns ``False``
-            and the graph continues.
         source: Workflow source (default ``langgraph``).
         metadata: Workflow-level metadata dict.
         trace_id: External trace ID for correlation (LangSmith, OTel, etc.).
@@ -517,7 +523,6 @@ def wrap_langgraph(
         graph,
         client=client,
         workflow_name=workflow_name,
-        auto_block=auto_block,
         source=source,
         metadata=metadata,
         trace_id=trace_id,
