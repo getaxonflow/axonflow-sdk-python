@@ -67,6 +67,7 @@ def _output_blocked(reason: str = "Output blocked") -> MCPCheckOutputResponse:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestMCPToolInterceptor:
     @pytest.fixture
     def client(self) -> AxonFlow:
@@ -822,6 +823,7 @@ class TestToolOutputWrapper:
     @pytest.fixture
     def client(self) -> AxonFlow:
         c = MagicMock(spec=AxonFlow)
+        c.mcp_check_input = AsyncMock(return_value=_input_allowed())
         c.mcp_check_output = AsyncMock(return_value=_output_allowed())
         return c
 
@@ -844,6 +846,50 @@ class TestToolOutputWrapper:
         assert result is message
         assert result.content == "clean data"
         execute.assert_awaited_once_with(call_request)
+
+    # --- input blocked ---
+
+    @pytest.mark.asyncio
+    async def test_blocked_input_raises_violation(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        client.mcp_check_input.return_value = _input_blocked("SQL injection detected")
+        execute = AsyncMock()
+
+        with pytest.raises(PolicyViolationError, match="SQL injection detected"):
+            await adapter.tool_output_wrapper()({"name": "lookup", "args": {}, "id": "c1"}, execute)
+
+        execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_blocked_input_uses_fallback_message(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        client.mcp_check_input.return_value = MCPCheckInputResponse(
+            allowed=False, block_reason=None, policies_evaluated=1
+        )
+        with pytest.raises(PolicyViolationError, match="Tool call blocked by policy"):
+            await adapter.tool_output_wrapper()({"name": "t", "args": {}, "id": "c"}, AsyncMock())
+
+    @pytest.mark.asyncio
+    async def test_connector_type_derived_from_name(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        execute = AsyncMock(return_value=_make_tool_message())
+        await adapter.tool_output_wrapper()({"name": "bankInfo", "args": {}, "id": "c1"}, execute)
+
+        assert client.mcp_check_input.call_args.kwargs["connector_type"] == "bankInfo"
+        assert client.mcp_check_output.call_args.kwargs["connector_type"] == "bankInfo"
+
+    @pytest.mark.asyncio
+    async def test_args_serialized_as_statement_for_input_check(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        args = {"query": "bob", "limit": 10}
+        execute = AsyncMock(return_value=_make_tool_message())
+        await adapter.tool_output_wrapper()({"name": "t", "args": args, "id": "c"}, execute)
+
+        assert client.mcp_check_input.call_args.kwargs["statement"] == json.dumps(args, default=str)
 
     # --- blocked output ---
 
