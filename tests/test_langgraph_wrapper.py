@@ -320,9 +320,7 @@ class TestNodeGovernance:
 
         # "debug" skipped, "plan" and "report" governed
         assert client.step_gate.call_count == 2
-        step_names = [
-            call.args[2].step_name for call in client.step_gate.call_args_list
-        ]
+        step_names = [call.args[2].step_name for call in client.step_gate.call_args_list]
         assert "debug" not in step_names
         assert "plan" in step_names
         assert "report" in step_names
@@ -341,9 +339,7 @@ class TestNodeGovernance:
         await governed.ainvoke({"query": "hello"})
 
         assert client.step_gate.call_count == 2
-        step_names = [
-            call.args[2].step_name for call in client.step_gate.call_args_list
-        ]
+        step_names = [call.args[2].step_name for call in client.step_gate.call_args_list]
         assert "debug" not in step_names
 
     @pytest.mark.asyncio
@@ -372,9 +368,7 @@ class TestNodeGovernance:
             client=client,
             workflow_name="test-wf",
             node_config={
-                "generate": NodeConfig(
-                    step_type="llm_call", model="gpt-4", provider="openai"
-                )
+                "generate": NodeConfig(step_type="llm_call", model="gpt-4", provider="openai")
             },
         )
 
@@ -430,9 +424,7 @@ class TestToolGovernance:
     @pytest.mark.asyncio
     async def test_tool_gates_called(self):
         client = _mock_client()
-        graph = MockCompiledGraph(
-            nodes=["tools"], tools=["web_search", "calculator"]
-        )
+        graph = MockCompiledGraph(nodes=["tools"], tools=["web_search", "calculator"])
         governed = wrap_langgraph(graph, client=client, workflow_name="test-wf")
 
         await governed.ainvoke({"query": "hello"})
@@ -450,9 +442,7 @@ class TestToolGovernance:
     @pytest.mark.asyncio
     async def test_tool_completed_called(self):
         client = _mock_client()
-        graph = MockCompiledGraph(
-            nodes=["tools"], tools=["web_search", "calculator"]
-        )
+        graph = MockCompiledGraph(nodes=["tools"], tools=["web_search", "calculator"])
         governed = wrap_langgraph(graph, client=client, workflow_name="test-wf")
 
         await governed.ainvoke({"query": "hello"})
@@ -463,12 +453,8 @@ class TestToolGovernance:
     @pytest.mark.asyncio
     async def test_govern_tools_false_skips(self):
         client = _mock_client()
-        graph = MockCompiledGraph(
-            nodes=["tools"], tools=["web_search", "calculator"]
-        )
-        governed = wrap_langgraph(
-            graph, client=client, workflow_name="test-wf", govern_tools=False
-        )
+        graph = MockCompiledGraph(nodes=["tools"], tools=["web_search", "calculator"])
+        governed = wrap_langgraph(graph, client=client, workflow_name="test-wf", govern_tools=False)
 
         await governed.ainvoke({"query": "hello"})
 
@@ -577,9 +563,7 @@ class TestCallbackMerging:
         existing_cb.on_chain_start = AsyncMock()
         existing_cb.on_chain_end = AsyncMock()
 
-        await governed.ainvoke(
-            {"query": "hello"}, config={"callbacks": [existing_cb]}
-        )
+        await governed.ainvoke({"query": "hello"}, config={"callbacks": [existing_cb]})
 
         # The user's callback should have been invoked alongside the governance one
         assert existing_cb.on_chain_start.call_count >= 1
@@ -605,9 +589,7 @@ class TestCallbackMerging:
         existing_cb.on_chain_end = AsyncMock()
 
         # Pass callbacks as a tuple instead of a list
-        await governed.ainvoke(
-            {"query": "hello"}, config={"callbacks": (existing_cb,)}
-        )
+        await governed.ainvoke({"query": "hello"}, config={"callbacks": (existing_cb,)})
 
         assert existing_cb.on_chain_start.call_count >= 1
 

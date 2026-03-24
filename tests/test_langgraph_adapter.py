@@ -470,9 +470,7 @@ class TestStepCompleted:
         return a
 
     @pytest.mark.asyncio
-    async def test_happy_path(
-        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
-    ) -> None:
+    async def test_happy_path(self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow) -> None:
         # check_gate increments counter to 1
         await adapter.check_gate("analyze", "llm_call")
         await adapter.step_completed("analyze", output={"result": "done"})
@@ -679,9 +677,7 @@ class TestToolCompleted:
         return a
 
     @pytest.mark.asyncio
-    async def test_happy_path(
-        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
-    ) -> None:
+    async def test_happy_path(self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow) -> None:
         await adapter.check_tool_gate("web_search", "function")
         await adapter.tool_completed("web_search", output={"results": ["r1"]})
 
