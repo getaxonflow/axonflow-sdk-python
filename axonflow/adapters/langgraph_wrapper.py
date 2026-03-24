@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 def _import_callback_handler() -> type:
     """Import langchain-core AsyncCallbackHandler with a helpful error."""
     try:
-        from langchain_core.callbacks import AsyncCallbackHandler  # noqa: PLC0415
+        from langchain_core.callbacks import AsyncCallbackHandler  # type: ignore[import-not-found]
     except ImportError:
         msg = (
             "langchain-core is required for wrap_langgraph(). "
@@ -44,7 +44,7 @@ def _import_callback_handler() -> type:
         )
         raise ImportError(msg) from None
     else:
-        return AsyncCallbackHandler
+        return AsyncCallbackHandler  # type: ignore[no-any-return]
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ def _make_callback_class() -> type:
     """
     AsyncCallbackHandler = _import_callback_handler()
 
-    class _Callback(AsyncCallbackHandler):  # type: ignore[misc]
+    class _Callback(AsyncCallbackHandler):  # type: ignore[misc,valid-type]
         """LangChain callback handler that enforces AxonFlow governance.
 
         Node detection strategy (priority order):
@@ -131,11 +131,11 @@ def _make_callback_class() -> type:
         ) -> str | None:
             # Strategy 1: documented LangGraph metadata key
             if metadata and "langgraph_node" in metadata:
-                return metadata["langgraph_node"]
+                return str(metadata["langgraph_node"])
 
             # Strategy 2: serialized name, filtering internal runnables
             if serialized:
-                name = serialized.get("name", "")
+                name: str = serialized.get("name", "")
                 if name and name not in _INTERNAL_RUNNABLES and not name.startswith("_"):
                     return name
 
