@@ -15,11 +15,12 @@ import pytest
 from axonflow import AxonFlow
 from axonflow.adapters.langgraph import WorkflowApprovalRequiredError, WorkflowBlockedError
 from axonflow.adapters.langgraph_wrapper import (
-    GovernedGraph,
-    NodeConfig,
     _DEFAULT_EXCLUDE,
     _INTERNAL_RUNNABLES,
+    GovernedGraph,
+    NodeConfig,
     _get_callback_class,
+    _import_callback_handler,
     wrap_langgraph,
 )
 from axonflow.workflow import (
@@ -32,14 +33,29 @@ from axonflow.workflow import (
 )
 
 
-# Reset the module-level callback class cache between tests
-# to ensure clean state (the class is created via lazy import).
+# Ensure the callback class works even when langchain-core is not installed
+# (CI only installs [dev] extras). We mock the import to return a base class
+# and reset the module-level cache so it's rebuilt each test.
 @pytest.fixture(autouse=True)
-def _reset_callback_cache(monkeypatch):
-    """Reset _CallbackClass cache so each test gets a fresh state."""
+def _patch_callback_for_ci(monkeypatch):
+    """Provide a fake AsyncCallbackHandler base and reset the class cache."""
     import axonflow.adapters.langgraph_wrapper as _mod
 
+    # Reset cache so _get_callback_class() rebuilds from scratch
     monkeypatch.setattr(_mod, "_CallbackClass", None)
+
+    # If langchain-core IS installed, this is a no-op (real import succeeds).
+    # If NOT installed, provide a minimal fake base class.
+    try:
+        _import_callback_handler()
+    except ImportError:
+        monkeypatch.setattr(
+            _mod,
+            "_import_callback_handler",
+            lambda: type(
+                "FakeAsyncCallbackHandler", (), {"raise_error": False, "run_inline": False}
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -60,11 +76,12 @@ class MockCompiledGraph:
         self.tools = tools or []
         self.error_on_node = error_on_node
 
-    async def ainvoke(self, input, config=None, **kwargs):
+    async def ainvoke(self, input, config=None, **kwargs):  # noqa: A002
         callbacks = (config or {}).get("callbacks", [])
         for node in self.nodes:
             if node == self.error_on_node:
-                raise RuntimeError(f"Node {node} failed")
+                msg = f"Node {node} failed"
+                raise RuntimeError(msg)
             run_id = uuid4()
             for cb in callbacks:
                 await cb.on_chain_start(
@@ -96,7 +113,7 @@ class MockCompiledGraph:
                 await cb.on_chain_end(output, run_id=run_id)
         return {"final": "result"}
 
-    async def astream(self, input, config=None, **kwargs):
+    async def astream(self, input, config=None, **kwargs):  # noqa: A002
         result = await self.ainvoke(input, config=config, **kwargs)
         for k, v in result.items():
             yield {k: v}
@@ -377,7 +394,7 @@ class TestNodeGovernance:
         # without metadata. Build a custom graph for that.
 
         class InternalRunnableGraph:
-            async def ainvoke(self, input, config=None, **kwargs):
+            async def ainvoke(self, input, config=None, **kwargs):  # noqa: A002
                 callbacks = (config or {}).get("callbacks", [])
                 run_id = uuid4()
                 # Fire chain_start with only serialized name (no langgraph_node metadata)

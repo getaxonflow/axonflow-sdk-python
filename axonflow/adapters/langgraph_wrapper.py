@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from axonflow.adapters.langgraph import (
@@ -26,7 +27,7 @@ from axonflow.adapters.langgraph import (
     WorkflowApprovalRequiredError,
     WorkflowBlockedError,
 )
-from axonflow.workflow import StepType, ToolContext, WorkflowSource
+from axonflow.workflow import WorkflowSource
 
 if TYPE_CHECKING:
     from axonflow import AxonFlow
@@ -35,14 +36,15 @@ if TYPE_CHECKING:
 def _import_callback_handler() -> type:
     """Import langchain-core AsyncCallbackHandler with a helpful error."""
     try:
-        from langchain_core.callbacks import AsyncCallbackHandler
-
-        return AsyncCallbackHandler
+        from langchain_core.callbacks import AsyncCallbackHandler  # noqa: PLC0415
     except ImportError:
-        raise ImportError(
+        msg = (
             "langchain-core is required for wrap_langgraph(). "
             "Install with: pip install axonflow[langgraph]"
-        ) from None
+        )
+        raise ImportError(msg) from None
+    else:
+        return AsyncCallbackHandler
 
 
 @dataclass(frozen=True)
@@ -408,14 +410,15 @@ class GovernedGraph:
 
         try:
             result = await self._graph.ainvoke(input, config=merged_config, **kwargs)
-            await adapter.complete_workflow()
-            return result
         except (WorkflowBlockedError, WorkflowApprovalRequiredError):
             await adapter.abort_workflow(reason="Governance block")
             raise
         except Exception as exc:
             await adapter.fail_workflow(reason=f"Exception: {exc}")
             raise
+        else:
+            await adapter.complete_workflow()
+            return result
 
     def invoke(
         self,
@@ -508,11 +511,7 @@ def wrap_langgraph(
         governed = wrap_langgraph(compiled, client=client, workflow_name="demo")
         result = await governed.ainvoke({"query": "Hello"})
     """
-    resolved_excludes: frozenset[str]
-    if exclude_nodes is not None:
-        resolved_excludes = frozenset(exclude_nodes)
-    else:
-        resolved_excludes = _DEFAULT_EXCLUDE
+    resolved_excludes = frozenset(exclude_nodes) if exclude_nodes is not None else _DEFAULT_EXCLUDE
 
     return GovernedGraph(
         graph,
