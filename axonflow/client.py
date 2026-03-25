@@ -157,6 +157,7 @@ from axonflow.types import (
     ExecutionExportOptions,
     ExecutionMode,
     ExecutionSnapshot,
+    ImpactReportResponse,
     ListBudgetsOptions,
     ListExecutionsOptions,
     ListExecutionsResponse,
@@ -173,12 +174,14 @@ from axonflow.types import (
     PlanStep,
     PlanVersionsResponse,
     PolicyApprovalResult,
+    PolicyConflictResponse,
     PricingInfo,
     PricingListResponse,
     RateLimitInfo,
     ResumePlanResponse,
     RetryConfig,
     RollbackPlanResponse,
+    SimulatePoliciesResponse,
     TimelineEntry,
     TokenUsage,
     UpdateBudgetRequest,
@@ -2019,6 +2022,164 @@ class AxonFlow:
 
         result: dict[str, Any] = response.get("data", response)
         return result
+
+    # =========================================================================
+    # Policy Simulation Methods (Evaluation Tier+)
+    # =========================================================================
+
+    async def simulate_policies(
+        self,
+        query: str,
+        request_type: str | None = None,
+        user: dict[str, Any] | None = None,
+        client: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> SimulatePoliciesResponse:
+        """Simulate all active policies against input (dry run).
+
+        Runs the full policy evaluation pipeline without actually blocking
+        or auditing the request. Useful for testing policy configurations
+        before deploying them.
+
+        Requires Evaluation tier or above.
+
+        Args:
+            query: The query text to simulate.
+            request_type: Optional request type (e.g. 'chat', 'completion').
+            user: Optional user context dictionary.
+            client: Optional client context dictionary.
+            context: Optional additional context dictionary.
+
+        Returns:
+            SimulatePoliciesResponse with simulation results.
+
+        Raises:
+            AxonFlowError: If the request fails (e.g. 403 for Community tier).
+
+        Example:
+            >>> result = await client.simulate_policies(
+            ...     query="What is the patient's SSN?",
+            ...     request_type="chat",
+            ...     user={"role": "analyst"},
+            ... )
+            >>> print(f"Allowed: {result.allowed}, Risk: {result.risk_score}")
+            >>> print(f"Policies matched: {result.applied_policies}")
+        """
+        if self._config.debug:
+            self._logger.debug("Simulating policies", query=query[:50])
+
+        body: dict[str, Any] = {"query": query}
+        if request_type is not None:
+            body["request_type"] = request_type
+        if user is not None:
+            body["user"] = user
+        if client is not None:
+            body["client"] = client
+        if context is not None:
+            body["context"] = context
+
+        response = await self._orchestrator_request(
+            "POST", "/api/v1/policies/simulate", json_data=body
+        )
+        data = response.get("data", response) if isinstance(response, dict) else {}
+
+        return SimulatePoliciesResponse.model_validate(data)
+
+    async def get_policy_impact_report(
+        self,
+        policy_id: str,
+        inputs: list[dict[str, Any]],
+    ) -> ImpactReportResponse:
+        """Test a single policy against multiple inputs.
+
+        Generates an impact report showing how a specific policy would
+        affect a set of sample inputs. Useful for understanding the
+        blast radius of policy changes.
+
+        Requires Evaluation tier or above.
+
+        Args:
+            policy_id: ID of the policy to test.
+            inputs: List of input dictionaries, each containing at minimum
+                a 'query' key and optionally 'request_type', 'user', 'context'.
+
+        Returns:
+            ImpactReportResponse with per-input match/block results.
+
+        Raises:
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> report = await client.get_policy_impact_report(
+            ...     policy_id="pol_abc123",
+            ...     inputs=[
+            ...         {"query": "Show me SSN 123-45-6789"},
+            ...         {"query": "What is the weather today?"},
+            ...     ],
+            ... )
+            >>> print(f"Match rate: {report.match_rate:.0%}")
+            >>> print(f"Block rate: {report.block_rate:.0%}")
+        """
+        if self._config.debug:
+            self._logger.debug(
+                "Getting policy impact report",
+                policy_id=policy_id,
+                input_count=len(inputs),
+            )
+
+        body: dict[str, Any] = {
+            "policy_id": policy_id,
+            "inputs": inputs,
+        }
+
+        response = await self._orchestrator_request(
+            "POST", "/api/v1/policies/impact-report", json_data=body
+        )
+        data = response.get("data", response) if isinstance(response, dict) else {}
+
+        return ImpactReportResponse.model_validate(data)
+
+    async def detect_policy_conflicts(
+        self,
+        policy_id: str | None = None,
+    ) -> PolicyConflictResponse:
+        """Detect conflicts between active policies.
+
+        Analyzes active policies for conflicts such as overlapping
+        conditions with contradictory actions. Optionally scoped to
+        conflicts involving a specific policy.
+
+        Requires Evaluation tier or above.
+
+        Args:
+            policy_id: If provided, only check conflicts involving this policy.
+                If None, check all active policies.
+
+        Returns:
+            PolicyConflictResponse with detected conflicts.
+
+        Raises:
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> conflicts = await client.detect_policy_conflicts()
+            >>> print(f"Found {conflicts.conflict_count} conflicts")
+            >>> for c in conflicts.conflicts:
+            ...     print(f"{c.policy_a.name} vs {c.policy_b.name}: {c.description}")
+        """
+        if self._config.debug:
+            self._logger.debug("Detecting policy conflicts", policy_id=policy_id)
+
+        body: dict[str, Any] = {}
+        if policy_id is not None:
+            body["policy_id"] = policy_id
+
+        response = await self._orchestrator_request(
+            "POST", "/api/v1/policies/conflicts", json_data=body
+        )
+        data = response.get("data", response) if isinstance(response, dict) else {}
+
+        return PolicyConflictResponse.model_validate(data)
 
     # =========================================================================
     # Audit Log Read Methods
@@ -6467,6 +6628,42 @@ class SyncAxonFlow:
     ) -> dict[str, Any]:
         """Update per-tenant circuit breaker config."""
         return self._run_sync(self._async_client.update_circuit_breaker_config(config))
+
+    # Policy Simulation sync wrappers (Evaluation Tier+)
+
+    def simulate_policies(
+        self,
+        query: str,
+        request_type: str | None = None,
+        user: dict[str, Any] | None = None,
+        client: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> SimulatePoliciesResponse:
+        """Simulate all active policies against input (dry run)."""
+        return self._run_sync(
+            self._async_client.simulate_policies(
+                query,
+                request_type=request_type,
+                user=user,
+                client=client,
+                context=context,
+            )
+        )
+
+    def get_policy_impact_report(
+        self,
+        policy_id: str,
+        inputs: list[dict[str, Any]],
+    ) -> ImpactReportResponse:
+        """Test a single policy against multiple inputs."""
+        return self._run_sync(self._async_client.get_policy_impact_report(policy_id, inputs))
+
+    def detect_policy_conflicts(
+        self,
+        policy_id: str | None = None,
+    ) -> PolicyConflictResponse:
+        """Detect conflicts between active policies."""
+        return self._run_sync(self._async_client.detect_policy_conflicts(policy_id=policy_id))
 
     # Policy CRUD sync wrappers
 
