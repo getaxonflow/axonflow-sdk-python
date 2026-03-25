@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axonflow"
-version = "5.1.0"
+version = "5.2.0"
 description = "AxonFlow Python SDK - Enterprise AI Governance in 3 Lines of Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -62,11 +62,12 @@ docs = [
 ]
 openai = ["openai>=1.0.0"]
 anthropic = ["anthropic>=0.18.0"]
-langgraph = ["mcp>=1.0.0"]
+langgraph = ["mcp>=1.0.0", "langchain-core>=0.3.0"]
 all = [
     "openai>=1.0.0",
     "anthropic>=0.18.0",
     "mcp>=1.0.0",
+    "langchain-core>=0.3.0",
 ]
 
 [project.urls]
@@ -142,6 +143,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004", "ARG", "PLC0415", "PT011", "PT012", "TC001", "TC002", "UP035", "F401", "F841", "EM101", "TRY301"]
+"axonflow/adapters/langgraph_wrapper.py" = ["ARG002", "PLC0415", "E501"]  # Callback signatures must match base; lazy import of langchain-core
 "examples/**/*.py" = ["T201", "ANN", "S106", "ERA001", "BLE001", "PLC0415", "F541"]
 "scripts/**/*.py" = ["T201", "ANN", "S106", "BLE001", "UP045", "DTZ005", "PTH123"]
 

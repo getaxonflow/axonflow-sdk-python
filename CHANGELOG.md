@@ -5,6 +5,18 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2026-03-25
+
+### Added
+
+- `wrap_langgraph()` — 1-line wrapper for compiled LangGraph StateGraphs. Transparently enforces AxonFlow governance at every node transition without modifying the graph definition. Uses langchain-core's `AsyncCallbackHandler` to intercept node execution via `metadata["langgraph_node"]`.
+- `GovernedGraph` class — returned by `wrap_langgraph()`, exposes `ainvoke()`, `invoke()`, `astream()`. Each invocation creates a new AxonFlow workflow. Reusable across multiple invocations.
+- `NodeConfig` dataclass — per-node configuration overrides (`step_type`, `model`, `provider`, `skip`) for fine-grained control over how individual nodes are governed.
+- `govern_tools` parameter — when `True` (default), individual tool calls within LangGraph nodes are automatically gate-checked via `check_tool_gate()` / `tool_completed()`.
+- `langchain-core>=0.3.0` added to the `langgraph` optional extra (`pip install axonflow[langgraph]`).
+
+---
+
 ## [5.1.0] - 2026-03-19
 
 ### Added
