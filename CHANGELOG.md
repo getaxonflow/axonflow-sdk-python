@@ -5,7 +5,7 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.3.0] - 2026-03-25
+## [5.2.0] - 2026-03-25
 
 ### Added
 
@@ -14,13 +14,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `detect_policy_conflicts()` — analyze active policies for contradictions, shadows, and redundancies. Optionally filter to conflicts involving a specific policy.
 - `AxonFlowLangGraphAdapter.tool_output_wrapper()` — returns an async wrapper for LangGraph `ToolNode(awrap_tool_call=...)` that enforces output policy checks on local `@tool` functions. Fixes a gap where locally defined tools bypassed `mcp_tool_interceptor` policy enforcement.
 - Types: `SimulatePoliciesRequest`, `SimulatePoliciesResponse`, `SimulationDailyUsage`, `ImpactReportInput`, `ImpactReportRequest`, `ImpactReportResult`, `ImpactReportResponse`, `PolicyConflictRef`, `PolicyConflict`, `PolicyConflictResponse`
-
----
-
-## [5.2.0] - 2026-03-25
-
-### Added
-
 - `wrap_langgraph()` — 1-line wrapper for compiled LangGraph StateGraphs. Transparently enforces AxonFlow governance at every node transition without modifying the graph definition. Uses langchain-core's `AsyncCallbackHandler` to intercept node execution via `metadata["langgraph_node"]`.
 - `GovernedGraph` class — returned by `wrap_langgraph()`, exposes `ainvoke()`, `invoke()`, `astream()`. Each invocation creates a new AxonFlow workflow. Reusable across multiple invocations.
 - `NodeConfig` dataclass — per-node configuration overrides (`step_type`, `model`, `provider`, `skip`) for fine-grained control over how individual nodes are governed.
