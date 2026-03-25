@@ -2078,11 +2078,10 @@ class AxonFlow:
         if context is not None:
             body["context"] = context
 
-        response = await self._orchestrator_request("POST", "/api/v1/policies/simulate", json_data=body)
-        if isinstance(response, dict):
-            data = response.get("data", response)
-        else:
-            data = {}
+        response = await self._orchestrator_request(
+            "POST", "/api/v1/policies/simulate", json_data=body
+        )
+        data = response.get("data", response) if isinstance(response, dict) else {}
 
         return SimulatePoliciesResponse.model_validate(data)
 
@@ -2136,10 +2135,7 @@ class AxonFlow:
         response = await self._orchestrator_request(
             "POST", "/api/v1/policies/impact-report", json_data=body
         )
-        if isinstance(response, dict):
-            data = response.get("data", response)
-        else:
-            data = {}
+        data = response.get("data", response) if isinstance(response, dict) else {}
 
         return ImpactReportResponse.model_validate(data)
 
@@ -2181,10 +2177,7 @@ class AxonFlow:
         response = await self._orchestrator_request(
             "POST", "/api/v1/policies/conflicts", json_data=body
         )
-        if isinstance(response, dict):
-            data = response.get("data", response)
-        else:
-            data = {}
+        data = response.get("data", response) if isinstance(response, dict) else {}
 
         return PolicyConflictResponse.model_validate(data)
 
