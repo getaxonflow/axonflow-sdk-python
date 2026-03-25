@@ -805,6 +805,8 @@ class TestContextManager:
 
         client.complete_workflow.assert_not_awaited()
         client.abort_workflow.assert_not_awaited()
+
+
 # tool_output_wrapper tests
 # ---------------------------------------------------------------------------
 
@@ -874,9 +876,7 @@ class TestToolOutputWrapper:
     async def test_redacted_output_replaces_content(
         self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
     ) -> None:
-        client.mcp_check_output.return_value = _output_allowed(
-            redacted_data="SSN: ***-**-****"
-        )
+        client.mcp_check_output.return_value = _output_allowed(redacted_data="SSN: ***-**-****")
         message = _make_tool_message("SSN: 123-45-6789")
         execute = AsyncMock(return_value=message)
 

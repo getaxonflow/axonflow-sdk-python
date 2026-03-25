@@ -1286,9 +1286,7 @@ class SimulatePoliciesResponse(BaseModel):
     dry_run: bool = Field(default=True, description="Always true for simulation")
     simulated_at: str = Field(default="", description="ISO 8601 timestamp")
     tier: str = Field(default="", description="License tier that ran the simulation")
-    daily_usage: SimulationDailyUsage | None = Field(
-        default=None, description="Daily quota usage"
-    )
+    daily_usage: SimulationDailyUsage | None = Field(default=None, description="Daily quota usage")
 
 
 class ImpactReportInput(BaseModel):
@@ -1326,9 +1324,7 @@ class ImpactReportResponse(BaseModel):
     blocked: int = Field(default=0, description="Number of inputs that would be blocked")
     match_rate: float = Field(default=0.0, description="Fraction of inputs that matched")
     block_rate: float = Field(default=0.0, description="Fraction of inputs that would be blocked")
-    results: list[ImpactReportResult] = Field(
-        default_factory=list, description="Per-input results"
-    )
+    results: list[ImpactReportResult] = Field(default_factory=list, description="Per-input results")
     processing_time_ms: int = Field(default=0, description="Processing time in ms")
     generated_at: str = Field(default="", description="ISO 8601 timestamp")
     tier: str = Field(default="", description="License tier")

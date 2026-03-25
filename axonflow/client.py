@@ -6656,9 +6656,7 @@ class SyncAxonFlow:
         inputs: list[dict[str, Any]],
     ) -> ImpactReportResponse:
         """Test a single policy against multiple inputs."""
-        return self._run_sync(
-            self._async_client.get_policy_impact_report(policy_id, inputs)
-        )
+        return self._run_sync(self._async_client.get_policy_impact_report(policy_id, inputs))
 
     def detect_policy_conflicts(
         self,
