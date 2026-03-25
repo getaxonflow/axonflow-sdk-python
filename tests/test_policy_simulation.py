@@ -317,7 +317,8 @@ class TestDetectPolicyConflicts:
                                 "type": "dynamic",
                             },
                             "conflict_type": "action_contradiction",
-                            "description": "Block PII blocks email patterns that Allow Analytics permits",
+                            "description": "Block PII blocks email patterns"
+                            " that Allow Analytics permits",
                             "severity": "high",
                             "overlapping_field": "query",
                         },
