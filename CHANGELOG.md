@@ -5,6 +5,18 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-03-25
+
+### Added
+
+- `simulate_policies()` — dry-run all active policies against an input query. Returns allowed/blocked status, applied policies, risk score, and daily usage. Requires Evaluation tier or above.
+- `get_policy_impact_report()` — test a single policy against multiple inputs and get aggregate match/block statistics.
+- `detect_policy_conflicts()` — analyze active policies for contradictions, shadows, and redundancies. Optionally filter to conflicts involving a specific policy.
+- `AxonFlowLangGraphAdapter.tool_output_wrapper()` — returns an async wrapper for LangGraph `ToolNode(awrap_tool_call=...)` that enforces output policy checks on local `@tool` functions. Fixes a gap where locally defined tools bypassed `mcp_tool_interceptor` policy enforcement.
+- Types: `SimulatePoliciesRequest`, `SimulatePoliciesResponse`, `SimulationDailyUsage`, `ImpactReportInput`, `ImpactReportRequest`, `ImpactReportResult`, `ImpactReportResponse`, `PolicyConflictRef`, `PolicyConflict`, `PolicyConflictResponse`
+
+---
+
 ## [5.2.0] - 2026-03-25
 
 ### Added

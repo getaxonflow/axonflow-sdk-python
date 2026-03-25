@@ -591,6 +591,80 @@ class AxonFlowLangGraphAdapter:
 
         return _interceptor
 
+    def tool_output_wrapper(
+        self,
+        options: MCPInterceptorOptions | None = None,
+    ) -> Callable[..., Any]:
+        """Return an async tool-call wrapper for use with LangGraph's ``ToolNode``.
+
+        The wrapper enforces AxonFlow output policies on **every** tool
+        invocation — including locally defined ``@tool`` functions that bypass
+        the MCP interceptor.  Pass the result directly to ``ToolNode``'s
+        ``awrap_tool_call`` parameter:
+
+        Example:
+            >>> wrapper = adapter.tool_output_wrapper()
+            >>> tool_node = ToolNode(tools, awrap_tool_call=wrapper)
+
+        With custom options:
+
+        Example:
+            >>> opts = MCPInterceptorOptions(
+            ...     connector_type_fn=lambda call: f"local.{call['name']}",
+            ... )
+            >>> tool_node = ToolNode(tools, awrap_tool_call=adapter.tool_output_wrapper(opts))
+
+        Args:
+            options: Optional :class:`MCPInterceptorOptions` controlling connector
+                type derivation. The ``operation`` field is unused (output-only).
+                Uses defaults if not provided.
+
+        Returns:
+            An async callable ``(call_request, execute) -> ToolMessage`` suitable
+            for ``ToolNode(awrap_tool_call=...)``.
+        """
+        opts = options or MCPInterceptorOptions()
+
+        def _default_connector_type(call_request: dict[str, Any]) -> str:
+            return call_request.get("name", "unknown_tool")
+
+        resolve_connector_type = opts.connector_type_fn or _default_connector_type
+
+        async def _wrapper(call_request: dict[str, Any], execute: Callable[..., Any]) -> Any:
+            # Execute the tool
+            result = await execute(call_request)
+
+            # Serialize content for policy check
+            content = getattr(result, "content", None)
+            if content is None:
+                return result
+
+            if isinstance(content, str):
+                serialized = content
+            else:
+                try:
+                    serialized = json.dumps(content, default=str)
+                except (TypeError, ValueError):
+                    serialized = str(content)
+
+            connector_type = resolve_connector_type(call_request)
+
+            output_check = await self.client.mcp_check_output(
+                connector_type=connector_type,
+                message=serialized,
+            )
+            if not output_check.allowed:
+                raise PolicyViolationError(
+                    output_check.block_reason or "Tool output blocked by policy"
+                )
+            if output_check.redacted_data is not None:
+                result.content = output_check.redacted_data
+                return result
+
+            return result
+
+        return _wrapper
+
     async def __aenter__(self) -> AxonFlowLangGraphAdapter:
         """Context manager entry."""
         return self

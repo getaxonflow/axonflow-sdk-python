@@ -805,3 +805,169 @@ class TestContextManager:
 
         client.complete_workflow.assert_not_awaited()
         client.abort_workflow.assert_not_awaited()
+# tool_output_wrapper tests
+# ---------------------------------------------------------------------------
+
+
+def _make_tool_message(content: Any = "tool output") -> MagicMock:
+    """Create a mock ToolMessage with a mutable .content attribute."""
+    msg = MagicMock()
+    msg.content = content
+    return msg
+
+
+class TestToolOutputWrapper:
+    @pytest.fixture
+    def client(self) -> AxonFlow:
+        c = MagicMock(spec=AxonFlow)
+        c.mcp_check_output = AsyncMock(return_value=_output_allowed())
+        return c
+
+    @pytest.fixture
+    def adapter(self, client: AxonFlow) -> AxonFlowLangGraphAdapter:
+        return AxonFlowLangGraphAdapter(client, "test-workflow")
+
+    # --- happy path ---
+
+    @pytest.mark.asyncio
+    async def test_allowed_output_returns_original(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        message = _make_tool_message("clean data")
+        execute = AsyncMock(return_value=message)
+        call_request = {"name": "my_tool", "args": {"x": 1}, "id": "call-1"}
+
+        result = await adapter.tool_output_wrapper()(call_request, execute)
+
+        assert result is message
+        assert result.content == "clean data"
+        execute.assert_awaited_once_with(call_request)
+
+    # --- blocked output ---
+
+    @pytest.mark.asyncio
+    async def test_blocked_output_raises_violation(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        client.mcp_check_output.return_value = _output_blocked("Sensitive data detected")
+        message = _make_tool_message("SSN: 123-45-6789")
+        execute = AsyncMock(return_value=message)
+
+        with pytest.raises(PolicyViolationError, match="Sensitive data detected"):
+            await adapter.tool_output_wrapper()({"name": "lookup", "args": {}, "id": "c1"}, execute)
+
+    @pytest.mark.asyncio
+    async def test_blocked_output_uses_fallback_message(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        client.mcp_check_output.return_value = MCPCheckOutputResponse(
+            allowed=False, block_reason=None, policies_evaluated=1
+        )
+        execute = AsyncMock(return_value=_make_tool_message())
+
+        with pytest.raises(PolicyViolationError, match="Tool output blocked by policy"):
+            await adapter.tool_output_wrapper()({"name": "t", "args": {}, "id": "c"}, execute)
+
+    # --- redacted output ---
+
+    @pytest.mark.asyncio
+    async def test_redacted_output_replaces_content(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        client.mcp_check_output.return_value = _output_allowed(
+            redacted_data="SSN: ***-**-****"
+        )
+        message = _make_tool_message("SSN: 123-45-6789")
+        execute = AsyncMock(return_value=message)
+
+        result = await adapter.tool_output_wrapper()(
+            {"name": "lookup", "args": {}, "id": "c1"}, execute
+        )
+
+        assert result is message
+        assert result.content == "SSN: ***-**-****"
+
+    # --- content serialization ---
+
+    @pytest.mark.asyncio
+    async def test_string_content_serialization(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        message = _make_tool_message("plain text result")
+        execute = AsyncMock(return_value=message)
+
+        await adapter.tool_output_wrapper()({"name": "t", "args": {}, "id": "c"}, execute)
+
+        call_kwargs = client.mcp_check_output.call_args.kwargs
+        assert call_kwargs["message"] == "plain text result"
+
+    @pytest.mark.asyncio
+    async def test_list_content_serialization(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        content = [{"type": "text", "text": "hello"}, {"type": "image_url", "url": "http://..."}]
+        message = _make_tool_message(content)
+        execute = AsyncMock(return_value=message)
+
+        await adapter.tool_output_wrapper()({"name": "t", "args": {}, "id": "c"}, execute)
+
+        call_kwargs = client.mcp_check_output.call_args.kwargs
+        assert call_kwargs["message"] == json.dumps(content, default=str)
+
+    # --- custom connector_type_fn ---
+
+    @pytest.mark.asyncio
+    async def test_custom_connector_type_fn(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        opts = MCPInterceptorOptions(connector_type_fn=lambda call: f"local.{call['name']}")
+        message = _make_tool_message("data")
+        execute = AsyncMock(return_value=message)
+
+        await adapter.tool_output_wrapper(opts)(
+            {"name": "my_tool", "args": {}, "id": "c1"}, execute
+        )
+
+        call_kwargs = client.mcp_check_output.call_args.kwargs
+        assert call_kwargs["connector_type"] == "local.my_tool"
+
+    # --- execute is called ---
+
+    @pytest.mark.asyncio
+    async def test_execute_fn_called(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        message = _make_tool_message()
+        execute = AsyncMock(return_value=message)
+        call_request = {"name": "tool", "args": {"a": 1}, "id": "c1"}
+
+        await adapter.tool_output_wrapper()(call_request, execute)
+
+        execute.assert_awaited_once_with(call_request)
+
+    # --- no content attribute ---
+
+    @pytest.mark.asyncio
+    async def test_no_content_attribute_returns_result_unchanged(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        """If result has no .content (e.g. Command), skip policy check."""
+        result = MagicMock(spec=[])  # no attributes
+        execute = AsyncMock(return_value=result)
+
+        out = await adapter.tool_output_wrapper()({"name": "t", "args": {}, "id": "c"}, execute)
+
+        assert out is result
+        client.mcp_check_output.assert_not_awaited()
+
+    # --- factory independence ---
+
+    @pytest.mark.asyncio
+    async def test_each_call_returns_independent_wrapper(
+        self, adapter: AxonFlowLangGraphAdapter
+    ) -> None:
+        wrapper_a = adapter.tool_output_wrapper()
+        wrapper_b = adapter.tool_output_wrapper(
+            MCPInterceptorOptions(connector_type_fn=lambda c: "other")
+        )
+        assert wrapper_a is not wrapper_b

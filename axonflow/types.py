@@ -1250,3 +1250,114 @@ class CircuitBreakerConfigUpdate(BaseModel):
     )
     max_timeout_seconds: int | None = Field(default=None, description="Override max timeout")
     enable_auto_recovery: bool | None = Field(default=None, description="Override auto-recovery")
+
+
+# =============================================================================
+# Policy Simulation Types (Evaluation Tier+)
+# =============================================================================
+
+
+class SimulatePoliciesRequest(BaseModel):
+    """Request for POST /api/v1/policies/simulate."""
+
+    query: str = Field(description="The query text to simulate against policies")
+    request_type: str | None = Field(default=None, description="Type of request (e.g. 'chat')")
+    user: dict[str, Any] | None = Field(default=None, description="User context")
+    client: dict[str, Any] | None = Field(default=None, description="Client context")
+    context: dict[str, Any] | None = Field(default=None, description="Additional context")
+
+
+class SimulationDailyUsage(BaseModel):
+    """Daily simulation quota usage."""
+
+    used: int = Field(description="Number of simulations used today")
+    limit: int = Field(description="Daily limit (-1 = unlimited)")
+
+
+class SimulatePoliciesResponse(BaseModel):
+    """Response from POST /api/v1/policies/simulate."""
+
+    allowed: bool = Field(default=True, description="Whether the input would be allowed")
+    applied_policies: list[str] = Field(default_factory=list, description="Policies that matched")
+    risk_score: float = Field(default=0.0, description="Computed risk score")
+    required_actions: list[str] = Field(default_factory=list, description="Actions required")
+    processing_time_ms: int = Field(default=0, description="Simulation processing time")
+    total_policies: int = Field(default=0, description="Total policies evaluated")
+    dry_run: bool = Field(default=True, description="Always true for simulation")
+    simulated_at: str = Field(default="", description="ISO 8601 timestamp")
+    tier: str = Field(default="", description="License tier that ran the simulation")
+    daily_usage: SimulationDailyUsage | None = Field(
+        default=None, description="Daily quota usage"
+    )
+
+
+class ImpactReportInput(BaseModel):
+    """Single input for impact report."""
+
+    query: str = Field(description="The query text to test")
+    request_type: str | None = Field(default=None, description="Type of request")
+    user: dict[str, Any] | None = Field(default=None, description="User context")
+    context: dict[str, Any] | None = Field(default=None, description="Additional context")
+
+
+class ImpactReportRequest(BaseModel):
+    """Request for POST /api/v1/policies/impact-report."""
+
+    policy_id: str = Field(description="ID of the policy to test")
+    inputs: list[ImpactReportInput] = Field(description="Test inputs")
+
+
+class ImpactReportResult(BaseModel):
+    """Result for a single input in the impact report."""
+
+    input_index: int = Field(description="Index of the input in the request")
+    matched: bool = Field(default=False, description="Whether the policy matched this input")
+    blocked: bool = Field(default=False, description="Whether the policy would block this input")
+    actions: list[str] = Field(default_factory=list, description="Actions triggered")
+
+
+class ImpactReportResponse(BaseModel):
+    """Response from POST /api/v1/policies/impact-report."""
+
+    policy_id: str = Field(description="ID of the tested policy")
+    policy_name: str | None = Field(default=None, description="Name of the tested policy")
+    total_inputs: int = Field(default=0, description="Number of inputs tested")
+    matched: int = Field(default=0, description="Number of inputs that matched")
+    blocked: int = Field(default=0, description="Number of inputs that would be blocked")
+    match_rate: float = Field(default=0.0, description="Fraction of inputs that matched")
+    block_rate: float = Field(default=0.0, description="Fraction of inputs that would be blocked")
+    results: list[ImpactReportResult] = Field(
+        default_factory=list, description="Per-input results"
+    )
+    processing_time_ms: int = Field(default=0, description="Processing time in ms")
+    generated_at: str = Field(default="", description="ISO 8601 timestamp")
+    tier: str = Field(default="", description="License tier")
+
+
+class PolicyConflictRef(BaseModel):
+    """Reference to a policy in a conflict pair."""
+
+    id: str = Field(description="Policy ID")
+    name: str = Field(description="Policy name")
+    type: str = Field(description="Policy type")
+
+
+class PolicyConflict(BaseModel):
+    """A detected conflict between two policies."""
+
+    policy_a: PolicyConflictRef = Field(description="First policy in the conflict")
+    policy_b: PolicyConflictRef = Field(description="Second policy in the conflict")
+    conflict_type: str = Field(description="Type of conflict")
+    description: str = Field(description="Human-readable conflict description")
+    severity: str = Field(description="Conflict severity (low, medium, high)")
+    overlapping_field: str = Field(description="Field where the conflict occurs")
+
+
+class PolicyConflictResponse(BaseModel):
+    """Response from POST /api/v1/policies/conflicts."""
+
+    conflicts: list[PolicyConflict] = Field(default_factory=list, description="Detected conflicts")
+    total_policies: int = Field(default=0, description="Total policies checked")
+    conflict_count: int = Field(default=0, description="Number of conflicts found")
+    checked_at: str = Field(default="", description="ISO 8601 timestamp")
+    tier: str = Field(default="", description="License tier")
