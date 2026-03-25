@@ -626,7 +626,8 @@ class AxonFlowLangGraphAdapter:
         opts = options or MCPInterceptorOptions()
 
         def _default_connector_type(call_request: dict[str, Any]) -> str:
-            return call_request.get("name", "unknown_tool")
+            name: str = call_request.get("name", "unknown_tool")
+            return name
 
         resolve_connector_type = opts.connector_type_fn or _default_connector_type
 
