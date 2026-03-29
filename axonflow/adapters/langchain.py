@@ -369,7 +369,7 @@ class AxonFlowChatModel(_GovernanceMixin):
         axonflow: AxonFlow,
         user_token: str | None = None,
     ) -> None:
-        from langchain_core.language_models import BaseChatModel
+        from langchain_core.language_models import BaseChatModel  # type: ignore[import-not-found]
 
         if not isinstance(wrapped, BaseChatModel):
             msg = f"wrapped must be a BaseChatModel instance, got {type(wrapped)}"
