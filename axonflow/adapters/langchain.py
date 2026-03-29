@@ -114,9 +114,9 @@ def _extract_token_usage(obj: Any) -> TokenUsage:
     meta = getattr(msg, "usage_metadata", None)
     if isinstance(meta, dict):
         return TokenUsage(
-            prompt_tokens=int(meta.get("input_tokens", meta.get("prompt_tokens", 0))),
-            completion_tokens=int(meta.get("output_tokens", meta.get("completion_tokens", 0))),
-            total_tokens=int(meta.get("total_tokens", 0)),
+            prompt_tokens=int(meta.get("input_tokens") or meta.get("prompt_tokens") or 0),
+            completion_tokens=int(meta.get("output_tokens") or meta.get("completion_tokens") or 0),
+            total_tokens=int(meta.get("total_tokens") or 0),
         )
     return TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
 
@@ -369,7 +369,7 @@ class AxonFlowChatModel(_GovernanceMixin):
         axonflow: AxonFlow,
         user_token: str | None = None,
     ) -> None:
-        from langchain_core.language_models import BaseChatModel  # type: ignore[import-not-found]
+        from langchain_core.language_models import BaseChatModel
 
         if not isinstance(wrapped, BaseChatModel):
             msg = f"wrapped must be a BaseChatModel instance, got {type(wrapped)}"
