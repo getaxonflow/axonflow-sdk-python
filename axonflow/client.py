@@ -1122,10 +1122,11 @@ class AxonFlow:
             options: Optional additional options for the query
 
         Returns:
-            ConnectorResponse with data, redaction info, and policy_info
+            ConnectorResponse with data, redaction info, and policy_info.
+            When blocked by policy (HTTP 403), returns blocked=True with block_reason.
 
         Raises:
-            ConnectorError: If the request is blocked by policy or fails
+            ConnectorError: If the request fails (non-403 errors only)
 
         Example:
             response = await client.mcp_query(
@@ -1155,8 +1156,8 @@ class AxonFlow:
         response = await self._http_client.post(url, json=body)
         response_data = response.json()
 
-        # Handle policy blocks (403 responses)
-        if not response.is_success:
+        # Handle non-403 errors (403 is a valid policy-blocked response)
+        if not response.is_success and response.status_code != 403:  # noqa: PLR2004
             error_msg = response_data.get("error", f"MCP query failed: {response.status_code}")
             raise ConnectorError(error_msg, connector=connector, operation="mcp_query")
 
@@ -1173,13 +1174,18 @@ class AxonFlow:
         if response_data.get("policy_info"):
             policy_info = ConnectorPolicyInfo.model_validate(response_data["policy_info"])
 
+        # 403 means policy blocked the request
+        blocked = response.status_code == 403  # noqa: PLR2004
+
         return ConnectorResponse(
-            success=response_data.get("success", True),
+            success=response_data.get("success", not blocked),
             data=response_data.get("data"),
             error=response_data.get("error"),
             meta=response_data.get("meta", {}),
             redacted=response_data.get("redacted", False),
             redacted_fields=response_data.get("redacted_fields", []),
+            blocked=blocked,
+            block_reason=response_data.get("error") if blocked else None,
             policy_info=policy_info,
         )
 
