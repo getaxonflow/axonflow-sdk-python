@@ -25,12 +25,12 @@ Notes:
     - Governance (pre-check + audit) applies to **async** invocations only.
       The synchronous ``invoke`` path delegates directly to the wrapped model
       without any AxonFlow calls; document this gap for callers.
-    - ``with_fallbacks`` fallback models bypass governance — document as a
-      known gap and address in a follow-up.
+    - ``with_fallbacks`` wraps each fallback in governance automatically.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
@@ -40,6 +40,8 @@ from axonflow.types import TokenUsage
 
 if TYPE_CHECKING:
     from axonflow import AxonFlow
+
+_logger = logging.getLogger("axonflow.adapters.langchain")
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +94,11 @@ def _messages_to_query(input: Any) -> str:
             if isinstance(content, str):
                 parts.append(content)
             elif isinstance(content, list):
-                parts.extend(str(c) for c in content if isinstance(c, str))
+                for c in content:
+                    if isinstance(c, str):
+                        parts.append(c)
+                    elif isinstance(c, dict) and "text" in c:
+                        parts.append(c["text"])
         return " ".join(parts)
     return str(input)
 
@@ -108,8 +114,8 @@ def _extract_token_usage(obj: Any) -> TokenUsage:
     meta = getattr(msg, "usage_metadata", None)
     if isinstance(meta, dict):
         return TokenUsage(
-            prompt_tokens=int(meta.get("input_tokens", 0)),
-            completion_tokens=int(meta.get("output_tokens", 0)),
+            prompt_tokens=int(meta.get("input_tokens", meta.get("prompt_tokens", 0))),
+            completion_tokens=int(meta.get("output_tokens", meta.get("completion_tokens", 0))),
             total_tokens=int(meta.get("total_tokens", 0)),
         )
     return TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0)
@@ -132,46 +138,22 @@ def _get_content_str(obj: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# AxonFlowRunnableBinding
+# _GovernanceMixin — shared governance logic
 # ---------------------------------------------------------------------------
 
 
-class AxonFlowRunnableBinding:
-    """Governs a ``RunnableBinding`` (returned by ``bind_tools`` /
-    ``with_structured_output``) with AxonFlow pre-check and audit.
+class _GovernanceMixin:
+    """Shared governance helpers for AxonFlowChatModel and AxonFlowRunnableBinding.
 
-    This class wraps a LangChain ``RunnableBinding`` and is returned by
-    :meth:`AxonFlowChatModel.bind_tools` and
-    :meth:`AxonFlowChatModel.with_structured_output`.  It is not meant to be
-    instantiated directly by callers.
-
-    Governance fires in ``ainvoke`` and ``astream``.  All other ``Runnable``
-    methods delegate transparently to the underlying binding.
+    Subclasses must set ``_inner``, ``_axonflow``, ``_user_token``,
+    ``_provider``, and ``_model_name`` before calling any mixin method.
     """
 
-    def __init__(
-        self,
-        *,
-        bound: Any,
-        axonflow: AxonFlow,
-        user_token: str | None = None,
-        provider: str = "unknown",
-        model_name: str = "unknown",
-    ) -> None:
-        from langchain_core.runnables import RunnableBinding  # type: ignore[import-not-found]
-
-        if not isinstance(bound, RunnableBinding):
-            # Accept any Runnable (e.g. RunnableRetry, RunnableSequence) as well.
-            pass
-        self._bound = bound
-        self._axonflow = axonflow
-        self._user_token = user_token
-        self._provider = provider
-        self._model_name = model_name
-
-    # ------------------------------------------------------------------
-    # Governance helpers
-    # ------------------------------------------------------------------
+    _inner: Any
+    _axonflow: AxonFlow
+    _user_token: str | None
+    _provider: str
+    _model_name: str
 
     def _resolve_user_token(self, config: dict[str, Any] | None) -> str:
         cfg = config or {}
@@ -206,8 +188,11 @@ class AxonFlowRunnableBinding:
                 latency_ms=latency_ms,
             )
         except Exception:
-            # Audit failures are non-fatal — governance already enforced.
-            pass
+            _logger.warning(
+                "Failed to record audit for context_id=%s",
+                context_id,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Governed async methods
@@ -226,7 +211,7 @@ class AxonFlowRunnableBinding:
         pre_result = await self._pre_check(user_token, query)
 
         t0 = time.monotonic()
-        result = await self._bound.ainvoke(input, config, **kwargs)
+        result = await self._inner.ainvoke(input, config, **kwargs)
         latency_ms = int((time.monotonic() - t0) * 1000)
 
         await self._audit(
@@ -251,197 +236,7 @@ class AxonFlowRunnableBinding:
 
         t0 = time.monotonic()
         accumulated: Any = None
-        async for chunk in self._bound.astream(input, config, **kwargs):
-            accumulated = chunk if accumulated is None else accumulated + chunk
-            yield chunk
-
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        await self._audit(
-            context_id=pre_result.context_id,
-            response_summary=_get_content_str(accumulated),
-            token_usage=_extract_token_usage(accumulated),
-            latency_ms=latency_ms,
-        )
-
-    # ------------------------------------------------------------------
-    # Transparent delegation for everything else
-    # ------------------------------------------------------------------
-
-    def invoke(self, input: Any, config: dict[str, Any] | None = None, **kwargs: Any) -> Any:
-        return self._bound.invoke(input, config, **kwargs)
-
-    def stream(
-        self, input: Any, config: dict[str, Any] | None = None, **kwargs: Any
-    ) -> Iterator[Any]:
-        return self._bound.stream(input, config, **kwargs)  # type: ignore[no-any-return]
-
-    def __or__(self, other: Any) -> Any:
-        return self._bound.__or__(other)
-
-    def __ror__(self, other: Any) -> Any:
-        return self._bound.__ror__(other)
-
-    def __getattr__(self, name: str) -> Any:
-        # Delegate attribute access to the underlying binding so callers can
-        # chain further operations (e.g. .with_config(), .bind()).
-        return getattr(self._bound, name)
-
-
-# ---------------------------------------------------------------------------
-# AxonFlowChatModel
-# ---------------------------------------------------------------------------
-
-
-class AxonFlowChatModel:
-    """A governed ``BaseChatModel`` wrapper that applies AxonFlow policy
-    enforcement transparently for every async LLM call.
-
-    ``AxonFlowChatModel`` satisfies ``isinstance(model, BaseChatModel)`` and
-    acts as a drop-in replacement in LangChain and LangGraph pipelines.
-
-    Args:
-        wrapped: Any ``BaseChatModel`` instance (e.g. ``ChatAnthropic``,
-            ``ChatOpenAI``).
-        axonflow: An authenticated :class:`axonflow.AxonFlow` client.
-        user_token: Optional instance-level default user token.  Overridden
-            per-invocation via ``config={"configurable": {"user_token": ...}}``.
-
-    Notes:
-        - **Async only**: governance fires in ``ainvoke`` / ``astream``.
-          Synchronous ``invoke`` / ``stream`` delegate to the wrapped model
-          without any AxonFlow calls.
-        - **Serialization**: the ``AxonFlow`` client and wrapped model are
-          excluded from Pydantic serialisation and LangGraph checkpoint
-          serialisation; the model is re-instantiated from constructor args.
-        - **Fallbacks**: models passed to ``with_fallbacks`` bypass governance
-          — document as a known gap.
-    """
-
-    def __init__(
-        self,
-        *,
-        wrapped: Any,
-        axonflow: AxonFlow,
-        user_token: str | None = None,
-    ) -> None:
-        from langchain_core.language_models import BaseChatModel  # type: ignore[import-not-found]
-
-        if not isinstance(wrapped, BaseChatModel):
-            msg = f"wrapped must be a BaseChatModel instance, got {type(wrapped)}"
-            raise TypeError(msg)
-
-        self._wrapped: Any = wrapped
-        self._axonflow = axonflow
-        self.user_token = user_token
-        self._provider = _infer_provider(wrapped)
-        self._model_name = _infer_model_name(wrapped)
-
-    # ------------------------------------------------------------------
-    # isinstance compatibility with BaseChatModel
-    # ------------------------------------------------------------------
-
-    def __class_getitem__(cls, item: Any) -> Any:
-        return cls
-
-    @classmethod
-    def __instancecheck__(cls, instance: Any) -> bool:  # noqa: PYI019
-        return isinstance(instance, cls)
-
-    # ------------------------------------------------------------------
-    # Governance helpers (shared with AxonFlowRunnableBinding)
-    # ------------------------------------------------------------------
-
-    def _resolve_user_token(self, config: dict[str, Any] | None) -> str:
-        cfg = config or {}
-        return cfg.get("configurable", {}).get("user_token") or self.user_token or ""
-
-    async def _pre_check(self, user_token: str, query: str) -> Any:
-        result = await self._axonflow.pre_check(
-            user_token=user_token,
-            query=query,
-        )
-        if not result.approved:
-            raise PolicyViolationError(
-                result.block_reason or "Request blocked by AxonFlow policy",
-                block_reason=result.block_reason,
-            )
-        return result
-
-    async def _audit(
-        self,
-        context_id: str,
-        response_summary: str,
-        token_usage: TokenUsage,
-        latency_ms: int,
-    ) -> None:
-        try:
-            await self._axonflow.audit_llm_call(
-                context_id=context_id,
-                response_summary=response_summary[:200],
-                provider=self._provider,
-                model=self._model_name,
-                token_usage=token_usage,
-                latency_ms=latency_ms,
-            )
-        except Exception:
-            pass
-
-    # ------------------------------------------------------------------
-    # Governed async path
-    # ------------------------------------------------------------------
-
-    async def ainvoke(
-        self,
-        input: Any,
-        config: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Invoke the wrapped model with AxonFlow pre-check and audit.
-
-        Pass ``user_token`` per-invocation via ``config``::
-
-            await model.ainvoke(
-                messages,
-                config={"configurable": {"user_token": "user-jwt"}},
-            )
-        """
-        user_token = self._resolve_user_token(config)
-        query = _messages_to_query(input)
-
-        pre_result = await self._pre_check(user_token, query)
-
-        t0 = time.monotonic()
-        result = await self._wrapped.ainvoke(input, config, **kwargs)
-        latency_ms = int((time.monotonic() - t0) * 1000)
-
-        await self._audit(
-            context_id=pre_result.context_id,
-            response_summary=_get_content_str(result),
-            token_usage=_extract_token_usage(result),
-            latency_ms=latency_ms,
-        )
-        return result
-
-    async def astream(
-        self,
-        input: Any,
-        config: dict[str, Any] | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Any]:
-        """Stream chunks from the wrapped model with AxonFlow governance.
-
-        Pre-check fires before the first token; audit fires after the last
-        chunk.  Token usage may not be available from all providers during
-        streaming.
-        """
-        user_token = self._resolve_user_token(config)
-        query = _messages_to_query(input)
-
-        pre_result = await self._pre_check(user_token, query)
-
-        t0 = time.monotonic()
-        accumulated: Any = None
-        async for chunk in self._wrapped.astream(input, config, **kwargs):
+        async for chunk in self._inner.astream(input, config, **kwargs):
             accumulated = chunk if accumulated is None else accumulated + chunk
             yield chunk
 
@@ -459,13 +254,156 @@ class AxonFlowChatModel:
 
     def invoke(self, input: Any, config: dict[str, Any] | None = None, **kwargs: Any) -> Any:
         """Invoke synchronously — no AxonFlow governance (async-only)."""
-        return self._wrapped.invoke(input, config, **kwargs)
+        return self._inner.invoke(input, config, **kwargs)
 
     def stream(
         self, input: Any, config: dict[str, Any] | None = None, **kwargs: Any
     ) -> Iterator[Any]:
         """Stream synchronously — no AxonFlow governance (async-only)."""
-        return self._wrapped.stream(input, config, **kwargs)  # type: ignore[no-any-return]
+        return self._inner.stream(input, config, **kwargs)  # type: ignore[no-any-return]
+
+    # ------------------------------------------------------------------
+    # Batch — explicit NotImplementedError to prevent silent bypass
+    # ------------------------------------------------------------------
+
+    def batch(self, *args: Any, **kwargs: Any) -> Any:
+        msg = "batch() is not supported — use ainvoke() or astream() for governed execution"
+        raise NotImplementedError(msg)
+
+    async def abatch(self, *args: Any, **kwargs: Any) -> Any:
+        msg = "abatch() is not supported — use ainvoke() or astream() for governed execution"
+        raise NotImplementedError(msg)
+
+    # ------------------------------------------------------------------
+    # Transparent delegation
+    # ------------------------------------------------------------------
+
+    def __or__(self, other: Any) -> Any:
+        return self._inner.__or__(other)
+
+    def __ror__(self, other: Any) -> Any:
+        return self._inner.__ror__(other)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def __getstate__(self) -> dict[str, Any]:
+        return self.__dict__.copy()
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+
+
+# ---------------------------------------------------------------------------
+# AxonFlowRunnableBinding
+# ---------------------------------------------------------------------------
+
+
+class AxonFlowRunnableBinding(_GovernanceMixin):
+    """Governs a ``RunnableBinding`` (returned by ``bind_tools`` /
+    ``with_structured_output``) with AxonFlow pre-check and audit.
+
+    This class wraps a LangChain ``RunnableBinding`` and is returned by
+    :meth:`AxonFlowChatModel.bind_tools` and
+    :meth:`AxonFlowChatModel.with_structured_output`.  It is not meant to be
+    instantiated directly by callers.
+
+    Governance fires in ``ainvoke`` and ``astream``.  All other ``Runnable``
+    methods delegate transparently to the underlying binding.
+    """
+
+    def __init__(
+        self,
+        *,
+        bound: Any,
+        axonflow: AxonFlow,
+        user_token: str | None = None,
+        provider: str = "unknown",
+        model_name: str = "unknown",
+    ) -> None:
+        self._inner = bound
+        self._axonflow = axonflow
+        self._user_token = user_token
+        self._provider = provider
+        self._model_name = model_name
+
+    def __repr__(self) -> str:
+        return f"AxonFlowRunnableBinding(provider={self._provider!r}, model={self._model_name!r})"
+
+
+# ---------------------------------------------------------------------------
+# AxonFlowChatModel
+# ---------------------------------------------------------------------------
+
+
+class AxonFlowChatModel(_GovernanceMixin):
+    """A governed ``BaseChatModel`` wrapper that applies AxonFlow policy
+    enforcement transparently for every async LLM call.
+
+    LangChain and LangGraph use duck typing for ``Runnable`` protocol
+    methods (``ainvoke``, ``astream``, etc.), so this wrapper works as a
+    drop-in replacement without subclassing ``BaseChatModel``.
+
+    Args:
+        wrapped: Any ``BaseChatModel`` instance (e.g. ``ChatAnthropic``,
+            ``ChatOpenAI``).
+        axonflow: An authenticated :class:`axonflow.AxonFlow` client.
+        user_token: Optional instance-level default user token.  Overridden
+            per-invocation via ``config={"configurable": {"user_token": ...}}``.
+
+    Notes:
+        - **Async only**: governance fires in ``ainvoke`` / ``astream``.
+          Synchronous ``invoke`` / ``stream`` delegate to the wrapped model
+          without any AxonFlow calls.
+        - **Serialization**: ``__getstate__`` / ``__setstate__`` are provided
+          for safe pickling. LangGraph checkpoint serialisation should work
+          but round-tripping requires a live ``AxonFlow`` client on restore.
+        - **Fallbacks**: ``with_fallbacks`` wraps each fallback model in
+          governance automatically.
+    """
+
+    def __init__(
+        self,
+        *,
+        wrapped: Any,
+        axonflow: AxonFlow,
+        user_token: str | None = None,
+    ) -> None:
+        from langchain_core.language_models import BaseChatModel  # type: ignore[import-not-found]
+
+        if not isinstance(wrapped, BaseChatModel):
+            msg = f"wrapped must be a BaseChatModel instance, got {type(wrapped)}"
+            raise TypeError(msg)
+
+        self._inner: Any = wrapped
+        self._axonflow = axonflow
+        self._user_token = user_token
+        self._provider = _infer_provider(wrapped)
+        self._model_name = _infer_model_name(wrapped)
+
+    def __repr__(self) -> str:
+        return f"AxonFlowChatModel(provider={self._provider!r}, model={self._model_name!r})"
+
+    # ------------------------------------------------------------------
+    # Governed ainvoke with docstring override
+    # ------------------------------------------------------------------
+
+    async def ainvoke(
+        self,
+        input: Any,
+        config: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Invoke the wrapped model with AxonFlow pre-check and audit.
+
+        Pass ``user_token`` per-invocation via ``config``::
+
+            await model.ainvoke(
+                messages,
+                config={"configurable": {"user_token": "user-jwt"}},
+            )
+        """
+        return await super().ainvoke(input, config, **kwargs)
 
     # ------------------------------------------------------------------
     # Tool / structured-output binding — returns AxonFlowRunnableBinding
@@ -477,11 +415,11 @@ class AxonFlowChatModel:
         The returned binding applies pre-check and audit on every async
         invocation, keeping governance outside the tool-calling loop.
         """
-        bound = self._wrapped.bind_tools(tools, **kwargs)
+        bound = self._inner.bind_tools(tools, **kwargs)
         return AxonFlowRunnableBinding(
             bound=bound,
             axonflow=self._axonflow,
-            user_token=self.user_token,
+            user_token=self._user_token,
             provider=self._provider,
             model_name=self._model_name,
         )
@@ -494,11 +432,11 @@ class AxonFlowChatModel:
         ``AxonFlowRunnableBinding`` so that pre-check fires before the model
         is called and audit fires after the parser completes.
         """
-        result = self._wrapped.with_structured_output(schema, **kwargs)
+        result = self._inner.with_structured_output(schema, **kwargs)
         return AxonFlowRunnableBinding(
             bound=result,
             axonflow=self._axonflow,
-            user_token=self.user_token,
+            user_token=self._user_token,
             provider=self._provider,
             model_name=self._model_name,
         )
@@ -509,25 +447,30 @@ class AxonFlowChatModel:
         Pre-check and audit fire once per user invocation regardless of how
         many retries occur internally.
         """
-        retrying = self._wrapped.with_retry(**kwargs)
+        retrying = self._inner.with_retry(**kwargs)
         return AxonFlowRunnableBinding(
             bound=retrying,
             axonflow=self._axonflow,
-            user_token=self.user_token,
+            user_token=self._user_token,
             provider=self._provider,
             model_name=self._model_name,
         )
 
-    # ------------------------------------------------------------------
-    # Transparent delegation
-    # ------------------------------------------------------------------
+    def with_fallbacks(self, fallbacks: list[Any], **kwargs: Any) -> Any:
+        """Wrap with fallbacks, ensuring each fallback is also governed.
 
-    def __or__(self, other: Any) -> Any:
-        return self._wrapped.__or__(other)
-
-    def __ror__(self, other: Any) -> Any:
-        return self._wrapped.__ror__(other)
-
-    def __getattr__(self, name: str) -> Any:
-        # Delegate to the wrapped model for any attribute not defined here.
-        return getattr(self._wrapped, name)
+        Unlike the default ``with_fallbacks``, this method wraps each
+        fallback model in ``AxonFlowChatModel`` so that governance is
+        enforced even when the primary model fails and a fallback is used.
+        """
+        wrapped_fallbacks = [
+            AxonFlowChatModel(
+                wrapped=fb,
+                axonflow=self._axonflow,
+                user_token=self._user_token,
+            )
+            if not isinstance(fb, AxonFlowChatModel)
+            else fb
+            for fb in fallbacks
+        ]
+        return self._inner.with_fallbacks(wrapped_fallbacks, **kwargs)

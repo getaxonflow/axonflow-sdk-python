@@ -126,6 +126,9 @@ def _make_wrapped_model(response: Any = None) -> Any:
     retry_binding.ainvoke = AsyncMock(return_value=ai_msg)
     model.with_retry = MagicMock(return_value=retry_binding)
 
+    # with_fallbacks returns a RunnableWithFallbacks-like object
+    model.with_fallbacks = MagicMock(return_value=MagicMock())
+
     return model
 
 
@@ -140,12 +143,11 @@ def _make_chat_model(
 
     client = _make_axonflow_client(approved=approved, block_reason=block_reason)
     wrapped = _make_wrapped_model()
-    # Make isinstance(wrapped, BaseChatModel) pass
-    # Bypass the isinstance guard
+    # Bypass the isinstance guard (MagicMock(spec=BaseChatModel) satisfies it)
     model = object.__new__(AxonFlowChatModel)
-    model._wrapped = wrapped
+    model._inner = wrapped
     model._axonflow = client
-    model.user_token = None
+    model._user_token = None
     model._provider = "anthropic"
     model._model_name = "claude-sonnet-4-6"
     return model
@@ -210,6 +212,14 @@ class TestHelpers:
         pv.to_string = MagicMock(return_value="prompt string")
         assert _messages_to_query(pv) == "prompt string"
 
+    def test_messages_to_query_multimodal_content(self):
+        msg = MagicMock()
+        msg.content = [
+            {"type": "text", "text": "What is in this image?"},
+            {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}},
+        ]
+        assert _messages_to_query([msg]) == "What is in this image?"
+
     def test_extract_token_usage_from_message(self):
         # Use spec=[] so MagicMock doesn't auto-create a 'generations' attribute
         msg = MagicMock(spec=[])
@@ -218,6 +228,14 @@ class TestHelpers:
         assert usage.prompt_tokens == 10
         assert usage.completion_tokens == 5
         assert usage.total_tokens == 15
+
+    def test_extract_token_usage_openai_format(self):
+        msg = MagicMock(spec=[])
+        msg.usage_metadata = {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}
+        usage = _extract_token_usage(msg)
+        assert usage.prompt_tokens == 20
+        assert usage.completion_tokens == 8
+        assert usage.total_tokens == 28
 
     def test_extract_token_usage_no_metadata(self):
         msg = MagicMock(spec=[])
@@ -258,7 +276,7 @@ class TestAxonFlowChatModel:
     @pytest.mark.asyncio
     async def test_ainvoke_calls_wrapped_model(self, model: AxonFlowChatModel):
         await model.ainvoke("Hello")
-        model._wrapped.ainvoke.assert_awaited_once()
+        model._inner.ainvoke.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_ainvoke_calls_audit(self, model: AxonFlowChatModel):
@@ -278,7 +296,7 @@ class TestAxonFlowChatModel:
     async def test_ainvoke_blocked_does_not_call_wrapped(self, blocked_model: AxonFlowChatModel):
         with pytest.raises(PolicyViolationError):
             await blocked_model.ainvoke("Tell me about John's SSN")
-        blocked_model._wrapped.ainvoke.assert_not_awaited()
+        blocked_model._inner.ainvoke.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_ainvoke_blocked_does_not_audit(self, blocked_model: AxonFlowChatModel):
@@ -294,14 +312,14 @@ class TestAxonFlowChatModel:
 
     @pytest.mark.asyncio
     async def test_ainvoke_user_token_from_instance(self, model: AxonFlowChatModel):
-        model.user_token = "instance-tok"
+        model._user_token = "instance-tok"
         await model.ainvoke("Hi")
         call_kwargs = model._axonflow.pre_check.call_args.kwargs
         assert call_kwargs["user_token"] == "instance-tok"
 
     @pytest.mark.asyncio
     async def test_ainvoke_config_token_overrides_instance(self, model: AxonFlowChatModel):
-        model.user_token = "instance-tok"
+        model._user_token = "instance-tok"
         await model.ainvoke("Hi", config={"configurable": {"user_token": "config-tok"}})
         call_kwargs = model._axonflow.pre_check.call_args.kwargs
         assert call_kwargs["user_token"] == "config-tok"
@@ -334,7 +352,7 @@ class TestAxonFlowChatModel:
 
     def test_invoke_delegates_without_governance(self, model: AxonFlowChatModel):
         model.invoke("Hello sync")
-        model._wrapped.invoke.assert_called_once()
+        model._inner.invoke.assert_called_once()
         model._axonflow.pre_check.assert_not_awaited()
 
     def test_bind_tools_returns_axonflow_binding(self, model: AxonFlowChatModel):
@@ -352,7 +370,7 @@ class TestAxonFlowChatModel:
         assert isinstance(result, AxonFlowRunnableBinding)
 
     def test_getattr_delegates_to_wrapped(self, model: AxonFlowChatModel):
-        model._wrapped.temperature = 0.7
+        model._inner.temperature = 0.7
         assert model.temperature == 0.7
 
     def test_with_structured_output_returns_governed(self, model: AxonFlowChatModel):
@@ -361,9 +379,46 @@ class TestAxonFlowChatModel:
         except ImportError:
             pytest.skip("langchain-core not installed")
         result = model.with_structured_output({"type": "object"})
-        # Should be a governed runnable (AxonFlowRunnableBinding or RunnableSequence
-        # with AxonFlowRunnableBinding as first step)
         assert result is not None
+
+    def test_repr(self, model: AxonFlowChatModel):
+        assert repr(model) == "AxonFlowChatModel(provider='anthropic', model='claude-sonnet-4-6')"
+
+    def test_batch_raises_not_implemented(self, model: AxonFlowChatModel):
+        with pytest.raises(NotImplementedError, match="batch"):
+            model.batch(["Hello"])
+
+    @pytest.mark.asyncio
+    async def test_abatch_raises_not_implemented(self, model: AxonFlowChatModel):
+        with pytest.raises(NotImplementedError, match="abatch"):
+            await model.abatch(["Hello"])
+
+    def test_with_fallbacks_wraps_each_fallback(self, model: AxonFlowChatModel):
+        fallback = _make_wrapped_model()
+        model.with_fallbacks([fallback])
+        # Verify with_fallbacks was called on the inner model
+        model._inner.with_fallbacks.assert_called_once()
+        # The first arg should be a list of AxonFlowChatModel instances
+        call_args = model._inner.with_fallbacks.call_args
+        wrapped_fallbacks = call_args[0][0]
+        assert len(wrapped_fallbacks) == 1
+        assert isinstance(wrapped_fallbacks[0], AxonFlowChatModel)
+
+    @pytest.mark.asyncio
+    async def test_audit_failure_logs_warning(self, model: AxonFlowChatModel):
+        model._axonflow.audit_llm_call = AsyncMock(side_effect=RuntimeError("audit down"))
+        with patch("axonflow.adapters.langchain._logger") as mock_logger:
+            result = await model.ainvoke("Hello")
+            assert result is not None
+            mock_logger.warning.assert_called_once()
+
+    def test_getstate_setstate(self, model: AxonFlowChatModel):
+        state = model.__getstate__()
+        assert "_inner" in state
+        assert "_axonflow" in state
+        new_model = object.__new__(AxonFlowChatModel)
+        new_model.__setstate__(state)
+        assert new_model._provider == "anthropic"
 
 
 # ---------------------------------------------------------------------------
@@ -374,14 +429,9 @@ class TestAxonFlowChatModel:
 class TestAxonFlowRunnableBinding:
     @pytest.fixture
     def binding(self) -> AxonFlowRunnableBinding:
-        try:
-            from langchain_core.runnables import RunnableBinding
-        except ImportError:
-            pytest.skip("langchain-core not installed")
-
         client = _make_axonflow_client()
         ai_msg = _make_ai_message()
-        bound = MagicMock(spec=RunnableBinding)
+        bound = MagicMock()
         bound.ainvoke = AsyncMock(return_value=ai_msg)
 
         async def _astream(*args, **kwargs):
@@ -409,7 +459,7 @@ class TestAxonFlowRunnableBinding:
     @pytest.mark.asyncio
     async def test_ainvoke_calls_bound(self, binding: AxonFlowRunnableBinding):
         await binding.ainvoke("Hello")
-        binding._bound.ainvoke.assert_awaited_once()
+        binding._inner.ainvoke.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_ainvoke_calls_audit(self, binding: AxonFlowRunnableBinding):
@@ -454,5 +504,12 @@ class TestAxonFlowRunnableBinding:
         assert result is not None
 
     def test_getattr_delegates_to_bound(self, binding: AxonFlowRunnableBinding):
-        binding._bound.some_custom_attr = "value"
+        binding._inner.some_custom_attr = "value"
         assert binding.some_custom_attr == "value"
+
+    def test_repr(self, binding: AxonFlowRunnableBinding):
+        assert repr(binding) == "AxonFlowRunnableBinding(provider='openai', model='gpt-4o')"
+
+    def test_batch_raises_not_implemented(self, binding: AxonFlowRunnableBinding):
+        with pytest.raises(NotImplementedError, match="batch"):
+            binding.batch(["Hello"])
