@@ -1156,8 +1156,14 @@ class AxonFlow:
         response = await self._http_client.post(url, json=body)
         response_data = response.json()
 
-        # Handle non-403 errors (403 is a valid policy-blocked response)
-        if not response.is_success and response.status_code != 403:  # noqa: PLR2004
+        # 403 with policy_info is a policy block; other 403s are auth/config errors
+        is_policy_block = (
+            response.status_code == 403  # noqa: PLR2004
+            and isinstance(response_data, dict)
+            and "policy_info" in response_data
+        )
+
+        if not response.is_success and not is_policy_block:
             error_msg = response_data.get("error", f"MCP query failed: {response.status_code}")
             raise ConnectorError(error_msg, connector=connector, operation="mcp_query")
 
@@ -1174,18 +1180,15 @@ class AxonFlow:
         if response_data.get("policy_info"):
             policy_info = ConnectorPolicyInfo.model_validate(response_data["policy_info"])
 
-        # 403 means policy blocked the request
-        blocked = response.status_code == 403  # noqa: PLR2004
-
         return ConnectorResponse(
-            success=response_data.get("success", not blocked),
+            success=response_data.get("success", not is_policy_block),
             data=response_data.get("data"),
             error=response_data.get("error"),
             meta=response_data.get("meta", {}),
             redacted=response_data.get("redacted", False),
             redacted_fields=response_data.get("redacted_fields", []),
-            blocked=blocked,
-            block_reason=response_data.get("error") if blocked else None,
+            blocked=is_policy_block,
+            block_reason=response_data.get("error") if is_policy_block else None,
             policy_info=policy_info,
         )
 

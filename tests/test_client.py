@@ -1411,24 +1411,21 @@ class TestMCPQueryMethods:
         assert result.policy_info.blocked is True
 
     @pytest.mark.asyncio
-    async def test_mcp_query_blocked_403_minimal(
+    async def test_mcp_query_403_without_policy_info_raises(
         self,
         client: AxonFlow,
         httpx_mock: HTTPXMock,
     ) -> None:
-        """Test MCP query 403 with minimal response body (no policy_info)."""
+        """Test MCP query 403 without policy_info raises ConnectorError (auth/config error)."""
         httpx_mock.add_response(
             url="https://test.axonflow.com/mcp/resources/query",
             method="POST",
             status_code=403,
-            json={"error": "Request blocked: PII detected"},
+            json={"error": "Unauthorized: tenant mismatch"},
         )
 
-        result = await client.mcp_query("postgres", "SELECT ssn FROM customers")
-        assert result.blocked is True
-        assert result.block_reason == "Request blocked: PII detected"
-        assert result.success is False
-        assert result.policy_info is None
+        with pytest.raises(ConnectorError, match="Unauthorized"):
+            await client.mcp_query("postgres", "SELECT 1")
 
     @pytest.mark.asyncio
     async def test_mcp_query_missing_connector(
