@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -512,12 +511,6 @@ class AxonFlowLangGraphAdapter:
     ) -> Callable[..., Any]:
         """Return an async MCP tool interceptor for use with MultiServerMCPClient.
 
-        .. deprecated::
-            Use :meth:`tool_output_wrapper` instead. ``tool_output_wrapper`` covers
-            both MCP tools and local ``@tool`` functions via LangGraph's
-            ``ToolNode(awrap_tool_call=...)`` parameter, making a separate MCP-only
-            interceptor unnecessary in most setups.
-
         The interceptor enforces AxonFlow input and output policies around every
         MCP tool call. Pass the result directly to MultiServerMCPClient's
         ``tool_interceptors`` parameter:
@@ -545,13 +538,6 @@ class AxonFlowLangGraphAdapter:
             An async callable ``(request, handler) -> result`` suitable for
             ``MultiServerMCPClient(tool_interceptors=[...])``.
         """
-        warnings.warn(
-            "mcp_tool_interceptor() is deprecated. Use tool_output_wrapper() instead — "
-            "it covers both MCP and local @tool functions via ToolNode(awrap_tool_call=...).",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
         try:
             from mcp.types import CallToolResult, TextContent  # noqa: PLC0415
         except ImportError as exc:
@@ -636,6 +622,14 @@ class AxonFlowLangGraphAdapter:
         Returns:
             An async callable ``(call_request, execute) -> ToolMessage`` suitable
             for ``ToolNode(awrap_tool_call=...)``.
+
+        Note:
+            If you also use :meth:`mcp_tool_interceptor` on a
+            ``MultiServerMCPClient``, MCP tool calls that flow through
+            ``ToolNode`` will be policy-checked **twice** (once by the
+            interceptor, once by this wrapper).  Use one or the other for
+            MCP tools — this wrapper alone is sufficient when all tools
+            (MCP and local) go through ``ToolNode``.
         """
         opts = options or MCPInterceptorOptions()
 

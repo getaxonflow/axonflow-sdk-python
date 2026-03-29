@@ -67,7 +67,6 @@ def _output_blocked(reason: str = "Output blocked") -> MCPCheckOutputResponse:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestMCPToolInterceptor:
     @pytest.fixture
     def client(self) -> AxonFlow:
