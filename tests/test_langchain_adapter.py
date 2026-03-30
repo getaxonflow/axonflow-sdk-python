@@ -393,16 +393,15 @@ class TestAxonFlowChatModel:
         with pytest.raises(NotImplementedError, match="abatch"):
             await model.abatch(["Hello"])
 
-    def test_with_fallbacks_wraps_each_fallback(self, model: AxonFlowChatModel):
+    def test_with_fallbacks_returns_governed_binding(self, model: AxonFlowChatModel):
         fallback = _make_wrapped_model()
-        model.with_fallbacks([fallback])
-        # Verify with_fallbacks was called on the inner model
+        result = model.with_fallbacks([fallback])
+        # Result should be a governed AxonFlowRunnableBinding wrapping the composed runnable
+        assert isinstance(result, AxonFlowRunnableBinding)
+        assert result._provider == "anthropic"
+        assert result._model_name == "claude-sonnet-4-6"
+        # with_fallbacks was called on the inner model
         model._inner.with_fallbacks.assert_called_once()
-        # The first arg should be a list of AxonFlowChatModel instances
-        call_args = model._inner.with_fallbacks.call_args
-        wrapped_fallbacks = call_args[0][0]
-        assert len(wrapped_fallbacks) == 1
-        assert isinstance(wrapped_fallbacks[0], AxonFlowChatModel)
 
     @pytest.mark.asyncio
     async def test_audit_failure_logs_warning(self, model: AxonFlowChatModel):
