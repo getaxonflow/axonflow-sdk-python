@@ -473,4 +473,17 @@ class AxonFlowChatModel(_GovernanceMixin):
             else fb
             for fb in fallbacks
         ]
-        return self._inner.with_fallbacks(wrapped_fallbacks, **kwargs)
+        # Use self._inner for the primary so that LangChain's RunnableWithFallbacks
+        # calls our __getattr__-delegated methods. The fallbacks are all governed.
+        # We wrap the entire composed runnable in an AxonFlowRunnableBinding so that
+        # the primary call also gets governance.
+        composed = self._inner.with_fallbacks(
+            [fb._inner for fb in wrapped_fallbacks], **kwargs
+        )
+        return AxonFlowRunnableBinding(
+            bound=composed,
+            axonflow=self._axonflow,
+            user_token=self._user_token,
+            provider=self._provider,
+            model_name=self._model_name,
+        )
