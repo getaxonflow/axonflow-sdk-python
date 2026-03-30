@@ -48,7 +48,7 @@ def _import_base_tool() -> type:
         )
         raise ImportError(msg) from None
     else:
-        return BaseTool
+        return BaseTool  # type: ignore[no-any-return]
 
 
 def _serialize_content(content: Any) -> str:
@@ -114,14 +114,23 @@ def _make_governed_tool_class() -> type:
                 msg = f"tool must be a BaseTool instance, got {type(tool)}"
                 raise TypeError(msg)
 
+            # Copy all public BaseTool configuration to preserve behavior
             super().__init__(
-                name=tool.name,
-                description=tool.description,
-                args_schema=tool.args_schema,
+                name=tool.name,  # type: ignore[attr-defined]
+                description=tool.description,  # type: ignore[attr-defined]
+                args_schema=tool.args_schema,  # type: ignore[attr-defined]
+                return_direct=getattr(tool, "return_direct", False),
+                response_format=getattr(tool, "response_format", "content"),
+                tags=getattr(tool, "tags", None),
+                metadata=getattr(tool, "metadata", None),
+                handle_tool_error=getattr(tool, "handle_tool_error", False),
+                handle_validation_error=getattr(tool, "handle_validation_error", False),
             )
             self._wrapped = tool
             self._client = client
-            self._connector_type = connector_type_fn(tool.name) if connector_type_fn else tool.name
+            self._connector_type = (
+                connector_type_fn(tool.name) if connector_type_fn else tool.name  # type: ignore[attr-defined]
+            )
             self._operation = operation
 
         def _run(self, *args: Any, **kwargs: Any) -> Any:
@@ -224,7 +233,7 @@ def _make_governed_tool_class() -> type:
 # Create the class — deferred until first import of this module.
 # If langchain-core is not installed, importing this module will raise ImportError
 # with a clear message.
-GovernedTool = _make_governed_tool_class()
+GovernedTool = _make_governed_tool_class()  # type: ignore[valid-type]
 
 
 def govern_tools(
@@ -233,7 +242,7 @@ def govern_tools(
     *,
     connector_type_fn: Callable[[str], str] | None = None,
     operation: str = "execute",
-) -> list[GovernedTool]:
+) -> list[Any]:
     """Wrap a list of tools with AxonFlow governance.
 
     One-liner to govern all tools before passing them to any framework::
