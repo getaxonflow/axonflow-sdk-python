@@ -1156,11 +1156,12 @@ class AxonFlow:
         response = await self._http_client.post(url, json=body)
         response_data = response.json()
 
-        # 403 with policy_info is a policy block; other 403s are auth/config errors
+        # All 403 responses from mcp_query are policy blocks.
+        # Auth errors return 401. Static policy blocks return 403 without policy_info,
+        # dynamic policy blocks return 403 with policy_info. Both are policy decisions.
         is_policy_block = (
             response.status_code == 403  # noqa: PLR2004
             and isinstance(response_data, dict)
-            and "policy_info" in response_data
         )
 
         if not response.is_success and not is_policy_block:
