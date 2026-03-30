@@ -24,6 +24,7 @@ Example::
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -127,11 +128,34 @@ def _make_governed_tool_class() -> type:
             msg = "GovernedTool overrides invoke/ainvoke directly"
             raise NotImplementedError(msg)
 
+        @staticmethod
+        def _run_coro_sync(coro: Any) -> Any:
+            """Run a coroutine synchronously.
+
+            Only works when called outside an async context (no running event loop).
+            For async contexts, use ``ainvoke()`` instead.
+            """
+            try:
+                asyncio.get_running_loop()
+                # Can't safely run async client methods from inside an event loop —
+                # the httpx AsyncClient is bound to the caller's loop
+                msg = (
+                    "GovernedTool.invoke() cannot be called from within an async "
+                    "context (running event loop detected). Use ainvoke() instead, "
+                    "or use SyncAxonFlow as the client."
+                )
+                raise RuntimeError(msg)
+            except RuntimeError as e:
+                if "invoke()" in str(e):
+                    raise
+                # No running loop — safe to use asyncio.run
+                return asyncio.run(coro)
+
         def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
             """Invoke with synchronous input/output governance."""
             statement = json.dumps(input, default=str) if not isinstance(input, str) else input
 
-            input_check = self._client._run_sync(
+            input_check = self._run_coro_sync(
                 self._client.mcp_check_input(
                     connector_type=self._connector_type,
                     statement=statement,
@@ -146,7 +170,7 @@ def _make_governed_tool_class() -> type:
             result = self._wrapped.invoke(input, config, **kwargs)
 
             serialized = _serialize_content(result)
-            output_check = self._client._run_sync(
+            output_check = self._run_coro_sync(
                 self._client.mcp_check_output(
                     connector_type=self._connector_type,
                     message=serialized,
