@@ -69,7 +69,7 @@ def _make_governed_tool_class() -> type:
     """
     BaseTool = _import_base_tool()  # noqa: N806
 
-    class GovernedTool(BaseTool):  # type: ignore[misc]
+    class GovernedTool(BaseTool):  # type: ignore[misc,valid-type]
         """Wraps a LangChain ``BaseTool`` with AxonFlow input/output governance.
 
         Every ``invoke`` and ``ainvoke`` call runs through two policy checks:
