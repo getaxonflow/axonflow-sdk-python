@@ -1411,21 +1411,27 @@ class TestMCPQueryMethods:
         assert result.policy_info.blocked is True
 
     @pytest.mark.asyncio
-    async def test_mcp_query_403_without_policy_info_raises(
+    async def test_mcp_query_403_without_policy_info_is_policy_block(
         self,
         client: AxonFlow,
         httpx_mock: HTTPXMock,
     ) -> None:
-        """Test MCP query 403 without policy_info raises ConnectorError (auth/config error)."""
+        """Test MCP query 403 without policy_info is still a policy block.
+
+        Static policy blocks return 403 without policy_info (omitempty).
+        Auth errors return 401, not 403. All 403s are policy decisions.
+        """
         httpx_mock.add_response(
             url="https://test.axonflow.com/mcp/resources/query",
             method="POST",
             status_code=403,
-            json={"error": "Unauthorized: tenant mismatch"},
+            json={"error": "Request blocked: Detects DROP TABLE statement"},
         )
 
-        with pytest.raises(ConnectorError, match="Unauthorized"):
-            await client.mcp_query("postgres", "SELECT 1")
+        result = await client.mcp_query("postgres", "SELECT 1; DROP TABLE users;--")
+        assert result.blocked is True
+        assert result.block_reason == "Request blocked: Detects DROP TABLE statement"
+        assert result.policy_info is None
 
     @pytest.mark.asyncio
     async def test_mcp_query_missing_connector(
