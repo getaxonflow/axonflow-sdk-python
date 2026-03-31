@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -537,7 +538,20 @@ class AxonFlowLangGraphAdapter:
         Returns:
             An async callable ``(request, handler) -> result`` suitable for
             ``MultiServerMCPClient(tool_interceptors=[...])``.
+
+        .. deprecated::
+            Use :class:`~axonflow.adapters.tool_wrapper.GovernedTool` (any framework)
+            or :meth:`tool_output_wrapper` (LangGraph ``ToolNode``) instead.
+            ``mcp_tool_interceptor`` will be removed after April 15, 2026.
         """
+        warnings.warn(
+            "mcp_tool_interceptor() is deprecated and will be removed after "
+            "April 15, 2026. Use GovernedTool (any framework) or "
+            "tool_output_wrapper() (LangGraph ToolNode) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         try:
             from mcp.types import CallToolResult, TextContent  # noqa: PLC0415
         except ImportError as exc:

@@ -15,15 +15,21 @@ from axonflow.adapters.langgraph_wrapper import (
     NodeConfig,
     wrap_langgraph,
 )
+from axonflow.adapters.tool_wrapper import (
+    GovernedTool,
+    govern_tools,
+)
 
 __all__ = [
     "AxonFlowChatModel",
     "AxonFlowLangGraphAdapter",
     "AxonFlowRunnableBinding",
     "GovernedGraph",
+    "GovernedTool",
     "MCPInterceptorOptions",
     "NodeConfig",
     "WorkflowApprovalRequiredError",
     "WorkflowBlockedError",
+    "govern_tools",
     "wrap_langgraph",
 ]
