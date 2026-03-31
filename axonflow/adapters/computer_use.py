@@ -150,8 +150,8 @@ class ComputerUseGovernor:
         name = tool_use_block.get("name", "unknown")
         tool_input = tool_use_block.get("input", {})
 
-        # For bash tools, check locally first (fast, no network)
-        if name in ("bash", "bash_20250124", "bash_20241022"):
+        # For bash tools (any version), check locally first (fast, no network)
+        if name == "bash" or name.startswith("bash_"):
             command = tool_input.get("command", "")
             if isinstance(command, str):
                 local_block = self._check_bash_locally(command)
