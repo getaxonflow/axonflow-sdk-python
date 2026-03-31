@@ -597,7 +597,7 @@ class AxonFlowLangGraphAdapter:
     ) -> Callable[..., Any]:
         """Return an async tool-call wrapper for use with LangGraph's ``ToolNode``.
 
-        The wrapper enforces AxonFlow output policies on **every** tool
+        The wrapper enforces AxonFlow input and output policies on **every** tool
         invocation — including locally defined ``@tool`` functions that bypass
         the MCP interceptor.  Pass the result directly to ``ToolNode``'s
         ``awrap_tool_call`` parameter:
@@ -616,12 +616,20 @@ class AxonFlowLangGraphAdapter:
 
         Args:
             options: Optional :class:`MCPInterceptorOptions` controlling connector
-                type derivation. The ``operation`` field is unused (output-only).
+                type derivation and operation type for input checks.
                 Uses defaults if not provided.
 
         Returns:
             An async callable ``(call_request, execute) -> ToolMessage`` suitable
             for ``ToolNode(awrap_tool_call=...)``.
+
+        Note:
+            If you also use :meth:`mcp_tool_interceptor` on a
+            ``MultiServerMCPClient``, MCP tool calls that flow through
+            ``ToolNode`` will be policy-checked **twice** (once by the
+            interceptor, once by this wrapper).  Use one or the other for
+            MCP tools — this wrapper alone is sufficient when all tools
+            (MCP and local) go through ``ToolNode``.
         """
         opts = options or MCPInterceptorOptions()
 
@@ -632,10 +640,23 @@ class AxonFlowLangGraphAdapter:
         resolve_connector_type = opts.connector_type_fn or _default_connector_type
 
         async def _wrapper(call_request: dict[str, Any], execute: Callable[..., Any]) -> Any:
-            # Execute the tool
+            connector_type = resolve_connector_type(call_request)
+            args = call_request.get("args", {})
+            statement = json.dumps(args, default=str)
+
+            input_check = await self.client.mcp_check_input(
+                connector_type=connector_type,
+                statement=statement,
+                operation=opts.operation,
+            )
+            if not input_check.allowed:
+                raise PolicyViolationError(
+                    input_check.block_reason or "Tool call blocked by policy"
+                )
+
             result = await execute(call_request)
 
-            # Serialize content for policy check
+            # Serialize content for output policy check
             content = getattr(result, "content", None)
             if content is None:
                 return result
@@ -647,8 +668,6 @@ class AxonFlowLangGraphAdapter:
                     serialized = json.dumps(content, default=str)
                 except (TypeError, ValueError):
                     serialized = str(content)
-
-            connector_type = resolve_connector_type(call_request)
 
             output_check = await self.client.mcp_check_output(
                 connector_type=connector_type,

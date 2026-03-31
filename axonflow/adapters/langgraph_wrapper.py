@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 def _import_callback_handler() -> type:
     """Import langchain-core AsyncCallbackHandler with a helpful error."""
     try:
-        from langchain_core.callbacks import AsyncCallbackHandler  # type: ignore[import-not-found]
+        from langchain_core.callbacks import AsyncCallbackHandler
     except ImportError:
         msg = (
             "langchain-core is required for wrap_langgraph(). "
@@ -44,7 +44,7 @@ def _import_callback_handler() -> type:
         )
         raise ImportError(msg) from None
     else:
-        return AsyncCallbackHandler  # type: ignore[no-any-return]
+        return AsyncCallbackHandler
 
 
 @dataclass(frozen=True)
