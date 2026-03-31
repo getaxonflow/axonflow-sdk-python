@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 def _import_base_tool() -> type:
     """Import BaseTool with a helpful error message."""
     try:
-        from langchain_core.tools import BaseTool  # type: ignore[import-not-found]
+        from langchain_core.tools import BaseTool
     except ImportError:
         msg = (
             "langchain-core is required for GovernedTool. "
@@ -48,7 +48,7 @@ def _import_base_tool() -> type:
         )
         raise ImportError(msg) from None
     else:
-        return BaseTool  # type: ignore[no-any-return]
+        return BaseTool
 
 
 def _serialize_content(content: Any) -> str:
