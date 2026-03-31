@@ -1,5 +1,9 @@
 """AxonFlow adapters for external orchestrators."""
 
+from axonflow.adapters.langchain import (
+    AxonFlowChatModel,
+    AxonFlowRunnableBinding,
+)
 from axonflow.adapters.langgraph import (
     AxonFlowLangGraphAdapter,
     MCPInterceptorOptions,
@@ -13,7 +17,9 @@ from axonflow.adapters.langgraph_wrapper import (
 )
 
 __all__ = [
+    "AxonFlowChatModel",
     "AxonFlowLangGraphAdapter",
+    "AxonFlowRunnableBinding",
     "GovernedGraph",
     "MCPInterceptorOptions",
     "NodeConfig",
