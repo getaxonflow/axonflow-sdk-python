@@ -1122,10 +1122,11 @@ class AxonFlow:
             options: Optional additional options for the query
 
         Returns:
-            ConnectorResponse with data, redaction info, and policy_info
+            ConnectorResponse with data, redaction info, and policy_info.
+            When blocked by policy (HTTP 403), returns blocked=True with block_reason.
 
         Raises:
-            ConnectorError: If the request is blocked by policy or fails
+            ConnectorError: If the request fails (non-403 errors only)
 
         Example:
             response = await client.mcp_query(
@@ -1155,8 +1156,15 @@ class AxonFlow:
         response = await self._http_client.post(url, json=body)
         response_data = response.json()
 
-        # Handle policy blocks (403 responses)
-        if not response.is_success:
+        # All 403 responses from mcp_query are policy blocks.
+        # Auth errors return 401. Static policy blocks return 403 without policy_info,
+        # dynamic policy blocks return 403 with policy_info. Both are policy decisions.
+        is_policy_block = (
+            response.status_code == 403  # noqa: PLR2004
+            and isinstance(response_data, dict)
+        )
+
+        if not response.is_success and not is_policy_block:
             error_msg = response_data.get("error", f"MCP query failed: {response.status_code}")
             raise ConnectorError(error_msg, connector=connector, operation="mcp_query")
 
@@ -1174,12 +1182,14 @@ class AxonFlow:
             policy_info = ConnectorPolicyInfo.model_validate(response_data["policy_info"])
 
         return ConnectorResponse(
-            success=response_data.get("success", True),
+            success=response_data.get("success", not is_policy_block),
             data=response_data.get("data"),
             error=response_data.get("error"),
             meta=response_data.get("meta", {}),
             redacted=response_data.get("redacted", False),
             redacted_fields=response_data.get("redacted_fields", []),
+            blocked=is_policy_block,
+            block_reason=response_data.get("error") if is_policy_block else None,
             policy_info=policy_info,
         )
 

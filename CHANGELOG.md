@@ -5,6 +5,21 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2026-03-30
+
+### Added
+
+- **`AxonFlowChatModel` LangChain adapter**: Wraps any `BaseChatModel` with pre-check + audit governance. Extracted `_GovernanceMixin` base class for shared governance logic. Includes `with_fallbacks` override to wrap each fallback in governance, and `batch`/`abatch` `NotImplementedError` to prevent silent bypass.
+- **`AxonFlowRunnableBinding`**: Governance wrapper for LangChain runnables with transparent delegation.
+- **Input checking in `tool_output_wrapper()`**: `tool_output_wrapper()` now calls `mcp_check_input` before tool execution, enforcing input policies on local `@tool` functions in LangGraph workflows.
+
+### Fixed
+
+- **`mcp_query()` 403 handling**: `mcp_query()` previously raised `ConnectorError` on HTTP 403 responses. Now treats 403 as a valid policy-blocked response consistent with `mcp_check_input()` and `mcp_check_output()`, returning a `ConnectorResponse` with `blocked=True` instead of raising an exception.
+- **Mypy type errors in LangChain adapter**: Fixed `int()` argument type errors in `_extract_token_usage()` for dict values that could be `None`.
+
+---
+
 ## [5.2.0] - 2026-03-25
 
 ### Added

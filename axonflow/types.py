@@ -353,6 +353,8 @@ class ConnectorResponse(BaseModel):
     redacted_fields: list[str] = Field(
         default_factory=list, description="JSON paths of redacted fields"
     )
+    blocked: bool = Field(default=False, description="Whether request was blocked by policy")
+    block_reason: str | None = Field(default=None, description="Reason if blocked by policy")
     policy_info: ConnectorPolicyInfo | None = Field(
         default=None, description="Policy evaluation details"
     )

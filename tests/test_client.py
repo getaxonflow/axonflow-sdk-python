@@ -1383,19 +1383,55 @@ class TestMCPQueryMethods:
         client: AxonFlow,
         httpx_mock: HTTPXMock,
     ) -> None:
-        """Test MCP query blocked by policy."""
+        """Test MCP query blocked by policy returns ConnectorResponse with blocked=True."""
         httpx_mock.add_response(
             url="https://test.axonflow.com/mcp/resources/query",
             method="POST",
             status_code=403,
-            json={"error": "Request blocked: SQLi detected"},
+            json={
+                "error": "Request blocked: SQLi detected",
+                "policy_info": {
+                    "policies_evaluated": 3,
+                    "blocked": True,
+                    "block_reason": "SQLi detected",
+                    "redactions_applied": 0,
+                    "processing_time_ms": 1,
+                },
+            },
         )
 
-        with pytest.raises(ConnectorError, match="blocked"):
-            await client.mcp_query(
-                "postgres",
-                "SELECT * FROM users; DROP TABLE users;--",
-            )
+        result = await client.mcp_query(
+            "postgres",
+            "SELECT * FROM users; DROP TABLE users;--",
+        )
+        assert result.blocked is True
+        assert result.block_reason == "Request blocked: SQLi detected"
+        assert result.success is False
+        assert result.policy_info is not None
+        assert result.policy_info.blocked is True
+
+    @pytest.mark.asyncio
+    async def test_mcp_query_403_without_policy_info_is_policy_block(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test MCP query 403 without policy_info is still a policy block.
+
+        Static policy blocks return 403 without policy_info (omitempty).
+        Auth errors return 401, not 403. All 403s are policy decisions.
+        """
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/mcp/resources/query",
+            method="POST",
+            status_code=403,
+            json={"error": "Request blocked: Detects DROP TABLE statement"},
+        )
+
+        result = await client.mcp_query("postgres", "SELECT 1; DROP TABLE users;--")
+        assert result.blocked is True
+        assert result.block_reason == "Request blocked: Detects DROP TABLE statement"
+        assert result.policy_info is None
 
     @pytest.mark.asyncio
     async def test_mcp_query_missing_connector(
