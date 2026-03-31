@@ -5,6 +5,14 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] - 2026-04-01
+
+### Added
+
+- **`ComputerUseGovernor` for Anthropic Computer Use**: Middleware for the sampling loop. `check_tool_use()` evaluates tool_use blocks before execution (blocks dangerous bash commands, detects PII). `check_result()` scans results before feeding back to Claude (redacts PII/secrets). Includes 10 default blocked bash patterns for local client-side blocking.
+
+---
+
 ## [5.3.0] - 2026-03-31
 
 ### Added
@@ -13,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`AxonFlowChatModel` LangChain adapter**: Wraps any `BaseChatModel` with pre-check + audit governance. Extracted `_GovernanceMixin` base class for shared governance logic. Includes `with_fallbacks` override to wrap each fallback in governance, and `batch`/`abatch` `NotImplementedError` to prevent silent bypass.
 - **`AxonFlowRunnableBinding`**: Governance wrapper for LangChain runnables with transparent delegation.
 - **Input checking in `tool_output_wrapper()`**: `tool_output_wrapper()` now calls `mcp_check_input` before tool execution, enforcing input policies on local `@tool` functions in LangGraph workflows.
-- **`ComputerUseGovernor` for Anthropic Computer Use**: Middleware for the sampling loop. `check_tool_use()` evaluates tool_use blocks before execution (blocks dangerous bash commands, detects PII). `check_result()` scans results before feeding back to Claude (redacts PII/secrets). Includes 10 default blocked bash patterns for local client-side blocking.
 
 ### Fixed
 
