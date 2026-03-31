@@ -477,9 +477,7 @@ class AxonFlowChatModel(_GovernanceMixin):
         # calls our __getattr__-delegated methods. The fallbacks are all governed.
         # We wrap the entire composed runnable in an AxonFlowRunnableBinding so that
         # the primary call also gets governance.
-        composed = self._inner.with_fallbacks(
-            [fb._inner for fb in wrapped_fallbacks], **kwargs
-        )
+        composed = self._inner.with_fallbacks([fb._inner for fb in wrapped_fallbacks], **kwargs)
         return AxonFlowRunnableBinding(
             bound=composed,
             axonflow=self._axonflow,
