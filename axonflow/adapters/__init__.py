@@ -1,5 +1,9 @@
 """AxonFlow adapters for external orchestrators."""
 
+from axonflow.adapters.computer_use import (
+    CheckResult,
+    ComputerUseGovernor,
+)
 from axonflow.adapters.langchain import (
     AxonFlowChatModel,
     AxonFlowRunnableBinding,
@@ -14,10 +18,6 @@ from axonflow.adapters.langgraph_wrapper import (
     GovernedGraph,
     NodeConfig,
     wrap_langgraph,
-)
-from axonflow.adapters.computer_use import (
-    CheckResult,
-    ComputerUseGovernor,
 )
 from axonflow.adapters.tool_wrapper import (
     GovernedTool,
