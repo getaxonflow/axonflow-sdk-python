@@ -1,5 +1,9 @@
 """AxonFlow adapters for external orchestrators."""
 
+from axonflow.adapters.computer_use import (
+    CheckResult,
+    ComputerUseGovernor,
+)
 from axonflow.adapters.langchain import (
     AxonFlowChatModel,
     AxonFlowRunnableBinding,
@@ -24,6 +28,8 @@ __all__ = [
     "AxonFlowChatModel",
     "AxonFlowLangGraphAdapter",
     "AxonFlowRunnableBinding",
+    "CheckResult",
+    "ComputerUseGovernor",
     "GovernedGraph",
     "GovernedTool",
     "MCPInterceptorOptions",
