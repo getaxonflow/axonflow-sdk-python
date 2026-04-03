@@ -95,6 +95,7 @@ class TestAuthHeadersWithoutCredentials:
 
         # Basic auth always sent — server derives tenant from clientId
         import base64
+
         expected = base64.b64encode(b"test-client:").decode()
         assert headers.get("authorization") == f"Basic {expected}"
         # X-Tenant-ID removed — tenant derived from auth
