@@ -388,11 +388,9 @@ class AxonFlow:
             "Content-Type": "application/json",
             "User-Agent": f"axonflow-sdk-python/{_SDK_VERSION}",
         }
-        # Add authentication and tenant headers
-        # client_id is always required for policy APIs (sets X-Tenant-ID)
+        # Add authentication headers
         # client_secret is optional for community mode but required for enterprise
         if client_id:
-            headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
             # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
             if client_secret:
                 credentials = f"{client_id}:{client_secret}"
