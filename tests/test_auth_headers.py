@@ -129,8 +129,11 @@ class TestAuthHeadersWithoutCredentials:
         request = requests[0]
         headers = dict(request.headers)
 
-        # No auth headers for health check without credentials
-        assert "authorization" not in headers
+        # Basic auth always sent (community default) — health endpoint accepts it
+        import base64
+
+        expected = base64.b64encode(b"community:").decode()
+        assert headers.get("authorization") == f"Basic {expected}"
         assert "x-license-key" not in headers
 
         print("✅ Health check works without auth headers")
