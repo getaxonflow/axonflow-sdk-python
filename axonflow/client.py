@@ -391,11 +391,11 @@ class AxonFlow:
         # Add authentication headers
         # client_secret is optional for community mode but required for enterprise
         if client_id:
-            # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
-            if client_secret:
-                credentials = f"{client_id}:{client_secret}"
-                encoded = base64.b64encode(credentials.encode()).decode()
-                headers["Authorization"] = f"Basic {encoded}"
+            # Always send Basic auth when client_id is set — server derives tenant from it.
+            # client_secret defaults to empty string for community/no-secret mode.
+            credentials = f"{client_id}:{client_secret or ''}"
+            encoded = base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded}"
 
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(
