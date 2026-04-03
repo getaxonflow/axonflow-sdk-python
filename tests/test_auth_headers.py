@@ -93,15 +93,17 @@ class TestAuthHeadersWithoutCredentials:
         request = requests[0]
         headers = dict(request.headers)
 
-        # Authorization header should NOT be set without client_secret
-        assert "authorization" not in headers
-        # X-Tenant-ID removed — tenant derived from OAuth2 credentials server-side
+        # Basic auth always sent — server derives tenant from clientId
+        import base64
+        expected = base64.b64encode(b"test-client:").decode()
+        assert headers.get("authorization") == f"Basic {expected}"
+        # X-Tenant-ID removed — tenant derived from auth
         assert "x-tenant-id" not in headers
         # Old headers should not be present
         assert "x-license-key" not in headers
         assert "x-client-secret" not in headers
 
-        print("✅ Community mode: no auth headers sent")
+        print("✅ Community mode: Basic auth with clientId, no X-Tenant-ID")
 
     @pytest.mark.asyncio
     async def test_no_auth_headers_for_health_check(self, httpx_mock):
