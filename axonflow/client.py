@@ -364,6 +364,12 @@ class AxonFlow:
             msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
             raise TypeError(msg)
 
+        if os.environ.get("AXONFLOW_DEMO") == "1":
+            resolved_endpoint = "https://demo.getaxonflow.com"
+            if not client_id:
+                msg = "client_id is required in demo mode (AXONFLOW_DEMO=1)"
+                raise TypeError(msg)
+
         if isinstance(mode, str):
             mode = Mode(mode)
 
