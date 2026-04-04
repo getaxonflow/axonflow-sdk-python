@@ -298,7 +298,7 @@ def ai_system_registry_from_dict(data: dict[str, Any]) -> AISystemRegistry:
         human_reliance=data.get("human_reliance") or data.get("risk_rating_reliance"),
         materiality=_parse_enum(
             MaterialityClassification,
-            data.get("materiality") or data.get("materiality_classification"),
+            data.get("materiality_classification"),
         ),
         status=_parse_enum(SystemStatus, data["status"]),
         metadata=data.get("metadata"),
