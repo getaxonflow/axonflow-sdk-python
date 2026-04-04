@@ -394,7 +394,8 @@ class AxonFlow:
         if client_secret and not client_id:
             raise ValueError(
                 "client_id is required when client_secret is set. "
-                "Set client_id to your tenant identity to avoid data being stored under the wrong tenant."
+                "Set client_id to your tenant identity to avoid "
+                "data being stored under the wrong tenant."
             )
         effective_client_id = client_id or "community"
         credentials = f"{effective_client_id}:{client_secret or ''}"
