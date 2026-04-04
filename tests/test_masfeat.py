@@ -222,14 +222,14 @@ class TestAISystemRegistry:
             customer_impact=3,
             model_complexity=2,
             human_reliance=1,
-            materiality=MaterialityClassification.HIGH,
+            materiality_classification=MaterialityClassification.HIGH,
             status=SystemStatus.ACTIVE,
             created_at=now,
             updated_at=now,
         )
         assert registry.id == "sys-123"
         assert registry.system_name == "Credit Scoring Model"
-        assert registry.materiality == MaterialityClassification.HIGH
+        assert registry.materiality_classification == MaterialityClassification.HIGH
 
     def test_optional_fields(self) -> None:
         """Test optional fields default to None."""
@@ -244,7 +244,7 @@ class TestAISystemRegistry:
             customer_impact=1,
             model_complexity=1,
             human_reliance=1,
-            materiality=MaterialityClassification.LOW,
+            materiality_classification=MaterialityClassification.LOW,
             status=SystemStatus.DRAFT,
             created_at=now,
             updated_at=now,
@@ -351,7 +351,7 @@ class TestAISystemRegistryFromDict:
             "customer_impact": 3,
             "model_complexity": 2,
             "human_reliance": 1,
-            "materiality": "high",
+            "materiality_classification": "high",
             "status": "active",
             "created_at": "2026-01-23T12:00:00Z",
             "updated_at": "2026-01-23T12:00:00Z",
@@ -359,7 +359,7 @@ class TestAISystemRegistryFromDict:
         result = ai_system_registry_from_dict(data)
         assert result.id == "sys-123"
         assert result.use_case == AISystemUseCase.CREDIT_SCORING
-        assert result.materiality == MaterialityClassification.HIGH
+        assert result.materiality_classification == MaterialityClassification.HIGH
         assert result.status == SystemStatus.ACTIVE
 
     def test_alternate_field_names(self) -> None:
@@ -384,7 +384,7 @@ class TestAISystemRegistryFromDict:
         assert result.customer_impact == 3
         assert result.model_complexity == 2
         assert result.human_reliance == 1
-        assert result.materiality == MaterialityClassification.MEDIUM
+        assert result.materiality_classification == MaterialityClassification.MEDIUM
         assert result.business_owner == "owner@example.com"
 
 
@@ -675,7 +675,7 @@ class TestMASFEATClientMethods:
                 "customer_impact": 3,
                 "model_complexity": 2,
                 "human_reliance": 1,
-                "materiality": "high",
+                "materiality_classification": "high",
                 "status": "draft",
                 "created_at": "2026-01-23T12:00:00Z",
                 "updated_at": "2026-01-23T12:00:00Z",
@@ -715,7 +715,7 @@ class TestMASFEATClientMethods:
                 "customer_impact": 3,
                 "model_complexity": 2,
                 "human_reliance": 1,
-                "materiality": "high",
+                "materiality_classification": "high",
                 "status": "active",
                 "created_at": "2026-01-23T12:00:00Z",
                 "updated_at": "2026-01-23T12:00:00Z",
@@ -747,7 +747,7 @@ class TestMASFEATClientMethods:
                     "customer_impact": 3,
                     "model_complexity": 2,
                     "human_reliance": 1,
-                    "materiality": "high",
+                    "materiality_classification": "high",
                     "status": "active",
                     "created_at": "2026-01-23T12:00:00Z",
                     "updated_at": "2026-01-23T12:00:00Z",
@@ -922,7 +922,7 @@ class TestMASFEATClientMethods:
                 "system_name": "Test Model",
                 "use_case": "credit_scoring",
                 "owner_team": "team",
-                "materiality": "high",
+                "materiality_classification": "high",
                 "status": "active",
                 "created_at": "2026-01-23T12:00:00Z",
                 "updated_at": "2026-01-23T12:00:00Z",
@@ -951,7 +951,7 @@ class TestMASFEATClientMethods:
                 "system_name": "Test Model",
                 "use_case": "credit_scoring",
                 "owner_team": "team",
-                "materiality": "high",
+                "materiality_classification": "high",
                 "status": "retired",
                 "created_at": "2026-01-23T12:00:00Z",
                 "updated_at": "2026-01-23T12:00:00Z",
@@ -1175,7 +1175,7 @@ class TestMASFEATClientMethods:
                 "system_name": "Updated Model Name",
                 "use_case": "credit_scoring",
                 "owner_team": "new-team",
-                "materiality": "high",
+                "materiality_classification": "high",
                 "status": "active",
                 "customer_impact": 4,
                 "model_complexity": 3,
