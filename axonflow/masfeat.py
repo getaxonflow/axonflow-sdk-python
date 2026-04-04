@@ -143,7 +143,7 @@ class AISystemRegistry:
     customer_impact: int | None
     model_complexity: int | None
     human_reliance: int | None
-    materiality: MaterialityClassification
+    materiality_classification: MaterialityClassification
     status: SystemStatus
     created_at: datetime | None
     updated_at: datetime | None
@@ -296,9 +296,9 @@ def ai_system_registry_from_dict(data: dict[str, Any]) -> AISystemRegistry:
         customer_impact=data.get("customer_impact") or data.get("risk_rating_impact"),
         model_complexity=data.get("model_complexity") or data.get("risk_rating_complexity"),
         human_reliance=data.get("human_reliance") or data.get("risk_rating_reliance"),
-        materiality=_parse_enum(
+        materiality_classification=_parse_enum(
             MaterialityClassification,
-            data.get("materiality") or data.get("materiality_classification"),
+            data.get("materiality_classification"),
         ),
         status=_parse_enum(SystemStatus, data["status"]),
         metadata=data.get("metadata"),

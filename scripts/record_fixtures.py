@@ -154,7 +154,6 @@ async def main() -> None:
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Basic {credentials}",
-        "X-Tenant-ID": CLIENT_ID,
     }
 
     async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:

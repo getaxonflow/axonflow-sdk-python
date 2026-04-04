@@ -388,16 +388,12 @@ class AxonFlow:
             "Content-Type": "application/json",
             "User-Agent": f"axonflow-sdk-python/{_SDK_VERSION}",
         }
-        # Add authentication and tenant headers
-        # client_id is always required for policy APIs (sets X-Tenant-ID)
-        # client_secret is optional for community mode but required for enterprise
-        if client_id:
-            headers["X-Tenant-ID"] = client_id  # client_id is used as tenant ID for policy APIs
-            # OAuth2-style: Authorization: Basic base64(clientId:clientSecret)
-            if client_secret:
-                credentials = f"{client_id}:{client_secret}"
-                encoded = base64.b64encode(credentials.encode()).decode()
-                headers["Authorization"] = f"Basic {encoded}"
+        # Always send Basic auth — server derives tenant from clientId.
+        # Uses effective client_id ("community" default when not configured).
+        effective_client_id = client_id or "community"
+        credentials = f"{effective_client_id}:{client_secret or ''}"
+        encoded = base64.b64encode(credentials.encode()).decode()
+        headers["Authorization"] = f"Basic {encoded}"
 
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(

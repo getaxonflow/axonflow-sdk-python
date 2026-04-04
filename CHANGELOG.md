@@ -5,6 +5,23 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - 2026-04-04
+
+### BREAKING CHANGES
+
+- **`X-Tenant-ID` header removed.** The SDK no longer sends `X-Tenant-ID`. The server derives tenant from OAuth2 Client Credentials (Basic auth). Requires platform v6.0.0+.
+- **`MaterialityClassification` field renamed.** MAS FEAT `AISystemRegistry.materiality` renamed to `materiality_classification` to match server JSON field.
+
+### Added
+
+- **`Status` field on `PlanResponse`.** The server returns plan status (pending, executing, completed, failed, cancelled) which was previously not parsed by the SDK.
+
+### Fixed
+
+- **MCP examples missing `client_id` and `user_token`** in request body for enterprise MCP handler authentication.
+
+---
+
 ## [5.4.0] - 2026-04-01
 
 ### Added
