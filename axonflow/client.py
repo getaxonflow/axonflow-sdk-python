@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import re
+import secrets
 from collections.abc import AsyncIterator, Coroutine, Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -369,6 +370,7 @@ class AxonFlow:
             if not client_id:
                 msg = "client_id is required in demo mode (AXONFLOW_DEMO=1)"
                 raise TypeError(msg)
+            client_id = f"{client_id}-{secrets.token_hex(3)}"
 
         if isinstance(mode, str):
             mode = Mode(mode)
