@@ -419,6 +419,7 @@ class PlanResponse(BaseModel):
     """Multi-agent plan response."""
 
     plan_id: str
+    status: str = "pending"
     steps: list[PlanStep] = Field(default_factory=list)
     domain: str = "generic"
     complexity: int = 0
