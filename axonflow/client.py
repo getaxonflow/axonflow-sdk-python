@@ -390,6 +390,14 @@ class AxonFlow:
         }
         # Always send Basic auth — server derives tenant from clientId.
         # Uses effective client_id ("community" default when not configured).
+        # Reject client_secret without client_id — licensed mode must specify tenant.
+        if client_secret and not client_id:
+            msg = (
+                "client_id is required when client_secret is set. "
+                "Set client_id to your tenant identity to avoid "
+                "data being stored under the wrong tenant."
+            )
+            raise ValueError(msg)
         effective_client_id = client_id or "community"
         credentials = f"{effective_client_id}:{client_secret or ''}"
         encoded = base64.b64encode(credentials.encode()).decode()
