@@ -74,7 +74,6 @@ def _detect_platform_version(endpoint: str) -> str | None:
     return None
 
 
-
 def _normalize_arch(arch: str) -> str:
     """Normalize architecture names to match other SDKs."""
     if arch == "aarch64":
