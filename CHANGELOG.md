@@ -5,6 +5,18 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0] - 2026-04-08
+
+### Added
+
+- **`check_tool_input()` / `check_tool_output()`** — generic aliases for tool governance. Existing `mcp_check_input()` / `mcp_check_output()` remain supported.
+
+### Changed
+
+- Anonymous telemetry is now enabled by default for all endpoints, including localhost/self-hosted evaluation. Opt out with `DO_NOT_TRACK=1` or `AXONFLOW_TELEMETRY=off`.
+
+---
+
 ## [6.0.0] - 2026-04-05
 
 ### BREAKING CHANGES

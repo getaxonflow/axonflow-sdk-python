@@ -1258,6 +1258,16 @@ class AxonFlow:
 
         return MCPCheckInputResponse(**data)
 
+    async def check_tool_input(
+        self,
+        connector_type: str,
+        statement: str,
+        operation: str = "execute",
+        parameters: dict[str, Any] | None = None,
+    ) -> MCPCheckInputResponse:
+        """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
+        return await self.mcp_check_input(connector_type, statement, operation, parameters)
+
     async def mcp_check_output(
         self,
         connector_type: str,
@@ -1312,6 +1322,19 @@ class AxonFlow:
             raise ConnectorError(error_msg, connector_type, "check-output")
 
         return MCPCheckOutputResponse(**data)
+
+    async def check_tool_output(
+        self,
+        connector_type: str,
+        response_data: list[dict[str, Any]] | None = None,
+        message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        row_count: int = 0,
+    ) -> MCPCheckOutputResponse:
+        """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
+        return await self.mcp_check_output(
+            connector_type, response_data, message, metadata, row_count
+        )
 
     async def generate_plan(
         self,
@@ -6505,6 +6528,33 @@ class SyncAxonFlow:
         row_count: int = 0,
     ) -> MCPCheckOutputResponse:
         """Validate MCP response data against configured policies."""
+        return self._run_sync(
+            self._async_client.mcp_check_output(
+                connector_type, response_data, message, metadata, row_count
+            )
+        )
+
+    def check_tool_input(
+        self,
+        connector_type: str,
+        statement: str,
+        operation: str = "execute",
+        parameters: dict[str, Any] | None = None,
+    ) -> MCPCheckInputResponse:
+        """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
+        return self._run_sync(
+            self._async_client.mcp_check_input(connector_type, statement, operation, parameters)
+        )
+
+    def check_tool_output(
+        self,
+        connector_type: str,
+        response_data: list[dict[str, Any]] | None = None,
+        message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        row_count: int = 0,
+    ) -> MCPCheckOutputResponse:
+        """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return self._run_sync(
             self._async_client.mcp_check_output(
                 connector_type, response_data, message, metadata, row_count
