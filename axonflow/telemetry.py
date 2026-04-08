@@ -13,11 +13,13 @@ Override endpoint:
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import platform
 import threading
 import uuid
+from urllib.parse import urlparse
 
 import httpx
 
@@ -74,6 +76,54 @@ def _detect_platform_version(endpoint: str) -> str | None:
     return None
 
 
+# Loopback and any-interface addresses. "0.0.0.0" is intentionally included
+# here because it's the canonical bind-all-interfaces address and, in the
+# context of an AxonFlow client endpoint, means "talk to localhost".
+# noqa: S104 is scoped to the tuple below — this is not a bind operation.
+_LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})  # noqa: S104
+
+
+def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
+    """Classify the configured AxonFlow endpoint for analytics (#1525).
+
+    Returns one of:
+        ``"localhost"``         — localhost, 127.0.0.1, ::1, 0.0.0.0, ``*.localhost``
+        ``"private_network"``   — RFC1918 ranges, link-local, ``*.local``,
+                                  ``*.internal``, ``*.lan``, ``*.intranet``
+        ``"remote"``            — everything else
+        ``"unknown"``           — on any parse failure
+
+    The raw URL is never sent — only the classification. See issue #1525.
+    """
+    if not url:
+        return "unknown"
+    try:
+        host = urlparse(url).hostname
+    except (ValueError, AttributeError):
+        return "unknown"
+    if not host:
+        return "unknown"
+    host = host.lower()
+
+    if host in _LOCALHOST_HOSTS or host.endswith(".localhost"):
+        return "localhost"
+
+    if any(host.endswith(suffix) for suffix in (".local", ".internal", ".lan", ".intranet")):
+        return "private_network"
+
+    # Try parsing as an IP address (v4 or v6).
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        # Not an IP; treat remaining hostnames as remote.
+        return "remote"
+    if ip.is_loopback:
+        return "localhost"
+    if ip.is_private or ip.is_link_local:
+        return "private_network"
+    return "remote"
+
+
 def _normalize_arch(arch: str) -> str:
     """Normalize architecture names to match other SDKs."""
     if arch == "aarch64":
@@ -83,7 +133,11 @@ def _normalize_arch(arch: str) -> str:
     return arch
 
 
-def _build_payload(mode: str, platform_version: str | None = None) -> dict[str, object]:
+def _build_payload(
+    mode: str,
+    platform_version: str | None = None,
+    endpoint_type: str = "unknown",
+) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping."""
     return {
         "sdk": "python",
@@ -93,6 +147,7 @@ def _build_payload(mode: str, platform_version: str | None = None) -> dict[str, 
         "arch": _normalize_arch(platform.machine()),
         "runtime_version": platform.python_version(),
         "deployment_mode": mode,
+        "endpoint_type": endpoint_type,
         "features": [],
         "instance_id": str(uuid.uuid4()),
     }
@@ -102,7 +157,8 @@ def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
     """Execute the HTTP POST (runs inside a daemon thread)."""
     try:
         platform_version = _detect_platform_version(endpoint) if endpoint else None
-        payload = _build_payload(mode, platform_version)
+        endpoint_type = _classify_endpoint(endpoint)
+        payload = _build_payload(mode, platform_version, endpoint_type)
         resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
         if resp.status_code == _HTTP_OK:
             try:
