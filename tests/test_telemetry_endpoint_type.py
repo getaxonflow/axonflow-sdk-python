@@ -1,6 +1,6 @@
 """Unit tests for _classify_endpoint (issue #1525)."""
 
-from axonflow.telemetry import _classify_endpoint, _build_payload
+from axonflow.telemetry import _build_payload, _classify_endpoint
 
 
 class TestClassifyEndpoint:

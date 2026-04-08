@@ -76,7 +76,14 @@ def _detect_platform_version(endpoint: str) -> str | None:
     return None
 
 
-def _classify_endpoint(url: str | None) -> str:
+# Loopback and any-interface addresses. "0.0.0.0" is intentionally included
+# here because it's the canonical bind-all-interfaces address and, in the
+# context of an AxonFlow client endpoint, means "talk to localhost".
+# noqa: S104 is scoped to the tuple below — this is not a bind operation.
+_LOCALHOST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})  # noqa: S104
+
+
+def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
     """Classify the configured AxonFlow endpoint for analytics (#1525).
 
     Returns one of:
@@ -86,7 +93,7 @@ def _classify_endpoint(url: str | None) -> str:
         ``"remote"``            — everything else
         ``"unknown"``           — on any parse failure
 
-    The raw URL is never sent — only the classification. See ADR or issue #1525.
+    The raw URL is never sent — only the classification. See issue #1525.
     """
     if not url:
         return "unknown"
@@ -98,7 +105,7 @@ def _classify_endpoint(url: str | None) -> str:
         return "unknown"
     host = host.lower()
 
-    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") or host.endswith(".localhost"):
+    if host in _LOCALHOST_HOSTS or host.endswith(".localhost"):
         return "localhost"
 
     if any(host.endswith(suffix) for suffix in (".local", ".internal", ".lan", ".intranet")):
@@ -107,14 +114,14 @@ def _classify_endpoint(url: str | None) -> str:
     # Try parsing as an IP address (v4 or v6).
     try:
         ip = ipaddress.ip_address(host)
-        if ip.is_loopback:
-            return "localhost"
-        if ip.is_private or ip.is_link_local:
-            return "private_network"
-        return "remote"
     except ValueError:
         # Not an IP; treat remaining hostnames as remote.
         return "remote"
+    if ip.is_loopback:
+        return "localhost"
+    if ip.is_private or ip.is_link_local:
+        return "private_network"
+    return "remote"
 
 
 def _normalize_arch(arch: str) -> str:
