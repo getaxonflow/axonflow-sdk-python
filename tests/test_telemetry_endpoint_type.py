@@ -29,6 +29,35 @@ class TestClassifyEndpoint:
         # Link-local
         assert _classify_endpoint("http://169.254.169.254") == "private_network"
 
+    def test_rfc1918_172_boundary(self):
+        # Review finding L4: explicit 172.15/172.32 boundary tests. Python
+        # delegates to stdlib ipaddress.is_private which gets this right,
+        # but the boundary wasn't asserted explicitly in the v6.2.0 test
+        # suite. Cross-SDK parity with the TS/Go/Java suites.
+        assert _classify_endpoint("http://172.15.0.1") == "remote"
+        assert _classify_endpoint("http://172.32.0.1") == "remote"
+        assert _classify_endpoint("http://172.16.0.0") == "private_network"
+        assert _classify_endpoint("http://172.31.255.255") == "private_network"
+
+    def test_private_network_ipv6(self):
+        # Python uses stdlib ipaddress which classifies these correctly
+        # — add explicit tests for cross-SDK parity and documentation.
+        assert _classify_endpoint("http://[fd00::1]:8080") == "private_network"
+        assert _classify_endpoint("http://[fd12:3456:789a::1]") == "private_network"
+        assert _classify_endpoint("http://[fc00::1]") == "private_network"
+        assert _classify_endpoint("http://[fe80::1]") == "private_network"
+
+    def test_public_ipv6(self):
+        assert _classify_endpoint("http://[2001:4860:4860::8888]") == "remote"
+        assert _classify_endpoint("http://[2606:4700:4700::1111]") == "remote"
+
+    def test_ipv6_loopback_and_unspecified(self):
+        # ::1 is loopback (localhost). :: is IN6ADDR_ANY (bind-all); Python's
+        # stdlib classifies :: as unspecified (which is_loopback=False but
+        # also not is_private). Most clients bind to :: in the same semantic
+        # as 0.0.0.0, so treat it as localhost for SDK endpoint classification.
+        assert _classify_endpoint("http://[::1]") == "localhost"
+
     def test_private_network_hostnames(self):
         assert _classify_endpoint("http://agent.internal") == "private_network"
         assert _classify_endpoint("http://agent.local") == "private_network"
