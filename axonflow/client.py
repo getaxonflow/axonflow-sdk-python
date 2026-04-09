@@ -358,16 +358,17 @@ class AxonFlow:
 
             As of v1.0.0, all routes go through a single endpoint (Single Entry Point Architecture).
         """
-        # Support AXONFLOW_AGENT_URL env var for backwards compatibility
-        resolved_endpoint = endpoint or os.environ.get("AXONFLOW_AGENT_URL")
-        if not resolved_endpoint:
-            msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
-            raise TypeError(msg)
-
+        # Try mode: auto-connect to try.getaxonflow.com (must be checked before endpoint validation)
         if os.environ.get("AXONFLOW_TRY") == "1":
             resolved_endpoint = "https://try.getaxonflow.com"
             if not client_id:
                 msg = "client_id is required in try mode (AXONFLOW_TRY=1)"
+                raise TypeError(msg)
+        else:
+            # Support AXONFLOW_AGENT_URL env var for backwards compatibility
+            resolved_endpoint = endpoint or os.environ.get("AXONFLOW_AGENT_URL")
+            if not resolved_endpoint:
+                msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
                 raise TypeError(msg)
 
         if isinstance(mode, str):
