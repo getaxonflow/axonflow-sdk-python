@@ -366,7 +366,7 @@ class AxonFlow:
                 raise TypeError(msg)
         else:
             # Support AXONFLOW_AGENT_URL env var for backwards compatibility
-            resolved_endpoint = endpoint or os.environ.get("AXONFLOW_AGENT_URL")
+            resolved_endpoint = endpoint or os.environ.get("AXONFLOW_AGENT_URL") or ""
             if not resolved_endpoint:
                 msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
                 raise TypeError(msg)
