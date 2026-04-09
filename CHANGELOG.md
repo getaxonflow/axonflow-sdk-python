@@ -5,10 +5,12 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [6.3.0] - Release Pending (2026-04-09)
+## [6.3.0] - Unreleased
 
 ### Added
-
+- `AXONFLOW_TRY=1` environment variable to connect to `try.getaxonflow.com` shared evaluation server
+- `register_try()` helper in `axonflow.community` for self-registering a tenant
+- Checkpoint telemetry reports `endpoint_type: "community-saas"` when try mode is active
 - **Explicit IPv6 + RFC1918 boundary test coverage.** The v6.2.0 test suite relied on Python stdlib `ipaddress.is_private` for correctness and didn't assert the behavior explicitly. New cases cover:
   - `172.15.0.1` and `172.32.0.1` must be `remote` (RFC1918 boundary)
   - `172.16.0.0` and `172.31.255.255` must be `private_network`
@@ -17,7 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Public IPv6 (`2001:4860:4860::8888`, `2606:4700:4700::1111`) → `remote`
   - IPv6 loopback `::1` → `localhost`
 
-No runtime behavior change — Python's stdlib classifier was already correct for all these cases. The added tests are cross-SDK parity with TS/Java/Go.
+No runtime behavior change for the IPv6 cases — Python's stdlib classifier was already correct for all these cases. The added tests are cross-SDK parity with TS/Java/Go.
+
+### Changed
+- Renamed `AXONFLOW_DEMO` to `AXONFLOW_TRY` (demo mode → try mode)
+- Removed client-side random suffix from client_id (server generates UUID tenant_id)
 
 ---
 

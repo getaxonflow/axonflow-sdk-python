@@ -87,6 +87,7 @@ def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
     """Classify the configured AxonFlow endpoint for analytics (#1525).
 
     Returns one of:
+        ``"community-saas"``    — try.getaxonflow.com shared evaluation server
         ``"localhost"``         — localhost, 127.0.0.1, ::1, 0.0.0.0, ``*.localhost``
         ``"private_network"``   — RFC1918 ranges, link-local, ``*.local``,
                                   ``*.internal``, ``*.lan``, ``*.intranet``
@@ -95,6 +96,8 @@ def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
 
     The raw URL is never sent — only the classification. See issue #1525.
     """
+    if os.environ.get("AXONFLOW_TRY") == "1":
+        return "community-saas"
     if not url:
         return "unknown"
     try:

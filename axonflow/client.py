@@ -32,7 +32,6 @@ import json
 import logging
 import os
 import re
-import secrets
 from collections.abc import AsyncIterator, Coroutine, Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -365,12 +364,11 @@ class AxonFlow:
             msg = "endpoint is required (or set AXONFLOW_AGENT_URL environment variable)"
             raise TypeError(msg)
 
-        if os.environ.get("AXONFLOW_DEMO") == "1":
-            resolved_endpoint = "https://demo.getaxonflow.com"
+        if os.environ.get("AXONFLOW_TRY") == "1":
+            resolved_endpoint = "https://try.getaxonflow.com"
             if not client_id:
-                msg = "client_id is required in demo mode (AXONFLOW_DEMO=1)"
+                msg = "client_id is required in try mode (AXONFLOW_TRY=1)"
                 raise TypeError(msg)
-            client_id = f"{client_id}-{secrets.token_hex(3)}"
 
         if isinstance(mode, str):
             mode = Mode(mode)
