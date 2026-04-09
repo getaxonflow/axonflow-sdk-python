@@ -5,7 +5,7 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [6.3.0] - Unreleased
+## [6.3.0] - 2026-04-09
 
 ### Added
 - `AXONFLOW_TRY=1` environment variable to connect to `try.getaxonflow.com` shared evaluation server
