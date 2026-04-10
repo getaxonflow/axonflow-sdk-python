@@ -62,6 +62,23 @@ Concurrent executions applies to MAP and WCP executions per tenant. Pending exec
 
 [Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
 
+## Try Without Installing
+
+Skip local setup entirely — try AxonFlow instantly at [**try.getaxonflow.com**](https://docs.getaxonflow.com/docs/deployment/community-saas):
+
+```bash
+# 1. Register (30 seconds)
+curl -X POST https://try.getaxonflow.com/api/v1/register \
+  -H "Content-Type: application/json" -d '{"label":"my-trial"}'
+
+# 2. Set credentials and auto-connect
+export AXONFLOW_TRY=1
+export AXONFLOW_CLIENT_ID=cs_your-tenant-id
+export AXONFLOW_CLIENT_SECRET=your-secret
+```
+
+No Docker, no license, no installation. Rate-limited to 20 req/min. [Learn more](https://docs.getaxonflow.com/docs/deployment/community-saas).
+
 ## Quick Start
 
 ### Async Usage (Recommended)
