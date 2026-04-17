@@ -8,7 +8,6 @@ a major version bump.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -17,20 +16,20 @@ class ExplainPolicy(BaseModel):
     """A policy reference inside a decision explanation."""
 
     policy_id: str
-    policy_name: Optional[str] = None
-    action: Optional[str] = None
-    risk_level: Optional[str] = None  # low | medium | high | critical
+    policy_name: str | None = None
+    action: str | None = None
+    risk_level: str | None = None  # low | medium | high | critical
     allow_override: bool = False
-    policy_description: Optional[str] = None
+    policy_description: str | None = None
 
 
 class ExplainRule(BaseModel):
     """Rule-level detail inside a decision explanation."""
 
     policy_id: str
-    rule_id: Optional[str] = None
-    rule_text: Optional[str] = None
-    matched_on: Optional[str] = None
+    rule_id: str | None = None
+    rule_text: str | None = None
+    matched_on: str | None = None
 
 
 class DecisionExplanation(BaseModel):
@@ -60,13 +59,13 @@ class DecisionExplanation(BaseModel):
 
     decision_id: str
     timestamp: datetime
-    policy_matches: List[ExplainPolicy] = Field(default_factory=list)
-    matched_rules: Optional[List[ExplainRule]] = None
+    policy_matches: list[ExplainPolicy] = Field(default_factory=list)
+    matched_rules: list[ExplainRule] | None = None
     decision: str  # allow | deny | require_approval
     reason: str = ""
-    risk_level: Optional[str] = None
+    risk_level: str | None = None
     override_available: bool = False
-    override_existing_id: Optional[str] = None
+    override_existing_id: str | None = None
     historical_hit_count_session: int = 0
-    policy_source_link: Optional[str] = None
-    tool_signature: Optional[str] = None
+    policy_source_link: str | None = None
+    tool_signature: str | None = None

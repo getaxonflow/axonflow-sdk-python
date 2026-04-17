@@ -112,7 +112,9 @@ class TestClientExplainDecision:
 
         captured_args: list[tuple[str, str]] = []
 
-        async def fake_request(self: AxonFlow, method: str, path: str, **kwargs: object) -> dict[str, object]:
+        async def fake_request(
+            self: AxonFlow, method: str, path: str, **kwargs: object
+        ) -> dict[str, object]:
             captured_args.append((method, path))
             return {
                 "decision_id": "dec-1",
@@ -141,7 +143,9 @@ class TestClientExplainDecision:
 
         captured_paths: list[str] = []
 
-        async def fake_request(self: AxonFlow, method: str, path: str, **kwargs: object) -> dict[str, object]:
+        async def fake_request(
+            self: AxonFlow, method: str, path: str, **kwargs: object
+        ) -> dict[str, object]:
             captured_paths.append(path)
             return {
                 "decision_id": "a/b",
