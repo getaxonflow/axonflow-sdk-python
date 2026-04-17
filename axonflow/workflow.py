@@ -180,6 +180,41 @@ class StepGateResponse(BaseModel):
         return self.decision == GateDecision.REQUIRE_APPROVAL
 
 
+class Checkpoint(BaseModel):
+    """A governance-aware resume boundary at a step-gate evaluation."""
+
+    id: int = Field(..., description="Database identifier")
+    workflow_id: str = Field(..., description="Workflow this checkpoint belongs to")
+    step_id: str = Field(..., description="Step this checkpoint was created at")
+    step_index: int = Field(..., description="Position of the step in the workflow")
+    step_type: str | None = Field(default=None, description="Type of step")
+    checkpoint_type: str = Field(..., description="Classification: step_gate or approval_boundary")
+    gate_decision: str = Field(..., description="Decision at this checkpoint")
+    gate_reason: str | None = Field(default=None, description="Reason for the decision")
+    is_resumable: bool = Field(default=True, description="Whether the workflow can resume from here")
+    resume_count: int = Field(default=0, description="How many times resumed from this checkpoint")
+    created_at: str = Field(..., description="When the checkpoint was created")
+
+
+class CheckpointListResponse(BaseModel):
+    """Response from listing checkpoints."""
+
+    checkpoints: list[Checkpoint] = Field(default_factory=list)
+    workflow_id: str = Field(...)
+
+
+class ResumeFromCheckpointResponse(BaseModel):
+    """Response after resuming from a checkpoint."""
+
+    workflow_id: str = Field(...)
+    resumed_from_checkpoint: str = Field(..., description="step_id of the checkpoint")
+    resumed_from_index: int = Field(...)
+    new_decision: str = Field(...)
+    decision_source: str = Field(default="fresh")
+    resume_count: int = Field(...)
+    message: str = Field(...)
+
+
 class WorkflowStepInfo(BaseModel):
     """Information about a workflow step."""
 
