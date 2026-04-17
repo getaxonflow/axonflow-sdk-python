@@ -3980,6 +3980,8 @@ class AxonFlow:
             if request.tool_context.tool_type is not None:
                 tc["tool_type"] = request.tool_context.tool_type
             body["tool_context"] = tc
+        if request.retry_policy is not None:
+            body["retry_policy"] = request.retry_policy.value
 
         if self._config.debug:
             self._logger.debug(
@@ -4006,6 +4008,8 @@ class AxonFlow:
             approval_url=response.get("approval_url"),
             policies_evaluated=response.get("policies_evaluated"),
             policies_matched=response.get("policies_matched"),
+            cached=response.get("cached", False),
+            decision_source=response.get("decision_source"),
         )
 
     async def mark_step_completed(
