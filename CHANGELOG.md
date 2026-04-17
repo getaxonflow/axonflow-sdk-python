@@ -5,6 +5,27 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.0] - 2026-04-18
+
+### Added
+
+- **Execution boundary semantics** — `RetryPolicy` enum with `IDEMPOTENT`
+  (default) and `REEVALUATE` values. Step gate requests accept `retry_policy`
+  to control cached vs fresh evaluation behavior.
+- **Step gate response metadata** — `cached` (bool) and `decision_source`
+  (str) fields on `StepGateResponse` indicate decision provenance.
+- **Workflow checkpoints** — `get_checkpoints(workflow_id)` lists step-gate
+  checkpoints. `resume_from_checkpoint(workflow_id, checkpoint_id)` resumes
+  from a specific checkpoint with fresh policy evaluation (Enterprise).
+- **Checkpoint types** — `Checkpoint`, `CheckpointListResponse`, and
+  `ResumeFromCheckpointResponse` models.
+
+### Fixed
+
+- `step_gate()` now correctly passes `retry_policy` in the request body
+  and populates `cached`/`decision_source` in the response. Previously
+  these fields were defined on the model but not wired through the client.
+
 ## [6.3.0] - 2026-04-09
 
 ### Added

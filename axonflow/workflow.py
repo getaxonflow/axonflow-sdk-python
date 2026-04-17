@@ -106,7 +106,7 @@ class ToolContext(BaseModel):
 
 
 class RetryPolicy(str, Enum):
-    """Controls how step gate decisions behave on repeated calls for the same (workflow_id, step_id)."""
+    """Controls step gate retry behavior for the same (workflow_id, step_id)."""
 
     IDEMPOTENT = "idempotent"
     """Return cached decision if the step was already evaluated (default)."""
@@ -191,7 +191,9 @@ class Checkpoint(BaseModel):
     checkpoint_type: str = Field(..., description="Classification: step_gate or approval_boundary")
     gate_decision: str = Field(..., description="Decision at this checkpoint")
     gate_reason: str | None = Field(default=None, description="Reason for the decision")
-    is_resumable: bool = Field(default=True, description="Whether the workflow can resume from here")
+    is_resumable: bool = Field(
+        default=True, description="Whether the workflow can resume from here"
+    )
     resume_count: int = Field(default=0, description="How many times resumed from this checkpoint")
     created_at: str = Field(..., description="When the checkpoint was created")
 
