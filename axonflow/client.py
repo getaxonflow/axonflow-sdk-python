@@ -196,7 +196,6 @@ from axonflow.types import (
 from axonflow.workflow import (
     ApprovalStatus,
     ApproveStepResponse,
-    Checkpoint,
     CheckpointListResponse,
     CreateWorkflowRequest,
     CreateWorkflowResponse,
