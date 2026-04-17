@@ -123,6 +123,7 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.telemetry import send_telemetry_ping
+from axonflow.decisions import DecisionExplanation
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,
@@ -2278,6 +2279,12 @@ class AxonFlow:
             body["end_time"] = request.end_time.isoformat()
         if request.request_type:
             body["request_type"] = request.request_type
+        if request.decision_id:
+            body["decision_id"] = request.decision_id
+        if request.policy_name:
+            body["policy_name"] = request.policy_name
+        if request.override_id:
+            body["override_id"] = request.override_id
         if request.offset > 0:
             body["offset"] = request.offset
 
@@ -2316,6 +2323,45 @@ class AxonFlow:
             limit=response.get("limit", request.limit),
             offset=response.get("offset", request.offset),
         )
+
+    async def explain_decision(self, decision_id: str) -> DecisionExplanation:
+        """Fetch the full explanation for a previously-made policy decision.
+
+        Implements ADR-043. Calls ``GET /api/v1/decisions/:id/explain`` and
+        returns a :class:`DecisionExplanation` with matched policies, risk
+        level, override availability, and a rolling-24h session hit count.
+
+        The caller must either own the decision (user_email match) or belong
+        to the same tenant as the decision's originator.
+
+        Args:
+            decision_id: The global decision identifier returned in the
+                original step gate or policy evaluation response.
+
+        Returns:
+            A DecisionExplanation (frozen shape per ADR-043).
+
+        Raises:
+            ValueError: If ``decision_id`` is empty.
+
+        Example:
+            >>> exp = await client.explain_decision("dec_wf123_step4")
+            >>> if exp.override_available:
+            ...     # offer the user a governed override action
+            ...     pass
+        """
+        if not decision_id:
+            msg = "decision_id is required"
+            raise ValueError(msg)
+
+        response = await self._orchestrator_request(
+            "GET",
+            f"/api/v1/decisions/{decision_id}/explain",
+        )
+
+        if not isinstance(response, dict):
+            response = {}
+        return DecisionExplanation.model_validate(response)
 
     async def get_audit_logs_by_tenant(
         self,

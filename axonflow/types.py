@@ -630,6 +630,11 @@ class AuditSearchRequest(BaseModel):
     start_time: datetime | None = Field(default=None, description="Start of time range")
     end_time: datetime | None = Field(default=None, description="End of time range")
     request_type: str | None = Field(default=None, description="Filter by request type")
+    # ADR-043: explainability + audit cross-reference filters.
+    decision_id: str | None = Field(default=None, description="Filter by decision ID")
+    policy_name: str | None = Field(default=None, description="Filter by matched policy name")
+    # ADR-042: override lifecycle reconstruction.
+    override_id: str | None = Field(default=None, description="Filter by session-override ID")
     limit: int = Field(default=100, ge=1, le=1000, description="Max results")
     offset: int = Field(default=0, ge=0, description="Pagination offset")
 
