@@ -4169,6 +4169,30 @@ class AxonFlow:
             raise TypeError(msg)
         return CheckpointListResponse(**response)
 
+    async def resume_from_last_checkpoint(
+        self,
+        workflow_id: str,
+    ) -> ResumeFromCheckpointResponse:
+        """Resume a workflow from its last resumable checkpoint.
+
+        Evaluation+ tier. Re-evaluates with current policies.
+
+        Args:
+            workflow_id: Workflow ID
+
+        Returns:
+            Resume result with fresh decision
+        """
+        response = await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/checkpoints/resume",
+            json_data={},
+        )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from resume checkpoint"
+            raise TypeError(msg)
+        return ResumeFromCheckpointResponse(**response)
+
     async def resume_from_checkpoint(
         self,
         workflow_id: str,
