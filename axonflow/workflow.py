@@ -105,6 +105,15 @@ class ToolContext(BaseModel):
     tool_input: dict[str, Any] = Field(default_factory=dict)
 
 
+class RetryPolicy(str, Enum):
+    """Controls how step gate decisions behave on repeated calls for the same (workflow_id, step_id)."""
+
+    IDEMPOTENT = "idempotent"
+    """Return cached decision if the step was already evaluated (default)."""
+    REEVALUATE = "reevaluate"
+    """Force fresh policy evaluation regardless of prior decision."""
+
+
 class StepGateRequest(BaseModel):
     """Request to check if a step is allowed to proceed."""
 
@@ -118,6 +127,11 @@ class StepGateRequest(BaseModel):
     model: str | None = Field(default=None, description="LLM model being used (if applicable)")
     provider: str | None = Field(default=None, description="LLM provider (if applicable)")
     tool_context: ToolContext | None = None
+    retry_policy: RetryPolicy | None = Field(
+        default=None,
+        description='Retry behavior: "idempotent" (default) returns cached decision, '
+        '"reevaluate" forces fresh evaluation',
+    )
 
 
 class StepGateResponse(BaseModel):
@@ -143,6 +157,14 @@ class StepGateResponse(BaseModel):
     policies_matched: list[PolicyMatch] | None = Field(
         default=None,
         description="List of policies that matched and influenced the decision (Issue #1019)",
+    )
+    cached: bool = Field(
+        default=False,
+        description="Whether this response was served from a prior decision",
+    )
+    decision_source: str | None = Field(
+        default=None,
+        description='How the decision was produced: "fresh" or "cached"',
     )
 
     def is_allowed(self) -> bool:
