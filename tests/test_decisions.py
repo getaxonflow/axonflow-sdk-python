@@ -134,6 +134,33 @@ class TestClientExplainDecision:
         assert captured_args == [("GET", "/api/v1/decisions/dec-1/explain")]
 
     @pytest.mark.asyncio
+    async def test_url_encodes_decision_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from axonflow.client import AxonFlow
+
+        client = AxonFlow(endpoint="http://localhost:8080")
+
+        captured_paths: list[str] = []
+
+        async def fake_request(self: AxonFlow, method: str, path: str, **kwargs: object) -> dict[str, object]:
+            captured_paths.append(path)
+            return {
+                "decision_id": "a/b",
+                "timestamp": "2026-04-17T12:00:00Z",
+                "decision": "allow",
+                "reason": "",
+                "policy_matches": [],
+                "override_available": False,
+                "historical_hit_count_session": 0,
+            }
+
+        monkeypatch.setattr(AxonFlow, "_orchestrator_request", fake_request)
+
+        await client.explain_decision("a/b")
+        assert len(captured_paths) == 1
+        assert "a%2Fb" in captured_paths[0]
+        assert "a/b/explain" not in captured_paths[0]
+
+    @pytest.mark.asyncio
     async def test_handles_empty_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from axonflow.client import AxonFlow
 

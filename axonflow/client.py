@@ -2354,9 +2354,14 @@ class AxonFlow:
             msg = "decision_id is required"
             raise ValueError(msg)
 
+        # Path-escape the decision ID. ADR-043 doesn't constrain the
+        # identifier format — IDs containing "/" or "?" would break the URL.
+        from urllib.parse import quote
+        encoded = quote(decision_id, safe="")
+
         response = await self._orchestrator_request(
             "GET",
-            f"/api/v1/decisions/{decision_id}/explain",
+            f"/api/v1/decisions/{encoded}/explain",
         )
 
         if not isinstance(response, dict):
