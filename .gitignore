@@ -97,3 +97,4 @@ WEEK_[0-9]*.md
 *_COMPLETE.md
 
 .codex/
+.worktrees/

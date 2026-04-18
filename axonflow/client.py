@@ -196,6 +196,7 @@ from axonflow.types import (
 from axonflow.workflow import (
     ApprovalStatus,
     ApproveStepResponse,
+    CheckpointListResponse,
     CreateWorkflowRequest,
     CreateWorkflowResponse,
     GateDecision,
@@ -205,6 +206,7 @@ from axonflow.workflow import (
     PendingApproval,
     PendingApprovalsResponse,
     RejectStepResponse,
+    ResumeFromCheckpointResponse,
     StepGateRequest,
     StepGateResponse,
     StepType,
@@ -3980,6 +3982,8 @@ class AxonFlow:
             if request.tool_context.tool_type is not None:
                 tc["tool_type"] = request.tool_context.tool_type
             body["tool_context"] = tc
+        if request.retry_policy is not None:
+            body["retry_policy"] = request.retry_policy.value
 
         if self._config.debug:
             self._logger.debug(
@@ -4006,6 +4010,8 @@ class AxonFlow:
             approval_url=response.get("approval_url"),
             policies_evaluated=response.get("policies_evaluated"),
             policies_matched=response.get("policies_matched"),
+            cached=response.get("cached", False),
+            decision_source=response.get("decision_source"),
         )
 
     async def mark_step_completed(
@@ -4135,6 +4141,87 @@ class AxonFlow:
 
         if self._config.debug:
             self._logger.debug("Workflow resumed", workflow_id=workflow_id)
+
+    async def get_checkpoints(self, workflow_id: str) -> CheckpointListResponse:
+        """List all step-gate checkpoints for a workflow.
+
+        Checkpoints are created automatically at each step gate evaluation.
+        Available in all tiers.
+
+        Args:
+            workflow_id: Workflow ID
+
+        Returns:
+            List of checkpoints ordered by step index
+
+        Example:
+            >>> checkpoints = await client.get_checkpoints("wf_123")
+            >>> for cp in checkpoints.checkpoints:
+            ...     print(f"{cp.step_id}: {cp.gate_decision} (resumable={cp.is_resumable})")
+        """
+        response = await self._orchestrator_request(
+            "GET",
+            f"/api/v1/workflows/{workflow_id}/checkpoints",
+        )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from get checkpoints"
+            raise TypeError(msg)
+        return CheckpointListResponse(**response)
+
+    async def resume_from_last_checkpoint(
+        self,
+        workflow_id: str,
+    ) -> ResumeFromCheckpointResponse:
+        """Resume a workflow from its last resumable checkpoint.
+
+        Evaluation+ tier. Re-evaluates with current policies.
+
+        Args:
+            workflow_id: Workflow ID
+
+        Returns:
+            Resume result with fresh decision
+        """
+        response = await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/checkpoints/resume",
+            json_data={},
+        )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from resume checkpoint"
+            raise TypeError(msg)
+        return ResumeFromCheckpointResponse(**response)
+
+    async def resume_from_checkpoint(
+        self,
+        workflow_id: str,
+        checkpoint_id: int,
+    ) -> ResumeFromCheckpointResponse:
+        """Resume a workflow from a specific checkpoint with fresh policy evaluation.
+
+        Enterprise only. The step gate at the checkpoint boundary is re-evaluated
+        with current policies.
+
+        Args:
+            workflow_id: Workflow ID
+            checkpoint_id: Checkpoint database ID
+
+        Returns:
+            Resume result with fresh decision
+
+        Example:
+            >>> result = await client.resume_from_checkpoint("wf_123", 42)
+            >>> print(f"New decision: {result.new_decision}")
+        """
+        response = await self._orchestrator_request(
+            "POST",
+            f"/api/v1/workflows/{workflow_id}/checkpoints/{checkpoint_id}/resume",
+            json_data={},
+        )
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from resume checkpoint"
+            raise TypeError(msg)
+        return ResumeFromCheckpointResponse(**response)
 
     async def list_workflows(
         self,

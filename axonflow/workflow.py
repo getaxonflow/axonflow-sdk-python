@@ -105,6 +105,15 @@ class ToolContext(BaseModel):
     tool_input: dict[str, Any] = Field(default_factory=dict)
 
 
+class RetryPolicy(str, Enum):
+    """Controls step gate retry behavior for the same (workflow_id, step_id)."""
+
+    IDEMPOTENT = "idempotent"
+    """Return cached decision if the step was already evaluated (default)."""
+    REEVALUATE = "reevaluate"
+    """Force fresh policy evaluation regardless of prior decision."""
+
+
 class StepGateRequest(BaseModel):
     """Request to check if a step is allowed to proceed."""
 
@@ -118,6 +127,11 @@ class StepGateRequest(BaseModel):
     model: str | None = Field(default=None, description="LLM model being used (if applicable)")
     provider: str | None = Field(default=None, description="LLM provider (if applicable)")
     tool_context: ToolContext | None = None
+    retry_policy: RetryPolicy | None = Field(
+        default=None,
+        description='Retry behavior: "idempotent" (default) returns cached decision, '
+        '"reevaluate" forces fresh evaluation',
+    )
 
 
 class StepGateResponse(BaseModel):
@@ -144,6 +158,14 @@ class StepGateResponse(BaseModel):
         default=None,
         description="List of policies that matched and influenced the decision (Issue #1019)",
     )
+    cached: bool = Field(
+        default=False,
+        description="Whether this response was served from a prior decision",
+    )
+    decision_source: str | None = Field(
+        default=None,
+        description='How the decision was produced: "fresh" or "cached"',
+    )
 
     def is_allowed(self) -> bool:
         """Check if the step is allowed to proceed."""
@@ -156,6 +178,43 @@ class StepGateResponse(BaseModel):
     def requires_approval(self) -> bool:
         """Check if the step requires human approval."""
         return self.decision == GateDecision.REQUIRE_APPROVAL
+
+
+class Checkpoint(BaseModel):
+    """A governance-aware resume boundary at a step-gate evaluation."""
+
+    id: int = Field(..., description="Database identifier")
+    workflow_id: str = Field(..., description="Workflow this checkpoint belongs to")
+    step_id: str = Field(..., description="Step this checkpoint was created at")
+    step_index: int = Field(..., description="Position of the step in the workflow")
+    step_type: str | None = Field(default=None, description="Type of step")
+    checkpoint_type: str = Field(..., description="Classification: step_gate or approval_boundary")
+    gate_decision: str = Field(..., description="Decision at this checkpoint")
+    gate_reason: str | None = Field(default=None, description="Reason for the decision")
+    is_resumable: bool = Field(
+        default=True, description="Whether the workflow can resume from here"
+    )
+    resume_count: int = Field(default=0, description="How many times resumed from this checkpoint")
+    created_at: str = Field(..., description="When the checkpoint was created")
+
+
+class CheckpointListResponse(BaseModel):
+    """Response from listing checkpoints."""
+
+    checkpoints: list[Checkpoint] = Field(default_factory=list)
+    workflow_id: str = Field(...)
+
+
+class ResumeFromCheckpointResponse(BaseModel):
+    """Response after resuming from a checkpoint."""
+
+    workflow_id: str = Field(...)
+    resumed_from_checkpoint: str = Field(..., description="step_id of the checkpoint")
+    resumed_from_index: int = Field(...)
+    new_decision: str = Field(...)
+    decision_source: str = Field(default="fresh")
+    resume_count: int = Field(...)
+    message: str = Field(...)
 
 
 class WorkflowStepInfo(BaseModel):
