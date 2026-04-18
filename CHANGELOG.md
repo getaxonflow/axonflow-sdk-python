@@ -5,33 +5,6 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [6.5.0] - 2026-04-18
-
-### Added
-
-- **`AxonFlow.explain_decision(decision_id)`** — fetches the full explanation for a
-  previously-made policy decision via `GET /api/v1/decisions/:id/explain`.
-  Returns a `DecisionExplanation` with matched policies, risk level, reason,
-  override availability, existing override ID (if any), and a rolling-24h
-  session hit count for the matched rule. Shape is frozen; additive-only
-  fields ensure forward compatibility.
-- **`DecisionExplanation`, `ExplainPolicy`, `ExplainRule`** — new Pydantic
-  models exported from `axonflow.decisions`.
-- **`AuditSearchRequest.decision_id`, `policy_name`, `override_id`** — three
-  new optional filter fields on `search_audit_logs`. Use `decision_id` to
-  gather every record tied to one decision; `policy_name` to find everything
-  matched by a specific policy; `override_id` to reconstruct an override's
-  full lifecycle.
-
-### Compatibility
-
-Companion to platform v7.1.0. Back-compatible — extra filters pass through
-when unset; server-side filtering only happens on v7.1.0+ platforms. The
-`DecisionExplanation` model accepts additive future fields via Pydantic's
-default extra-fields-ignore behavior.
-
----
-
 ## [6.4.0] - 2026-04-18
 
 ### Added
@@ -46,12 +19,34 @@ default extra-fields-ignore behavior.
   from a specific checkpoint with fresh policy evaluation (Enterprise).
 - **Checkpoint types** — `Checkpoint`, `CheckpointListResponse`, and
   `ResumeFromCheckpointResponse` models.
+- **`AxonFlow.explain_decision(decision_id)`** — fetches the full explanation for a
+  previously-made policy decision via `GET /api/v1/decisions/:id/explain`.
+  Returns a `DecisionExplanation` with matched policies, risk level, reason,
+  override availability, existing override ID (if any), and a rolling-24h
+  session hit count for the matched rule. Shape is frozen; additive-only
+  fields ensure forward compatibility.
+- **`DecisionExplanation`, `ExplainPolicy`, `ExplainRule`** — new Pydantic
+  models exported from `axonflow.decisions`.
+- **`AuditSearchRequest.decision_id`, `policy_name`, `override_id`** — three
+  new optional filter fields on `search_audit_logs`. Use `decision_id` to
+  gather every record tied to one decision; `policy_name` to find everything
+  matched by a specific policy; `override_id` to reconstruct an override's
+  full lifecycle.
 
 ### Fixed
 
 - `step_gate()` now correctly passes `retry_policy` in the request body
   and populates `cached`/`decision_source` in the response. Previously
   these fields were defined on the model but not wired through the client.
+
+### Compatibility
+
+Companion to platform v7.1.0. Works against plugin releases (OpenClaw v1.3.0+,
+Claude Code v0.5.0+, Cursor v0.5.0+, Codex v0.4.0+) that surface the
+`DecisionExplanation` shape. Audit filter fields pass through when unset;
+server-side filtering activates on v7.1.0+ platforms. The `DecisionExplanation`
+model accepts additive future fields via Pydantic's default extra-fields-ignore
+behavior.
 
 ## [6.3.0] - 2026-04-09
 
