@@ -47,6 +47,8 @@ if TYPE_CHECKING:
         RegistrySummary,
     )
 
+from urllib.parse import quote
+
 import httpx
 import structlog
 from cachetools import TTLCache
@@ -75,6 +77,7 @@ from axonflow.code_governance import (
     ValidateGitProviderRequest,
     ValidateGitProviderResponse,
 )
+from axonflow.decisions import DecisionExplanation
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
@@ -295,6 +298,35 @@ class HealthResponse:
     def has_capability(self, name: str) -> bool:
         """Check if the platform supports a named capability."""
         return any(c.name == name for c in self.capabilities)
+
+
+def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
+    """Build the POST /api/v1/audit/search body from an AuditSearchRequest.
+
+    Extracted from ``AxonFlow.search_audit_logs`` to keep that method under
+    the branch-count lint threshold. Only non-empty / non-default fields are
+    emitted — the wire contract is "omit fields you don't care about".
+    """
+    body: dict[str, Any] = {"limit": request.limit}
+    if request.user_email:
+        body["user_email"] = request.user_email
+    if request.client_id:
+        body["client_id"] = request.client_id
+    if request.start_time:
+        body["start_time"] = request.start_time.isoformat()
+    if request.end_time:
+        body["end_time"] = request.end_time.isoformat()
+    if request.request_type:
+        body["request_type"] = request.request_type
+    if request.decision_id:
+        body["decision_id"] = request.decision_id
+    if request.policy_name:
+        body["policy_name"] = request.policy_name
+    if request.override_id:
+        body["override_id"] = request.override_id
+    if request.offset > 0:
+        body["offset"] = request.offset
+    return body
 
 
 class AxonFlow:
@@ -2266,20 +2298,7 @@ class AxonFlow:
         if request is None:
             request = AuditSearchRequest()
 
-        # Build request body with only non-None values
-        body: dict[str, Any] = {"limit": request.limit}
-        if request.user_email:
-            body["user_email"] = request.user_email
-        if request.client_id:
-            body["client_id"] = request.client_id
-        if request.start_time:
-            body["start_time"] = request.start_time.isoformat()
-        if request.end_time:
-            body["end_time"] = request.end_time.isoformat()
-        if request.request_type:
-            body["request_type"] = request.request_type
-        if request.offset > 0:
-            body["offset"] = request.offset
+        body = _build_audit_search_body(request)
 
         if self._config.debug:
             self._logger.debug(
@@ -2316,6 +2335,49 @@ class AxonFlow:
             limit=response.get("limit", request.limit),
             offset=response.get("offset", request.offset),
         )
+
+    async def explain_decision(self, decision_id: str) -> DecisionExplanation:
+        """Fetch the full explanation for a previously-made policy decision.
+
+        Implements ADR-043. Calls ``GET /api/v1/decisions/:id/explain`` and
+        returns a :class:`DecisionExplanation` with matched policies, risk
+        level, override availability, and a rolling-24h session hit count.
+
+        The caller must either own the decision (user_email match) or belong
+        to the same tenant as the decision's originator.
+
+        Args:
+            decision_id: The global decision identifier returned in the
+                original step gate or policy evaluation response.
+
+        Returns:
+            A DecisionExplanation (frozen shape per ADR-043).
+
+        Raises:
+            ValueError: If ``decision_id`` is empty.
+
+        Example:
+            >>> exp = await client.explain_decision("dec_wf123_step4")
+            >>> if exp.override_available:
+            ...     # offer the user a governed override action
+            ...     pass
+        """
+        if not decision_id:
+            msg = "decision_id is required"
+            raise ValueError(msg)
+
+        # Path-escape the decision ID. The data contract doesn't constrain
+        # the identifier format — IDs containing "/" or "?" would break the URL.
+        encoded = quote(decision_id, safe="")
+
+        response = await self._orchestrator_request(
+            "GET",
+            f"/api/v1/decisions/{encoded}/explain",
+        )
+
+        if not isinstance(response, dict):
+            response = {}
+        return DecisionExplanation.model_validate(response)
 
     async def get_audit_logs_by_tenant(
         self,
