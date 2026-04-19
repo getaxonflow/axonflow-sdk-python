@@ -12,7 +12,46 @@ env:
   DO_NOT_TRACK: '1'
 
 jobs:
+  # Preflight: validate CHANGELOG has a section for the tag being released
+  # BEFORE any publish step runs. A missing section fails the entire
+  # workflow cleanly rather than publishing to PyPI first and then failing
+  # at the GitHub release step.
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract CHANGELOG section
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          awk -v ver="$VERSION" '$0 ~ "^## \\["ver"\\]" {p=1; next} p && /^## \[/ {exit} p {print}' CHANGELOG.md > /tmp/release-body.md
+          if [ ! -s /tmp/release-body.md ]; then
+            echo "::error::No CHANGELOG.md section found for version $VERSION — refusing to publish."
+            echo "::error::Add a '## [$VERSION] - YYYY-MM-DD' section to CHANGELOG.md and re-tag."
+            exit 1
+          fi
+          {
+            echo "## AxonFlow Python SDK v${VERSION}"
+            echo ""
+            echo "### Installation"
+            echo ""
+            echo '```bash'
+            echo "pip install axonflow==${VERSION}"
+            echo '```'
+            echo ""
+            cat /tmp/release-body.md
+          } > /tmp/release-body-final.md
+          echo "Release body: $(wc -l < /tmp/release-body-final.md) lines"
+
+      - name: Upload release body artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-body
+          path: /tmp/release-body-final.md
+          retention-days: 1
+
   build:
+    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,36 +113,29 @@ jobs:
           packages-dir: dist/
 
   create-release:
-    needs: publish-pypi
+    needs: [preflight, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
+      - name: Download dist artifacts
         uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
+
+      - name: Download release body artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-body
+          path: /tmp/release-body
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: dist/*
           name: Release ${{ github.ref_name }}
-          body: |
-            ## AxonFlow Python SDK ${{ github.ref_name }}
-
-            ### Installation
-
-            ```bash
-            pip install axonflow
-            ```
-
-            ### Changes
-
-            See [CHANGELOG.md](https://github.com/getaxonflow/axonflow-sdk-python/blob/main/CHANGELOG.md) for full release details.
+          body_path: /tmp/release-body/release-body-final.md
           generate_release_notes: false
 
   verify-publish:
