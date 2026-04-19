@@ -139,7 +139,7 @@ jobs:
           generate_release_notes: false
 
   verify-publish:
-    needs: publish-pypi
+    needs: [preflight, publish-pypi]
     runs-on: ubuntu-latest
     steps:
       - name: Extract version from tag
