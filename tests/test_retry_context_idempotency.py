@@ -284,6 +284,38 @@ async def test_mark_step_completed_409_raises_typed_error(
 
 
 @pytest.mark.asyncio
+async def test_retry_context_accepts_null_idempotency_key(
+    client: AxonFlow, httpx_mock: HTTPXMock
+) -> None:
+    """Contract §3: idempotency_key is `string or null`. Platform returns null when the caller
+    never supplied a key. The SDK model must accept null without failing pydantic validation."""
+    httpx_mock.add_response(
+        url=GATE_URL,
+        json={
+            "decision": "allow",
+            "step_id": "step_1",
+            "retry_context": {
+                "gate_count": 1,
+                "completion_count": 0,
+                "prior_completion_status": "none",
+                "prior_output_available": False,
+                "prior_output": None,
+                "prior_completion_at": None,
+                "first_attempt_at": "2026-04-21T15:30:00.000Z",
+                "last_attempt_at": "2026-04-21T15:30:00.000Z",
+                "last_decision": "allow",
+                "idempotency_key": None,
+            },
+        },
+    )
+    gate = await client.step_gate(
+        "wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL)
+    )
+    assert gate.retry_context is not None
+    assert gate.retry_context.idempotency_key is None
+
+
+@pytest.mark.asyncio
 async def test_step_gate_409_raises_typed_error(
     client: AxonFlow, httpx_mock: HTTPXMock
 ) -> None:

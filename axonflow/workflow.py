@@ -177,11 +177,11 @@ class RetryContext(BaseModel):
             "call's decision."
         ),
     )
-    idempotency_key: str = Field(
-        default="",
+    idempotency_key: str | None = Field(
+        default=None,
         description=(
             "Key the caller set on this step (from the first gate call that supplied one), or "
-            'empty string "" if the caller never supplied one. Once set, immutable.'
+            "None if the caller never supplied one. Once set, immutable."
         ),
     )
 
