@@ -16,7 +16,6 @@ from axonflow.workflow import (
     StepType,
 )
 
-
 GATE_URL = "https://test.axonflow.com/api/v1/workflows/wf_1/steps/step_1/gate"
 COMPLETE_URL = "https://test.axonflow.com/api/v1/workflows/wf_1/steps/step_1/complete"
 
@@ -25,9 +24,7 @@ COMPLETE_URL = "https://test.axonflow.com/api/v1/workflows/wf_1/steps/step_1/com
 
 
 @pytest.mark.asyncio
-async def test_first_call_retry_context_shape(
-    client: AxonFlow, httpx_mock: HTTPXMock
-) -> None:
+async def test_first_call_retry_context_shape(client: AxonFlow, httpx_mock: HTTPXMock) -> None:
     now = "2026-04-21T15:30:45.123Z"
     httpx_mock.add_response(
         url=GATE_URL,
@@ -51,9 +48,7 @@ async def test_first_call_retry_context_shape(
         },
     )
 
-    gate = await client.step_gate(
-        "wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL)
-    )
+    gate = await client.step_gate("wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL))
     rc = gate.retry_context
     assert rc is not None
     assert rc.gate_count == 1
@@ -71,9 +66,7 @@ async def test_first_call_retry_context_shape(
 
 
 @pytest.mark.asyncio
-async def test_second_call_after_completion(
-    client: AxonFlow, httpx_mock: HTTPXMock
-) -> None:
+async def test_second_call_after_completion(client: AxonFlow, httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
         url=GATE_URL,
         json={
@@ -94,9 +87,7 @@ async def test_second_call_after_completion(
         },
     )
 
-    gate = await client.step_gate(
-        "wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL)
-    )
+    gate = await client.step_gate("wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL))
     rc = gate.retry_context
     assert rc is not None
     assert rc.gate_count == 2
@@ -111,9 +102,7 @@ async def test_second_call_after_completion(
 
 
 @pytest.mark.asyncio
-async def test_second_call_without_completion(
-    client: AxonFlow, httpx_mock: HTTPXMock
-) -> None:
+async def test_second_call_without_completion(client: AxonFlow, httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
         url=GATE_URL,
         json={
@@ -134,9 +123,7 @@ async def test_second_call_without_completion(
         },
     )
 
-    gate = await client.step_gate(
-        "wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL)
-    )
+    gate = await client.step_gate("wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL))
     rc = gate.retry_context
     assert rc is not None
     assert rc.gate_count == 2
@@ -185,18 +172,16 @@ async def test_include_prior_output_sends_query_param_and_populates_output(
 
     # Confirm the query param was actually sent
     requests = httpx_mock.get_requests()
-    assert any(
-        "include_prior_output=true" in str(r.url) for r in requests
-    ), f"Expected include_prior_output=true on query string, got {[str(r.url) for r in requests]}"
+    assert any("include_prior_output=true" in str(r.url) for r in requests), (
+        f"Expected include_prior_output=true on query string, got {[str(r.url) for r in requests]}"
+    )
 
 
 # --- Test e: idempotency_key round-trip --------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_idempotency_key_round_trip(
-    client: AxonFlow, httpx_mock: HTTPXMock
-) -> None:
+async def test_idempotency_key_round_trip(client: AxonFlow, httpx_mock: HTTPXMock) -> None:
     key = "payment:wire:acct4471:invoice-7721"
     httpx_mock.add_response(
         url=GATE_URL,
@@ -308,17 +293,13 @@ async def test_retry_context_accepts_null_idempotency_key(
             },
         },
     )
-    gate = await client.step_gate(
-        "wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL)
-    )
+    gate = await client.step_gate("wf_1", "step_1", StepGateRequest(step_type=StepType.LLM_CALL))
     assert gate.retry_context is not None
     assert gate.retry_context.idempotency_key is None
 
 
 @pytest.mark.asyncio
-async def test_step_gate_409_raises_typed_error(
-    client: AxonFlow, httpx_mock: HTTPXMock
-) -> None:
+async def test_step_gate_409_raises_typed_error(client: AxonFlow, httpx_mock: HTTPXMock) -> None:
     httpx_mock.add_response(
         url=GATE_URL,
         status_code=409,

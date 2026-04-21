@@ -210,7 +210,8 @@ class StepGateRequest(BaseModel):
         description=(
             "Caller-supplied opaque business-level key. Once set on the first gate call for a "
             "(workflow_id, step_id), it is immutable — subsequent gate/complete calls must pass "
-            "the same key or raise IdempotencyKeyMismatchError. Echoed on retry_context.idempotency_key."
+            "the same key or raise IdempotencyKeyMismatchError. Echoed on "
+            "retry_context.idempotency_key."
         ),
     )
 
@@ -249,7 +250,7 @@ class StepGateResponse(BaseModel):
     decision_source: str | None = Field(
         default=None,
         description=(
-            '[DEPRECATED] Use retry_context.prior_completion_status instead. '
+            "[DEPRECATED] Use retry_context.prior_completion_status instead. "
             "Will be removed in a future major version."
         ),
     )
