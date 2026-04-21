@@ -148,6 +148,7 @@ ignore = [
 "axonflow/adapters/langchain.py" = ["PLC0415", "A002", "BLE001", "S110", "SIM105"]  # Lazy import of langchain-core; `input` matches LangChain interface; broad except is intentional for non-fatal audit
 "axonflow/adapters/tool_wrapper.py" = ["PLC0415", "A002", "TRY301"]  # Lazy import of langchain-core; `input` matches BaseTool interface; raise in _run_coro_sync try block
 "examples/**/*.py" = ["T201", "ANN", "S106", "ERA001", "BLE001", "PLC0415", "F541"]
+"examples/wcp_retry_idempotency.py" = ["T201", "ANN", "S101", "S106", "ERA001", "BLE001", "PLC0415", "F541", "E501"]  # E2E validation script: bare asserts + long assertion strings are intentional
 "scripts/**/*.py" = ["T201", "ANN", "S106", "BLE001", "UP045", "DTZ005", "PTH123"]
 
 [tool.ruff.lint.isort]

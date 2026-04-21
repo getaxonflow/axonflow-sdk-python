@@ -69,7 +69,11 @@ async def act1(client: AxonFlow) -> None:
     assert_eq("first completion_count", 0, rc.completion_count)
     assert_eq("first prior_completion_status", "none", rc.prior_completion_status)
     assert_true("first !prior_output_available", not rc.prior_output_available)
-    assert_eq("first last_decision (first-call invariant)", first.decision.value, rc.last_decision.value if hasattr(rc.last_decision, "value") else rc.last_decision)
+    assert_eq(
+        "first last_decision (first-call invariant)",
+        first.decision.value,
+        rc.last_decision.value if hasattr(rc.last_decision, "value") else rc.last_decision,
+    )
     assert_eq("first FirstAttemptAt == LastAttemptAt", rc.first_attempt_at, rc.last_attempt_at)
     print("  first gate invariants ✔")
 
@@ -88,7 +92,9 @@ async def act1(client: AxonFlow) -> None:
     assert rc is not None
     assert_eq("re-gate post-complete gate_count", 2, rc.gate_count)
     assert_eq("re-gate post-complete completion_count", 1, rc.completion_count)
-    assert_eq("re-gate post-complete prior_completion_status", "completed", rc.prior_completion_status)
+    assert_eq(
+        "re-gate post-complete prior_completion_status", "completed", rc.prior_completion_status
+    )
     assert_true("re-gate post-complete prior_output_available", rc.prior_output_available)
     assert_true("re-gate post-complete prior_output omitted by default", rc.prior_output is None)
     assert_true("re-gate post-complete cached==True", re_gate.cached is True)
@@ -141,10 +147,14 @@ async def act2(client: AxonFlow) -> None:
     first = await client.step_gate(
         wf.workflow_id,
         "step-1",
-        StepGateRequest(step_name="wire", step_type=StepType.TOOL_CALL, idempotency_key=original_key),
+        StepGateRequest(
+            step_name="wire", step_type=StepType.TOOL_CALL, idempotency_key=original_key
+        ),
     )
     assert first.retry_context is not None
-    assert_eq("retry_context.idempotency_key echo", original_key, first.retry_context.idempotency_key)
+    assert_eq(
+        "retry_context.idempotency_key echo", original_key, first.retry_context.idempotency_key
+    )
     print("  key round-trip ✔")
 
     # 6) Re-gate with different key → IdempotencyKeyMismatchError
@@ -152,7 +162,9 @@ async def act2(client: AxonFlow) -> None:
         await client.step_gate(
             wf.workflow_id,
             "step-1",
-            StepGateRequest(step_type=StepType.TOOL_CALL, idempotency_key="payment:wire:different-2"),
+            StepGateRequest(
+                step_type=StepType.TOOL_CALL, idempotency_key="payment:wire:different-2"
+            ),
         )
         fail("expected IdempotencyKeyMismatchError on gate with different key")
     except IdempotencyKeyMismatchError as err:
