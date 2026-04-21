@@ -114,6 +114,79 @@ class RetryPolicy(str, Enum):
     """Force fresh policy evaluation regardless of prior decision."""
 
 
+class PriorCompletionStatus(str, Enum):
+    """State of the prior gate+complete cycle for a step."""
+
+    NONE = "none"
+    """First gate call, no prior gates on this step."""
+    COMPLETED = "completed"
+    """A prior gate call and a prior /complete both landed for this (workflow_id, step_id)."""
+    GATED_NOT_COMPLETED = "gated_not_completed"
+    """A prior gate landed but no /complete has followed for this (workflow_id, step_id)."""
+
+
+class RetryContext(BaseModel):
+    """First-class state signal returned on every step gate response.
+
+    Replaces the ambiguous ``cached: bool`` field. Callers should migrate off
+    ``cached`` and ``decision_source`` to the richer fields here.
+    """
+
+    gate_count: int = Field(
+        ...,
+        ge=1,
+        description=(
+            "Number of /gate calls for this (workflow_id, step_id), including the current call."
+        ),
+    )
+    completion_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of successful /complete calls for this (workflow_id, step_id).",
+    )
+    prior_completion_status: PriorCompletionStatus = Field(
+        ..., description="Whether a prior gate+complete cycle has landed."
+    )
+    prior_output_available: bool = Field(
+        ...,
+        description='True iff prior_completion_status == "completed".',
+    )
+    prior_output: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Output from the prior /complete, or None. Non-None only when the gate call was made "
+            "with include_prior_output=True AND prior_completion_status == 'completed'."
+        ),
+    )
+    prior_completion_at: datetime | None = Field(
+        default=None,
+        description="Timestamp of the prior /complete, if any.",
+    )
+    first_attempt_at: datetime = Field(
+        ...,
+        description="Timestamp of the first gate call for this (workflow_id, step_id).",
+    )
+    last_attempt_at: datetime = Field(
+        ...,
+        description="Timestamp of the current gate call.",
+    )
+    last_decision: GateDecision = Field(
+        ...,
+        description=(
+            "Decision of the immediately prior gate call. On first call, equals the current "
+            "call's decision."
+        ),
+    )
+    idempotency_key: str = Field(
+        default="",
+        description=(
+            "Key the caller set on this step (from the first gate call that supplied one), or "
+            'empty string "" if the caller never supplied one. Always present — never None — '
+            "per the wire contract (WCP_RETRY_IDEMPOTENCY_WIRE_CONTRACT.md §3). Immutable once set."
+        ),
+    )
+
+
 class StepGateRequest(BaseModel):
     """Request to check if a step is allowed to proceed."""
 
@@ -131,6 +204,16 @@ class StepGateRequest(BaseModel):
         default=None,
         description='Retry behavior: "idempotent" (default) returns cached decision, '
         '"reevaluate" forces fresh evaluation',
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=255,
+        description=(
+            "Caller-supplied opaque business-level key. Once set on the first gate call for a "
+            "(workflow_id, step_id), it is immutable — subsequent gate/complete calls must pass "
+            "the same key or raise IdempotencyKeyMismatchError. Echoed on "
+            "retry_context.idempotency_key."
+        ),
     )
 
 
@@ -160,11 +243,25 @@ class StepGateResponse(BaseModel):
     )
     cached: bool = Field(
         default=False,
-        description="Whether this response was served from a prior decision",
+        description=(
+            "[DEPRECATED] Use retry_context.gate_count > 1 instead. "
+            "Will be removed in a future major version."
+        ),
     )
     decision_source: str | None = Field(
         default=None,
-        description='How the decision was produced: "fresh" or "cached"',
+        description=(
+            "[DEPRECATED] Use retry_context.prior_completion_status instead. "
+            "Will be removed in a future major version."
+        ),
+    )
+    retry_context: RetryContext | None = Field(
+        default=None,
+        description=(
+            "First-class state signal for (workflow_id, step_id). Always present on every gate "
+            "response from platform v7.3.0+. Nullable in the SDK model only so older platform "
+            "responses that omit it still parse; expect it populated in practice."
+        ),
     )
 
     def is_allowed(self) -> bool:
@@ -288,6 +385,14 @@ class MarkStepCompletedRequest(BaseModel):
     tokens_in: int | None = Field(default=None, ge=0, description="Input tokens consumed")
     tokens_out: int | None = Field(default=None, ge=0, description="Output tokens produced")
     cost_usd: float | None = Field(default=None, ge=0, description="Cost in USD")
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=255,
+        description=(
+            "Must match the key passed on the corresponding gate call, if any. Mismatch "
+            "(including missing-vs-set on either side) raises IdempotencyKeyMismatchError."
+        ),
+    )
 
 
 class AbortWorkflowRequest(BaseModel):

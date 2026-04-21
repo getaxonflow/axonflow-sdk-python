@@ -5,6 +5,47 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.5.0] - 2026-04-21
+
+### Added
+
+- **`retry_context` and `idempotency_key` support on the step gate** —
+  `StepGateResponse` now carries a `retry_context` object on every gate call with the
+  true `(workflow_id, step_id)` lifecycle: `gate_count`, `completion_count`,
+  `prior_completion_status` (`PriorCompletionStatus` enum —
+  `NONE` / `COMPLETED` / `GATED_NOT_COMPLETED`), `prior_output_available`,
+  `prior_output`, `prior_completion_at`, `first_attempt_at`, `last_attempt_at`,
+  `last_decision`, and `idempotency_key`. Prefer these fields to the legacy
+  `cached` / `decision_source` fields.
+- **`client.step_gate(..., include_prior_output=False)`** — new keyword-only argument.
+  When `True`, the SDK sends `?include_prior_output=true` on the gate call and
+  `retry_context.prior_output` is populated when a prior `/complete` has landed.
+  Existing callers that omit the kwarg behave unchanged.
+- **`StepGateRequest.idempotency_key`** — caller-supplied opaque business-level key
+  (max 255 chars). Immutable once recorded on the first gate call for a
+  `(workflow_id, step_id)`; subsequent gate/complete calls must pass the same key.
+- **`MarkStepCompletedRequest.idempotency_key`** — must match the key set on the
+  corresponding gate call, if any. Mismatch (including missing-vs-set on either side)
+  surfaces as a typed `IdempotencyKeyMismatchError`.
+- **`IdempotencyKeyMismatchError`** — typed exception raised by `step_gate` and
+  `mark_step_completed` when the platform returns HTTP 409 with
+  `error.code == "IDEMPOTENCY_KEY_MISMATCH"`. Surfaces `workflow_id`, `step_id`,
+  `expected_idempotency_key`, `received_idempotency_key`, and the human-readable `message`.
+  Exported from `axonflow` top-level.
+- **`RetryContext`, `PriorCompletionStatus`** — exported pydantic model + enum.
+
+### Deprecated
+
+- **`StepGateResponse.cached`** and **`StepGateResponse.decision_source`** — still
+  populated but deprecated in favor of `retry_context.gate_count > 1` and
+  `retry_context.prior_completion_status`. Planned for removal in a future major version.
+
+### Compatibility
+
+Companion to the platform change that introduces `retry_context` on
+`POST /api/v1/workflows/{workflow_id}/steps/{step_id}/gate`. Additive only — existing
+callers that never set `idempotency_key` or `include_prior_output` see no behavior change.
+
 ## [6.4.0] - 2026-04-18
 
 ### Added

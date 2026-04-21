@@ -162,3 +162,38 @@ class VersionConflictError(AxonFlowError):
         self.plan_id = plan_id
         self.expected_version = expected_version
         self.current_version = current_version
+
+
+class IdempotencyKeyMismatchError(AxonFlowError):
+    """Idempotency key mismatch on a step gate or complete call (HTTP 409).
+
+    Raised when an ``idempotency_key`` on a ``/gate`` or ``/complete`` request conflicts
+    with the key recorded on an earlier gate call for the same ``(workflow_id, step_id)``.
+    Maps to HTTP 409 with ``error.code == "IDEMPOTENCY_KEY_MISMATCH"``.
+
+    ``expected_idempotency_key`` is the empty string ``""`` when the gate call had no
+    key but complete did; conversely ``received_idempotency_key`` is ``""`` when complete
+    omitted a key that gate had set.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        workflow_id: str,
+        step_id: str,
+        expected_idempotency_key: str,
+        received_idempotency_key: str,
+    ) -> None:
+        super().__init__(
+            message,
+            details={
+                "workflow_id": workflow_id,
+                "step_id": step_id,
+                "expected_idempotency_key": expected_idempotency_key,
+                "received_idempotency_key": received_idempotency_key,
+            },
+        )
+        self.workflow_id = workflow_id
+        self.step_id = step_id
+        self.expected_idempotency_key = expected_idempotency_key
+        self.received_idempotency_key = received_idempotency_key
