@@ -84,6 +84,7 @@ from axonflow.exceptions import (
     BudgetExceededError,
     ConnectionError,
     ConnectorError,
+    IdempotencyKeyMismatchError,
     PlanExecutionError,
     PolicyViolationError,
     TimeoutError,
@@ -210,6 +211,7 @@ from axonflow.workflow import (
     PendingApprovalsResponse,
     RejectStepResponse,
     ResumeFromCheckpointResponse,
+    RetryContext,
     StepGateRequest,
     StepGateResponse,
     StepType,
@@ -253,6 +255,38 @@ def _parse_datetime(value: str) -> datetime:
 
 # TypeVar for generic _run_sync method in SyncAxonFlow
 T = TypeVar("T")
+
+
+def _parse_idempotency_key_mismatch(
+    response: httpx.Response,
+    *,
+    workflow_id: str,
+    step_id: str,
+) -> IdempotencyKeyMismatchError | None:
+    """Inspect a 409 response body for IDEMPOTENCY_KEY_MISMATCH.
+
+    Returns a typed :class:`IdempotencyKeyMismatchError` if the body matches the
+    contract shape (``error.code == "IDEMPOTENCY_KEY_MISMATCH"``), otherwise ``None``.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    err = payload.get("error")
+    if not isinstance(err, dict) or err.get("code") != "IDEMPOTENCY_KEY_MISMATCH":
+        return None
+    details = err.get("details") or {}
+    if not isinstance(details, dict):
+        details = {}
+    return IdempotencyKeyMismatchError(
+        message=str(err.get("message", "idempotency_key mismatch")),
+        workflow_id=str(details.get("workflow_id") or workflow_id),
+        step_id=str(details.get("step_id") or step_id),
+        expected_idempotency_key=str(details.get("expected_idempotency_key", "")),
+        received_idempotency_key=str(details.get("received_idempotency_key", "")),
+    )
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
@@ -3999,6 +4033,8 @@ class AxonFlow:
         workflow_id: str,
         step_id: str,
         request: StepGateRequest,
+        *,
+        include_prior_output: bool = False,
     ) -> StepGateResponse:
         """Check if a workflow step is allowed to proceed (step gate).
 
@@ -4009,9 +4045,17 @@ class AxonFlow:
             workflow_id: Workflow ID
             step_id: Unique step identifier (you provide this)
             request: Step gate request with step details
+            include_prior_output: When True, sends ``?include_prior_output=true`` and
+                ``retry_context.prior_output`` is populated when a prior /complete has
+                landed. Default False because prior output may be large and/or contain
+                sensitive data.
 
         Returns:
             Gate decision: allow, block, or require_approval
+
+        Raises:
+            IdempotencyKeyMismatchError: If ``request.idempotency_key`` conflicts with
+                the key recorded on an earlier gate call for this (workflow_id, step_id).
 
         Example:
             >>> gate = await client.step_gate(
@@ -4021,15 +4065,17 @@ class AxonFlow:
             ...         step_name="Generate Code",
             ...         step_type=StepType.LLM_CALL,
             ...         model="gpt-4",
-            ...         provider="openai"
-            ...     )
+            ...         provider="openai",
+            ...         idempotency_key="payment:wire:acct4471:invoice-7721",
+            ...     ),
+            ...     include_prior_output=True,
             ... )
             >>> if gate.decision == GateDecision.BLOCK:
             ...     raise Exception(f"Step blocked: {gate.reason}")
-            >>> elif gate.decision == GateDecision.REQUIRE_APPROVAL:
-            ...     print(f"Waiting for approval: {gate.approval_url}")
+            >>> if gate.retry_context and gate.retry_context.prior_completion_status == "completed":
+            ...     prior = gate.retry_context.prior_output  # previous result, if any
         """
-        body = {
+        body: dict[str, Any] = {
             "step_name": request.step_name,
             "step_type": request.step_type.value,
             "step_input": request.step_input,
@@ -4046,6 +4092,8 @@ class AxonFlow:
             body["tool_context"] = tc
         if request.retry_policy is not None:
             body["retry_policy"] = request.retry_policy.value
+        if request.idempotency_key is not None:
+            body["idempotency_key"] = request.idempotency_key
 
         if self._config.debug:
             self._logger.debug(
@@ -4055,14 +4103,20 @@ class AxonFlow:
                 step_type=request.step_type.value,
             )
 
-        response = await self._orchestrator_request(
-            "POST",
-            f"/api/v1/workflows/{workflow_id}/steps/{step_id}/gate",
-            json_data=body,
+        path = f"/api/v1/workflows/{workflow_id}/steps/{step_id}/gate"
+        if include_prior_output:
+            path += "?include_prior_output=true"
+        response = await self._step_request_with_idempotency_check(
+            path, body, workflow_id=workflow_id, step_id=step_id
         )
         if not isinstance(response, dict):
             msg = "Unexpected response type from step gate"
             raise TypeError(msg)
+
+        retry_context = None
+        rc_raw = response.get("retry_context")
+        if isinstance(rc_raw, dict):
+            retry_context = RetryContext.model_validate(rc_raw)
 
         return StepGateResponse(
             decision=GateDecision(response["decision"]),
@@ -4074,6 +4128,7 @@ class AxonFlow:
             policies_matched=response.get("policies_matched"),
             cached=response.get("cached", False),
             decision_source=response.get("decision_source"),
+            retry_context=retry_context,
         )
 
     async def mark_step_completed(
@@ -4091,6 +4146,10 @@ class AxonFlow:
             step_id: Step ID
             request: Optional completion request with output data
 
+        Raises:
+            IdempotencyKeyMismatchError: If ``request.idempotency_key`` does not match the
+                key recorded on the earlier gate call for this (workflow_id, step_id).
+
         Example:
             >>> await client.mark_step_completed(
             ...     "wf_123",
@@ -4107,15 +4166,53 @@ class AxonFlow:
                 body["tokens_out"] = request.tokens_out
             if request.cost_usd is not None:
                 body["cost_usd"] = request.cost_usd
+            if request.idempotency_key is not None:
+                body["idempotency_key"] = request.idempotency_key
 
-        await self._orchestrator_request(
-            "POST",
+        await self._step_request_with_idempotency_check(
             f"/api/v1/workflows/{workflow_id}/steps/{step_id}/complete",
-            json_data=body,
+            body,
+            workflow_id=workflow_id,
+            step_id=step_id,
         )
 
         if self._config.debug:
             self._logger.debug("Step marked completed", workflow_id=workflow_id, step_id=step_id)
+
+    async def _step_request_with_idempotency_check(
+        self,
+        path: str,
+        body: dict[str, Any],
+        *,
+        workflow_id: str,
+        step_id: str,
+    ) -> dict[str, Any] | list[Any] | None:
+        """POST to a step gate/complete endpoint, mapping 409 IDEMPOTENCY_KEY_MISMATCH to
+        IdempotencyKeyMismatchError. All other errors are handled like _orchestrator_request.
+        """
+        url = f"{self._config.endpoint}{path}"
+        try:
+            response = await self._http_client.request("POST", url, json=body)
+            response.raise_for_status()
+            if response.status_code == 204:  # noqa: PLR2004
+                return None
+            result: dict[str, Any] | list[Any] = response.json()
+            return result  # noqa: TRY300
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to Orchestrator: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:  # noqa: PLR2004
+                idem = _parse_idempotency_key_mismatch(
+                    e.response, workflow_id=workflow_id, step_id=step_id
+                )
+                if idem is not None:
+                    raise idem from e
+            msg = f"HTTP {e.response.status_code}: {e.response.text}"
+            raise AxonFlowError(msg) from e
 
     async def complete_workflow(self, workflow_id: str) -> None:
         """Complete a workflow successfully.
@@ -7109,9 +7206,18 @@ class SyncAxonFlow:
         workflow_id: str,
         step_id: str,
         request: StepGateRequest,
+        *,
+        include_prior_output: bool = False,
     ) -> StepGateResponse:
         """Check policy gate for a workflow step."""
-        return self._run_sync(self._async_client.step_gate(workflow_id, step_id, request))
+        return self._run_sync(
+            self._async_client.step_gate(
+                workflow_id,
+                step_id,
+                request,
+                include_prior_output=include_prior_output,
+            )
+        )
 
     def mark_step_completed(
         self,
