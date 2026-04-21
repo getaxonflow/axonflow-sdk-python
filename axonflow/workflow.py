@@ -177,11 +177,12 @@ class RetryContext(BaseModel):
             "call's decision."
         ),
     )
-    idempotency_key: str | None = Field(
-        default=None,
+    idempotency_key: str = Field(
+        default="",
         description=(
             "Key the caller set on this step (from the first gate call that supplied one), or "
-            "None if the caller never supplied one. Once set, immutable."
+            'empty string "" if the caller never supplied one. Always present — never None — '
+            "per the wire contract (WCP_RETRY_IDEMPOTENCY_WIRE_CONTRACT.md §3). Immutable once set."
         ),
     )
 
