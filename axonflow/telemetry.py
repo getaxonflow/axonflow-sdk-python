@@ -40,13 +40,25 @@ def _is_telemetry_enabled(
     """Determine whether telemetry should fire.
 
     Priority (highest to lowest):
-    1. ``DO_NOT_TRACK=1`` environment variable  -> disabled
+    1. ``DO_NOT_TRACK=1`` environment variable  -> disabled (**deprecated**,
+       removed after 2026-05-05 in the next major release; emits a one-line
+       warning when it's the active control so operators can migrate)
     2. ``AXONFLOW_TELEMETRY=off`` environment variable -> disabled
+       (canonical AxonFlow-specific opt-out)
     3. Explicit config value (``telemetry_enabled``) -> use that
     4. Default: ON for all modes except sandbox
     """
     # Environment-level opt-out always wins.
     if os.environ.get("DO_NOT_TRACK", "").strip() == "1":
+        # Only warn when DO_NOT_TRACK is the active control. If the caller has
+        # also set AXONFLOW_TELEMETRY=off, they've already migrated.
+        if os.environ.get("AXONFLOW_TELEMETRY", "").strip().lower() != "off":
+            logger.warning(
+                "DO_NOT_TRACK=1 is deprecated as an AxonFlow telemetry opt-out "
+                "and will be removed after 2026-05-05 in the next major release. "
+                "Set AXONFLOW_TELEMETRY=off to opt out going forward. "
+                "See https://docs.getaxonflow.com/docs/telemetry for details."
+            )
         return False
     if os.environ.get("AXONFLOW_TELEMETRY", "").strip().lower() == "off":
         return False
