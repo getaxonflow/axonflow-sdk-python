@@ -4472,26 +4472,37 @@ class AxonFlow:
         self,
         workflow_id: str,
         step_id: str,
+        comment: str = "",
     ) -> ApproveStepResponse:
         """Approve a workflow step that requires human approval.
+
+        The server requires ``comment`` with a minimum of 10 characters — it's
+        the audit-trail justification that every approval carries into the
+        workflow history. Callers should always supply a meaningful comment.
 
         Call this to approve a step that received a ``require_approval`` gate decision.
 
         Args:
             workflow_id: Workflow ID
             step_id: Step ID to approve
+            comment: Audit justification for the approval (min 10 chars server-side)
 
         Returns:
             ApproveStepResponse with approval confirmation
 
         Example:
-            >>> result = await client.approve_step("wf_123", "step-1")
+            >>> result = await client.approve_step(
+            ...     "wf_123", "step-1", comment="Approved after full audit review"
+            ... )
             >>> print(f"Step {result.step_id} status: {result.status}")
         """
+        body: dict[str, Any] = {}
+        if comment:
+            body["comment"] = comment
         response = await self._orchestrator_request(
             "POST",
             f"/api/v1/workflows/{workflow_id}/steps/{step_id}/approve",
-            json_data={},
+            json_data=body,
         )
         if not isinstance(response, dict):
             msg = "Unexpected response type from approve step"
@@ -7318,9 +7329,10 @@ class SyncAxonFlow:
         self,
         workflow_id: str,
         step_id: str,
+        comment: str = "",
     ) -> ApproveStepResponse:
         """Approve a workflow step that requires human approval."""
-        return self._run_sync(self._async_client.approve_step(workflow_id, step_id))
+        return self._run_sync(self._async_client.approve_step(workflow_id, step_id, comment))
 
     def reject_step(
         self,
