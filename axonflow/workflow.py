@@ -446,15 +446,9 @@ class ApproveStepResponse(BaseModel):
         default=None, description="Post-approval decision (allow / block / require_approval)"
     )
     reason: str | None = Field(default=None, description="Decision reason text")
-    approval_status: str | None = Field(
-        default=None, description="pending / approved / rejected"
-    )
-    approval_id: str | None = Field(
-        default=None, description="Deterministic HITL queue UUID"
-    )
-    approved_by: str | None = Field(
-        default=None, description="Identity that approved the step"
-    )
+    approval_status: str | None = Field(default=None, description="pending / approved / rejected")
+    approval_id: str | None = Field(default=None, description="Deterministic HITL queue UUID")
+    approved_by: str | None = Field(default=None, description="Identity that approved the step")
     approved_at: str | None = Field(
         default=None, description="ISO 8601 timestamp when the approval was persisted"
     )
