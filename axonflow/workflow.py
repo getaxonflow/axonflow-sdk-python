@@ -418,36 +418,130 @@ class PolicyMatch(BaseModel):
 
 
 class ApproveStepResponse(BaseModel):
-    """Response from approving a workflow step."""
+    """Response from approving a workflow step.
+
+    Starting with v6.6.0 the server returns the rich step-gate shape: ``decision``
+    resolves to ``"allow"`` once approved, ``retry_context`` mirrors the gate
+    response retry state, ``approved_by`` / ``approved_at`` carry the reviewer
+    identity, ``approval_id`` is the deterministic HITL queue entry UUID, and
+    ``policies_matched`` reconstructs the governance trail. The legacy
+    ``workflow_id`` / ``step_id`` / ``status`` fields remain for back-compat.
+
+    See ADR-046 (HITL response parity) — the same shape is returned by both the
+    WCP endpoint and the MAP plan-scoped equivalent.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     workflow_id: str = Field(..., description="Workflow ID")
+    plan_id: str | None = Field(
+        default=None,
+        description="MAP plan ID — populated on plan-scoped responses",
+    )
     step_id: str = Field(..., description="Step ID that was approved")
-    status: str = Field(..., description="Approval status")
+    status: str | None = Field(
+        default=None, description="Legacy status field (mirrors approval_status)"
+    )
+    decision: str | None = Field(
+        default=None, description="Post-approval decision (allow / block / require_approval)"
+    )
+    reason: str | None = Field(default=None, description="Decision reason text")
+    approval_status: str | None = Field(default=None, description="pending / approved / rejected")
+    approval_id: str | None = Field(default=None, description="Deterministic HITL queue UUID")
+    approved_by: str | None = Field(default=None, description="Identity that approved the step")
+    approved_at: str | None = Field(
+        default=None, description="ISO 8601 timestamp when the approval was persisted"
+    )
+    policies_matched: list[PolicyMatch] | None = Field(
+        default=None, description="Policies that triggered the require_approval decision"
+    )
+    retry_context: RetryContext | None = Field(
+        default=None,
+        description="Retry / idempotency state — mirrors gate response",
+    )
+    message: str | None = Field(default=None, description="Human-readable summary")
 
 
 class RejectStepResponse(BaseModel):
-    """Response from rejecting a workflow step."""
+    """Response from rejecting a workflow step.
+
+    Symmetric with :class:`ApproveStepResponse` — ``decision`` resolves to
+    ``"block"``, ``rejected_by`` / ``rejected_at`` populate instead of
+    approved_*. See ADR-046.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     workflow_id: str = Field(..., description="Workflow ID")
+    plan_id: str | None = Field(default=None, description="MAP plan ID")
     step_id: str = Field(..., description="Step ID that was rejected")
-    status: str = Field(..., description="Rejection status")
+    status: str | None = Field(
+        default=None, description="Legacy status field (mirrors approval_status)"
+    )
+    decision: str | None = Field(default=None, description="Post-rejection decision (block)")
+    reason: str | None = Field(default=None, description="Decision reason text")
+    approval_status: str | None = Field(default=None)
+    approval_id: str | None = Field(default=None, description="Deterministic HITL queue UUID")
+    rejected_by: str | None = Field(default=None, description="Identity that rejected the step")
+    rejected_at: str | None = Field(default=None, description="ISO 8601 rejection timestamp")
+    policies_matched: list[PolicyMatch] | None = Field(default=None)
+    retry_context: RetryContext | None = Field(
+        default=None, description="Retry / idempotency state"
+    )
+    message: str | None = Field(default=None)
 
 
 class PendingApproval(BaseModel):
-    """A pending approval for a workflow step."""
+    """A pending approval for a workflow step.
+
+    Populated by both ``get_pending_approvals`` (WCP plane) and
+    ``get_pending_plan_approvals`` (MAP plane). The ``plan_id`` field is the
+    one intentional asymmetry between the two planes — populated on MAP-plane
+    entries, ``None`` on WCP-plane entries (mirrors ADR-046 parity rule).
+    """
 
     workflow_id: str = Field(..., description="Workflow ID")
     workflow_name: str = Field(..., description="Workflow name")
+    plan_id: str | None = Field(
+        default=None,
+        description=("MAP plan id — populated on MAP-plane entries; None on WCP-plane entries."),
+    )
     step_id: str = Field(..., description="Step ID awaiting approval")
-    step_name: str = Field(..., description="Step name")
-    step_type: str = Field(..., description="Step type")
+    step_index: int = Field(default=0, description="Zero-based step index within the workflow")
+    step_name: str | None = Field(default=None, description="Step name")
+    step_type: str | None = Field(default=None, description="Step type")
+    decision: str = Field(
+        default="require_approval",
+        description=(
+            "Gate decision that paused the step — always require_approval for pending entries"
+        ),
+    )
+    decision_reason: str | None = Field(default=None, description="Why the step was paused")
+    policies_matched: list[dict[str, Any]] | None = Field(
+        default=None, description="Policies that triggered the approval requirement"
+    )
+    step_input: dict[str, Any] | None = Field(
+        default=None, description="Step input payload (may be redacted)"
+    )
+    approval_status: str | None = Field(
+        default=None,
+        description="Current approval state — pending for listed entries",
+    )
     created_at: str = Field(..., description="When the approval was requested")
 
 
 class PendingApprovalsResponse(BaseModel):
-    """Response containing pending approvals."""
+    """Response containing pending approvals.
 
-    approvals: list[PendingApproval] = Field(
+    Shape matches the server wire contract: ``pending_approvals`` array +
+    ``count``.
+    """
+
+    pending_approvals: list[PendingApproval] = Field(
         default_factory=list, description="List of pending approvals"
     )
-    total: int = Field(default=0, ge=0, description="Total count of pending approvals")
+    count: int = Field(
+        default=0,
+        ge=0,
+        description="Total count of pending approvals matching the scope",
+    )

@@ -56,7 +56,7 @@ class TestApproveStep:
     ) -> None:
         """Test approving a workflow step."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/wf-123/steps/step-1/approve",
+            url="https://test.axonflow.com/api/v1/workflows/wf-123/steps/step-1/approve",
             json={
                 "workflow_id": "wf-123",
                 "step_id": "step-1",
@@ -78,7 +78,7 @@ class TestApproveStep:
     ) -> None:
         """Test that workflow_id and step_id default from args if not in response."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/wf-456/steps/step-2/approve",
+            url="https://test.axonflow.com/api/v1/workflows/wf-456/steps/step-2/approve",
             json={
                 "status": "approved",
             },
@@ -101,7 +101,7 @@ class TestRejectStep:
     ) -> None:
         """Test rejecting a workflow step with a reason."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/wf-123/steps/step-1/reject",
+            url="https://test.axonflow.com/api/v1/workflows/wf-123/steps/step-1/reject",
             json={
                 "workflow_id": "wf-123",
                 "step_id": "step-1",
@@ -123,7 +123,7 @@ class TestRejectStep:
     ) -> None:
         """Test rejecting a workflow step without a reason."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/wf-123/steps/step-1/reject",
+            url="https://test.axonflow.com/api/v1/workflows/wf-123/steps/step-1/reject",
             json={
                 "workflow_id": "wf-123",
                 "step_id": "step-1",
@@ -142,7 +142,7 @@ class TestRejectStep:
     ) -> None:
         """Test that workflow_id and step_id default from args if not in response."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/wf-789/steps/step-3/reject",
+            url="https://test.axonflow.com/api/v1/workflows/wf-789/steps/step-3/reject",
             json={
                 "status": "rejected",
             },
@@ -164,38 +164,44 @@ class TestGetPendingApprovals:
     ) -> None:
         """Test getting pending approvals."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/pending-approvals?limit=20",
+            url="https://test.axonflow.com/api/v1/workflows/approvals/pending?limit=20",
             json={
-                "approvals": [
+                "pending_approvals": [
                     {
                         "workflow_id": "wf-123",
                         "workflow_name": "customer-support",
                         "step_id": "step-1",
+                        "step_index": 0,
                         "step_name": "Generate Response",
                         "step_type": "llm_call",
+                        "decision": "require_approval",
                         "created_at": "2026-02-07T10:00:00Z",
                     },
                     {
                         "workflow_id": "wf-456",
                         "workflow_name": "data-pipeline",
                         "step_id": "step-3",
+                        "step_index": 2,
                         "step_name": "Delete Records",
                         "step_type": "tool_call",
+                        "decision": "require_approval",
                         "created_at": "2026-02-07T11:00:00Z",
                     },
                 ],
-                "total": 2,
+                "count": 2,
             },
         )
 
         result = await client.get_pending_approvals()
         assert isinstance(result, PendingApprovalsResponse)
-        assert result.total == 2
-        assert len(result.approvals) == 2
-        assert result.approvals[0].workflow_id == "wf-123"
-        assert result.approvals[0].workflow_name == "customer-support"
-        assert result.approvals[0].step_name == "Generate Response"
-        assert result.approvals[1].step_type == "tool_call"
+        assert result.count == 2
+        assert len(result.pending_approvals) == 2
+        assert result.pending_approvals[0].workflow_id == "wf-123"
+        assert result.pending_approvals[0].workflow_name == "customer-support"
+        assert result.pending_approvals[0].step_name == "Generate Response"
+        assert result.pending_approvals[1].step_type == "tool_call"
+        # WCP entries must not carry plan_id
+        assert result.pending_approvals[0].plan_id is None
 
     @pytest.mark.asyncio
     async def test_get_pending_approvals_with_limit(
@@ -205,16 +211,16 @@ class TestGetPendingApprovals:
     ) -> None:
         """Test getting pending approvals with custom limit."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/pending-approvals?limit=5",
+            url="https://test.axonflow.com/api/v1/workflows/approvals/pending?limit=5",
             json={
-                "approvals": [],
-                "total": 0,
+                "pending_approvals": [],
+                "count": 0,
             },
         )
 
         result = await client.get_pending_approvals(limit=5)
-        assert result.total == 0
-        assert result.approvals == []
+        assert result.count == 0
+        assert result.pending_approvals == []
 
     @pytest.mark.asyncio
     async def test_get_pending_approvals_empty(
@@ -224,16 +230,119 @@ class TestGetPendingApprovals:
     ) -> None:
         """Test getting pending approvals when none exist."""
         httpx_mock.add_response(
-            url="https://test.axonflow.com/api/v1/workflow-control/pending-approvals?limit=20",
+            url="https://test.axonflow.com/api/v1/workflows/approvals/pending?limit=20",
             json={
-                "approvals": [],
-                "total": 0,
+                "pending_approvals": [],
+                "count": 0,
             },
         )
 
         result = await client.get_pending_approvals()
-        assert result.total == 0
-        assert result.approvals == []
+        assert result.count == 0
+        assert result.pending_approvals == []
+
+
+class TestGetPendingPlanApprovals:
+    """Test get_pending_plan_approvals method — the MAP-plane listing (#1680)."""
+
+    @pytest.mark.asyncio
+    async def test_get_pending_plan_approvals(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """MAP-plane entries carry plan_id through the round trip."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/plans/approvals/pending?limit=20",
+            json={
+                "pending_approvals": [
+                    {
+                        "workflow_id": "wf_map_abc",
+                        "workflow_name": "map-confirm-plan-abc",
+                        "plan_id": "plan-abc",
+                        "step_id": "step_0_analyze",
+                        "step_index": 0,
+                        "step_name": "Analyze transaction",
+                        "step_type": "tool_call",
+                        "decision": "require_approval",
+                        "decision_reason": "High-value transaction",
+                        "created_at": "2026-04-22T10:00:00Z",
+                    },
+                ],
+                "count": 1,
+            },
+        )
+
+        result = await client.get_pending_plan_approvals()
+        assert isinstance(result, PendingApprovalsResponse)
+        assert result.count == 1
+        assert len(result.pending_approvals) == 1
+        assert result.pending_approvals[0].plan_id == "plan-abc"
+        assert result.pending_approvals[0].decision_reason == "High-value transaction"
+
+    @pytest.mark.asyncio
+    async def test_get_pending_plan_approvals_plan_id_filter(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """plan_id argument propagates to the query string."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/plans/approvals/pending?limit=20&plan_id=plan-abc",
+            json={"pending_approvals": [], "count": 0},
+        )
+
+        await client.get_pending_plan_approvals(plan_id="plan-abc")
+
+    @pytest.mark.asyncio
+    async def test_get_pending_plan_approvals_limit_and_plan_id(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Both knobs propagate together."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/plans/approvals/pending?limit=3&plan_id=plan-x",
+            json={"pending_approvals": [], "count": 0},
+        )
+
+        await client.get_pending_plan_approvals(limit=3, plan_id="plan-x")
+
+    @pytest.mark.asyncio
+    async def test_get_pending_plan_approvals_empty(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Empty list deserializes to an empty list (not None)."""
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/plans/approvals/pending?limit=20",
+            json={"pending_approvals": [], "count": 0},
+        )
+
+        result = await client.get_pending_plan_approvals()
+        assert result.count == 0
+        assert result.pending_approvals == []
+
+    @pytest.mark.asyncio
+    async def test_get_pending_plan_approvals_url_encodes_plan_id(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """plan_id with special characters must be URL-encoded on the wire.
+
+        Regression guard for #1680: raw string concatenation would let
+        characters like ``&`` or space slip into the URL and corrupt the
+        request. ``urllib.parse.quote(plan_id, safe='')`` percent-encodes
+        everything outside the unreserved set.
+        """
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/plans/approvals/pending?limit=20&plan_id=plan%20a%26b",
+            json={"pending_approvals": [], "count": 0},
+        )
+
+        await client.get_pending_plan_approvals(plan_id="plan a&b")
 
 
 # =========================================================================
@@ -599,23 +708,55 @@ class TestSyncWrappers:
         """Test sync get_pending_approvals wrapper."""
         httpx_mock.add_response(
             json={
-                "approvals": [
+                "pending_approvals": [
                     {
                         "workflow_id": "wf-123",
                         "workflow_name": "test-wf",
                         "step_id": "step-1",
+                        "step_index": 0,
                         "step_name": "Test Step",
                         "step_type": "llm_call",
+                        "decision": "require_approval",
                         "created_at": "2026-02-07T10:00:00Z",
                     },
                 ],
-                "total": 1,
+                "count": 1,
             },
         )
 
         result = sync_client.get_pending_approvals(limit=10)
         assert isinstance(result, PendingApprovalsResponse)
-        assert result.total == 1
+        assert result.count == 1
+
+    def test_sync_get_pending_plan_approvals(
+        self,
+        sync_client: SyncAxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test sync get_pending_plan_approvals wrapper (MAP plane)."""
+        httpx_mock.add_response(
+            json={
+                "pending_approvals": [
+                    {
+                        "workflow_id": "wf-map",
+                        "workflow_name": "map-plan-1",
+                        "plan_id": "plan-1",
+                        "step_id": "step-1",
+                        "step_index": 0,
+                        "step_name": "Test",
+                        "step_type": "tool_call",
+                        "decision": "require_approval",
+                        "created_at": "2026-04-22T10:00:00Z",
+                    },
+                ],
+                "count": 1,
+            },
+        )
+
+        result = sync_client.get_pending_plan_approvals(limit=10, plan_id="plan-1")
+        assert isinstance(result, PendingApprovalsResponse)
+        assert result.count == 1
+        assert result.pending_approvals[0].plan_id == "plan-1"
 
     def test_sync_rollback_plan(
         self,
@@ -772,12 +913,30 @@ class TestTypeModels:
         )
         assert approval.workflow_id == "wf-1"
         assert approval.step_type == "llm_call"
+        # plan_id defaults to None (WCP-plane entry shape)
+        assert approval.plan_id is None
+
+    def test_pending_approval_with_plan_id(self) -> None:
+        """Test PendingApproval carries plan_id through on MAP-plane entries (#1680)."""
+        approval = PendingApproval(
+            workflow_id="wf-map",
+            workflow_name="map-plan-1",
+            plan_id="plan-1",
+            step_id="step-1",
+            step_index=0,
+            decision="require_approval",
+            created_at="2026-04-22T10:00:00Z",
+        )
+        assert approval.plan_id == "plan-1"
+        # Ensures model_dump preserves plan_id so callers can serialize back
+        dumped = approval.model_dump()
+        assert dumped["plan_id"] == "plan-1"
 
     def test_pending_approvals_response_defaults(self) -> None:
         """Test PendingApprovalsResponse with defaults."""
         resp = PendingApprovalsResponse()
-        assert resp.approvals == []
-        assert resp.total == 0
+        assert resp.pending_approvals == []
+        assert resp.count == 0
 
     def test_rollback_plan_response(self) -> None:
         """Test RollbackPlanResponse model."""
