@@ -517,10 +517,10 @@ class PendingApproval(BaseModel):
         ),
     )
     decision_reason: str | None = Field(default=None, description="Why the step was paused")
-    policies_matched: list[dict] | None = Field(
+    policies_matched: list[dict[str, Any]] | None = Field(
         default=None, description="Policies that triggered the approval requirement"
     )
-    step_input: dict | None = Field(
+    step_input: dict[str, Any] | None = Field(
         default=None, description="Step input payload (may be redacted)"
     )
     approval_status: str | None = Field(
