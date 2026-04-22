@@ -514,15 +514,23 @@ class PendingApproval(BaseModel):
     step_type: str | None = Field(default=None, description="Step type")
     decision: str = Field(
         default="require_approval",
-        description="Gate decision that paused the step — always require_approval for pending entries",
+        description=(
+            "Gate decision that paused the step — always require_approval for "
+            "pending entries"
+        ),
     )
-    decision_reason: str | None = Field(default=None, description="Why the step was paused")
+    decision_reason: str | None = Field(
+        default=None, description="Why the step was paused"
+    )
     policies_matched: list[dict] | None = Field(
         default=None, description="Policies that triggered the approval requirement"
     )
-    step_input: dict | None = Field(default=None, description="Step input payload (may be redacted)")
+    step_input: dict | None = Field(
+        default=None, description="Step input payload (may be redacted)"
+    )
     approval_status: str | None = Field(
-        default=None, description="Current approval state — pending for listed entries"
+        default=None,
+        description="Current approval state — pending for listed entries",
     )
     created_at: str = Field(..., description="When the approval was requested")
 
