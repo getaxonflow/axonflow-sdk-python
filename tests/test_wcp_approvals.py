@@ -324,6 +324,26 @@ class TestGetPendingPlanApprovals:
         assert result.count == 0
         assert result.pending_approvals == []
 
+    @pytest.mark.asyncio
+    async def test_get_pending_plan_approvals_url_encodes_plan_id(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """plan_id with special characters must be URL-encoded on the wire.
+
+        Regression guard for #1680: raw string concatenation would let
+        characters like ``&`` or space slip into the URL and corrupt the
+        request. ``urllib.parse.quote(plan_id, safe='')`` percent-encodes
+        everything outside the unreserved set.
+        """
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/plans/approvals/pending?limit=20&plan_id=plan%20a%26b",
+            json={"pending_approvals": [], "count": 0},
+        )
+
+        await client.get_pending_plan_approvals(plan_id="plan a&b")
+
 
 # =========================================================================
 # Plan Rollback Tests (Feature 7)

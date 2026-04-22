@@ -4606,7 +4606,7 @@ class AxonFlow:
         """
         query = f"limit={limit}"
         if plan_id:
-            query += f"&plan_id={plan_id}"
+            query += f"&plan_id={quote(plan_id, safe='')}"
         path = f"/api/v1/plans/approvals/pending?{query}"
 
         response = await self._orchestrator_request("GET", path)
