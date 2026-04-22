@@ -418,19 +418,83 @@ class PolicyMatch(BaseModel):
 
 
 class ApproveStepResponse(BaseModel):
-    """Response from approving a workflow step."""
+    """Response from approving a workflow step.
+
+    Starting with v6.6.0 the server returns the rich step-gate shape: ``decision``
+    resolves to ``"allow"`` once approved, ``retry_context`` mirrors the gate
+    response retry state, ``approved_by`` / ``approved_at`` carry the reviewer
+    identity, ``approval_id`` is the deterministic HITL queue entry UUID, and
+    ``policies_matched`` reconstructs the governance trail. The legacy
+    ``workflow_id`` / ``step_id`` / ``status`` fields remain for back-compat.
+
+    See ADR-046 (HITL response parity) — the same shape is returned by both the
+    WCP endpoint and the MAP plan-scoped equivalent.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     workflow_id: str = Field(..., description="Workflow ID")
+    plan_id: str | None = Field(
+        default=None,
+        description="MAP plan ID — populated on plan-scoped responses",
+    )
     step_id: str = Field(..., description="Step ID that was approved")
-    status: str = Field(..., description="Approval status")
+    status: str | None = Field(
+        default=None, description="Legacy status field (mirrors approval_status)"
+    )
+    decision: str | None = Field(
+        default=None, description="Post-approval decision (allow / block / require_approval)"
+    )
+    reason: str | None = Field(default=None, description="Decision reason text")
+    approval_status: str | None = Field(
+        default=None, description="pending / approved / rejected"
+    )
+    approval_id: str | None = Field(
+        default=None, description="Deterministic HITL queue UUID"
+    )
+    approved_by: str | None = Field(
+        default=None, description="Identity that approved the step"
+    )
+    approved_at: str | None = Field(
+        default=None, description="ISO 8601 timestamp when the approval was persisted"
+    )
+    policies_matched: list[PolicyMatch] | None = Field(
+        default=None, description="Policies that triggered the require_approval decision"
+    )
+    retry_context: RetryContext | None = Field(
+        default=None,
+        description="Retry / idempotency state — mirrors gate response",
+    )
+    message: str | None = Field(default=None, description="Human-readable summary")
 
 
 class RejectStepResponse(BaseModel):
-    """Response from rejecting a workflow step."""
+    """Response from rejecting a workflow step.
+
+    Symmetric with :class:`ApproveStepResponse` — ``decision`` resolves to
+    ``"block"``, ``rejected_by`` / ``rejected_at`` populate instead of
+    approved_*. See ADR-046.
+    """
+
+    model_config = ConfigDict(extra="allow")
 
     workflow_id: str = Field(..., description="Workflow ID")
+    plan_id: str | None = Field(default=None, description="MAP plan ID")
     step_id: str = Field(..., description="Step ID that was rejected")
-    status: str = Field(..., description="Rejection status")
+    status: str | None = Field(
+        default=None, description="Legacy status field (mirrors approval_status)"
+    )
+    decision: str | None = Field(default=None, description="Post-rejection decision (block)")
+    reason: str | None = Field(default=None, description="Decision reason text")
+    approval_status: str | None = Field(default=None)
+    approval_id: str | None = Field(default=None, description="Deterministic HITL queue UUID")
+    rejected_by: str | None = Field(default=None, description="Identity that rejected the step")
+    rejected_at: str | None = Field(default=None, description="ISO 8601 rejection timestamp")
+    policies_matched: list[PolicyMatch] | None = Field(default=None)
+    retry_context: RetryContext | None = Field(
+        default=None, description="Retry / idempotency state"
+    )
+    message: str | None = Field(default=None)
 
 
 class PendingApproval(BaseModel):

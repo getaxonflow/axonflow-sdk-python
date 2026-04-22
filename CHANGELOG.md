@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [6.6.0] - 2026-04-22
 
+### Added
+
+- **Rich `ApproveStepResponse` / `RejectStepResponse`** — both pydantic models
+  now carry the same shape as the step-gate response: `decision` resolves to
+  `"allow"` / `"block"`, `retry_context` mirrors the gate response retry state,
+  `approved_by` / `approved_at` / `rejected_by` / `rejected_at` carry reviewer
+  identity, `approval_id` is the deterministic HITL queue UUID, and
+  `policies_matched` reconstructs the governance trail. Legacy fields
+  (`workflow_id`, `step_id`, `status`) remain for back-compat; every new field
+  is optional so older server responses still deserialize cleanly.
+- **`plan_id` on approve/reject responses** — populated when the response
+  comes from the MAP plan-scoped endpoint; empty on WCP plane responses.
+  Same models work across both endpoints.
+
 ### Deprecated
 
 - `DO_NOT_TRACK=1` as an AxonFlow telemetry opt-out — scheduled for removal after 2026-05-05 in the next major release. Use `AXONFLOW_TELEMETRY=off` instead. The SDK emits a one-line migration warning when `DO_NOT_TRACK=1` is the active control and `AXONFLOW_TELEMETRY=off` is not also set.
+
+### Unchanged
+
+- `approve_step(workflow_id, step_id)` / `reject_step(workflow_id, step_id, reason)`
+  method signatures are unchanged — only the response fields grew.
 
 ## [6.5.0] - 2026-04-21
 
