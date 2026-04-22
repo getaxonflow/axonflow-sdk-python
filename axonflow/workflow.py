@@ -504,9 +504,7 @@ class PendingApproval(BaseModel):
     workflow_name: str = Field(..., description="Workflow name")
     plan_id: str | None = Field(
         default=None,
-        description=(
-            "MAP plan id — populated on MAP-plane entries; None on WCP-plane entries."
-        ),
+        description=("MAP plan id — populated on MAP-plane entries; None on WCP-plane entries."),
     )
     step_id: str = Field(..., description="Step ID awaiting approval")
     step_index: int = Field(default=0, description="Zero-based step index within the workflow")
@@ -515,13 +513,10 @@ class PendingApproval(BaseModel):
     decision: str = Field(
         default="require_approval",
         description=(
-            "Gate decision that paused the step — always require_approval for "
-            "pending entries"
+            "Gate decision that paused the step — always require_approval for pending entries"
         ),
     )
-    decision_reason: str | None = Field(
-        default=None, description="Why the step was paused"
-    )
+    decision_reason: str | None = Field(default=None, description="Why the step was paused")
     policies_matched: list[dict] | None = Field(
         default=None, description="Policies that triggered the approval requirement"
     )
