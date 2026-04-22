@@ -334,6 +334,37 @@ class HealthResponse:
         return any(c.name == name for c in self.capabilities)
 
 
+def _parse_pending_approvals_response(response: dict[str, Any]) -> PendingApprovalsResponse:
+    """Parse the server pending-approvals response into the typed model.
+
+    Shared by ``get_pending_approvals`` (WCP plane) and
+    ``get_pending_plan_approvals`` (MAP plane) — identical wire shape, the
+    difference is just whether ``plan_id`` is populated per-entry.
+    """
+    approvals = [
+        PendingApproval(
+            workflow_id=a["workflow_id"],
+            workflow_name=a["workflow_name"],
+            plan_id=a.get("plan_id"),
+            step_id=a["step_id"],
+            step_index=a.get("step_index", 0),
+            step_name=a.get("step_name"),
+            step_type=a.get("step_type"),
+            decision=a.get("decision", "require_approval"),
+            decision_reason=a.get("decision_reason"),
+            policies_matched=a.get("policies_matched"),
+            step_input=a.get("step_input"),
+            approval_status=a.get("approval_status"),
+            created_at=a["created_at"],
+        )
+        for a in response.get("pending_approvals", [])
+    ]
+    return PendingApprovalsResponse(
+        pending_approvals=approvals,
+        count=response.get("count", len(approvals)),
+    )
+
+
 def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
     """Build the POST /api/v1/audit/search body from an AuditSearchRequest.
 
@@ -4459,7 +4490,7 @@ class AxonFlow:
         """
         response = await self._orchestrator_request(
             "POST",
-            f"/api/v1/workflow-control/{workflow_id}/steps/{step_id}/approve",
+            f"/api/v1/workflows/{workflow_id}/steps/{step_id}/approve",
             json_data={},
         )
         if not isinstance(response, dict):
@@ -4500,7 +4531,7 @@ class AxonFlow:
 
         response = await self._orchestrator_request(
             "POST",
-            f"/api/v1/workflow-control/{workflow_id}/steps/{step_id}/reject",
+            f"/api/v1/workflows/{workflow_id}/steps/{step_id}/reject",
             json_data=body,
         )
         if not isinstance(response, dict):
@@ -4517,7 +4548,13 @@ class AxonFlow:
         self,
         limit: int = 20,
     ) -> PendingApprovalsResponse:
-        """Get all pending approvals across workflows.
+        """Get all pending approvals across workflows — the WCP-plane listing.
+
+        Use :meth:`get_pending_plan_approvals` for the MAP-plane listing
+        (scopes to MAP-backed workflows and populates ``plan_id`` on every
+        entry).
+
+        Available on Evaluation+ licenses.
 
         Args:
             limit: Maximum number of pending approvals to return (default: 20)
@@ -4527,33 +4564,57 @@ class AxonFlow:
 
         Example:
             >>> result = await client.get_pending_approvals(limit=10)
-            >>> for approval in result.approvals:
+            >>> for approval in result.pending_approvals:
             ...     print(f"{approval.workflow_name}/{approval.step_name}: "
             ...           f"pending since {approval.created_at}")
         """
-        path = f"/api/v1/workflow-control/pending-approvals?limit={limit}"
+        path = f"/api/v1/workflows/approvals/pending?limit={limit}"
 
         response = await self._orchestrator_request("GET", path)
         if not isinstance(response, dict):
             msg = "Unexpected response type from get pending approvals"
             raise TypeError(msg)
 
-        approvals = [
-            PendingApproval(
-                workflow_id=a["workflow_id"],
-                workflow_name=a["workflow_name"],
-                step_id=a["step_id"],
-                step_name=a["step_name"],
-                step_type=a["step_type"],
-                created_at=a["created_at"],
-            )
-            for a in response.get("approvals", [])
-        ]
+        return _parse_pending_approvals_response(response)
 
-        return PendingApprovalsResponse(
-            approvals=approvals,
-            total=response.get("total", len(approvals)),
-        )
+    async def get_pending_plan_approvals(
+        self,
+        limit: int = 20,
+        plan_id: str | None = None,
+    ) -> PendingApprovalsResponse:
+        """List pending approvals for MAP-backed workflows.
+
+        The MAP-plane counterpart of :meth:`get_pending_approvals`. Every
+        returned entry has ``plan_id`` populated; WCP-only approvals are not
+        returned.
+
+        Requires an Evaluation or Enterprise license (same tier gate as the
+        MAP step approve/reject endpoints).
+
+        Args:
+            limit: Maximum number of pending approvals to return (default: 20)
+            plan_id: Optional plan id — when set, scopes the listing to a
+                single plan.
+
+        Returns:
+            PendingApprovalsResponse with list of MAP-plane pending approvals
+
+        Example:
+            >>> result = await client.get_pending_plan_approvals(plan_id="plan-abc123")
+            >>> for approval in result.pending_approvals:
+            ...     print(f"Plan {approval.plan_id} step {approval.step_id} awaiting approval")
+        """
+        query = f"limit={limit}"
+        if plan_id:
+            query += f"&plan_id={plan_id}"
+        path = f"/api/v1/plans/approvals/pending?{query}"
+
+        response = await self._orchestrator_request("GET", path)
+        if not isinstance(response, dict):
+            msg = "Unexpected response type from get pending plan approvals"
+            raise TypeError(msg)
+
+        return _parse_pending_approvals_response(response)
 
     # =========================================================================
     # HITL Queue API (Enterprise)
@@ -7276,6 +7337,19 @@ class SyncAxonFlow:
     ) -> PendingApprovalsResponse:
         """Get all pending approvals across workflows."""
         return self._run_sync(self._async_client.get_pending_approvals(limit))
+
+    def get_pending_plan_approvals(
+        self,
+        limit: int = 20,
+        plan_id: str | None = None,
+    ) -> PendingApprovalsResponse:
+        """List pending approvals for MAP-backed workflows (MAP-plane listing).
+
+        See :meth:`AxonFlow.get_pending_plan_approvals` for details.
+        """
+        return self._run_sync(
+            self._async_client.get_pending_plan_approvals(limit=limit, plan_id=plan_id)
+        )
 
     # HITL Queue API sync wrappers (Enterprise)
 

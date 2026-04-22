@@ -492,20 +492,49 @@ class RejectStepResponse(BaseModel):
 
 
 class PendingApproval(BaseModel):
-    """A pending approval for a workflow step."""
+    """A pending approval for a workflow step.
+
+    Populated by both ``get_pending_approvals`` (WCP plane) and
+    ``get_pending_plan_approvals`` (MAP plane). The ``plan_id`` field is the
+    one intentional asymmetry between the two planes — populated on MAP-plane
+    entries, ``None`` on WCP-plane entries (mirrors ADR-046 parity rule).
+    """
 
     workflow_id: str = Field(..., description="Workflow ID")
     workflow_name: str = Field(..., description="Workflow name")
+    plan_id: str | None = Field(
+        default=None,
+        description=(
+            "MAP plan id — populated on MAP-plane entries; None on WCP-plane entries."
+        ),
+    )
     step_id: str = Field(..., description="Step ID awaiting approval")
-    step_name: str = Field(..., description="Step name")
-    step_type: str = Field(..., description="Step type")
+    step_index: int = Field(default=0, description="Zero-based step index within the workflow")
+    step_name: str | None = Field(default=None, description="Step name")
+    step_type: str | None = Field(default=None, description="Step type")
+    decision: str = Field(
+        default="require_approval",
+        description="Gate decision that paused the step — always require_approval for pending entries",
+    )
+    decision_reason: str | None = Field(default=None, description="Why the step was paused")
+    policies_matched: list[dict] | None = Field(
+        default=None, description="Policies that triggered the approval requirement"
+    )
+    step_input: dict | None = Field(default=None, description="Step input payload (may be redacted)")
+    approval_status: str | None = Field(
+        default=None, description="Current approval state — pending for listed entries"
+    )
     created_at: str = Field(..., description="When the approval was requested")
 
 
 class PendingApprovalsResponse(BaseModel):
-    """Response containing pending approvals."""
+    """Response containing pending approvals.
 
-    approvals: list[PendingApproval] = Field(
+    Shape matches the server wire contract: ``pending_approvals`` array +
+    ``count``.
+    """
+
+    pending_approvals: list[PendingApproval] = Field(
         default_factory=list, description="List of pending approvals"
     )
-    total: int = Field(default=0, ge=0, description="Total count of pending approvals")
+    count: int = Field(default=0, ge=0, description="Total count of pending approvals matching the scope")
