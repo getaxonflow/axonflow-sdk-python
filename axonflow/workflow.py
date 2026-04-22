@@ -545,4 +545,8 @@ class PendingApprovalsResponse(BaseModel):
     pending_approvals: list[PendingApproval] = Field(
         default_factory=list, description="List of pending approvals"
     )
-    count: int = Field(default=0, ge=0, description="Total count of pending approvals matching the scope")
+    count: int = Field(
+        default=0,
+        ge=0,
+        description="Total count of pending approvals matching the scope",
+    )
