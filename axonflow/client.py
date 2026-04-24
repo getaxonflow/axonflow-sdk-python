@@ -657,7 +657,11 @@ class AxonFlow:
         return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
     @classmethod
-    def sandbox(cls, client_id: str = "demo-client", client_secret: str = "demo-secret") -> AxonFlow:  # noqa: S107
+    def sandbox(
+        cls,
+        client_id: str = "demo-client",  # noqa: S107
+        client_secret: str = "demo-secret",  # noqa: S107
+    ) -> AxonFlow:
         """Create a sandbox client targeting a local community stack.
 
         Assumes a local docker-compose community stack is running at
