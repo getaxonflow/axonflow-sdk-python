@@ -25,7 +25,12 @@ ERRORS=0
 
 # Latest RELEASED version = first `## [x.y.z]` line that isn't
 # [Unreleased] (which starts with a letter, not a digit).
-LATEST_VERSION=$(grep -m1 -E '^## \[[0-9]' CHANGELOG.md | sed 's/## \[\(.*\)\].*/\1/' | sed 's/^v//')
+#
+# `{ grep || true; }` is deliberate: under `set -euo pipefail`, a
+# failing grep (no match) aborts the whole command substitution
+# before we reach the -z check, killing the script silently. The
+# wrapper lets the `-z` check produce the real user-facing error.
+LATEST_VERSION=$({ grep -m1 -E '^## \[[0-9]' CHANGELOG.md || true; } | sed 's/## \[\(.*\)\].*/\1/' | sed 's/^v//')
 
 if [ -z "${LATEST_VERSION:-}" ]; then
     echo "❌ Could not extract a released version (## [X.Y.Z]) from CHANGELOG.md"
