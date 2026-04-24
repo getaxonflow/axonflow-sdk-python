@@ -657,18 +657,28 @@ class AxonFlow:
         return SyncAxonFlow(cls(endpoint, client_id, client_secret, **kwargs))
 
     @classmethod
-    def sandbox(cls, client_id: str = "demo-key", client_secret: str = "demo-key") -> AxonFlow:  # noqa: S107
-        """Create a sandbox client for testing.
+    def sandbox(cls, client_id: str = "demo-client", client_secret: str = "demo-secret") -> AxonFlow:  # noqa: S107
+        """Create a sandbox client targeting a local community stack.
+
+        Assumes a local docker-compose community stack is running at
+        ``http://localhost:8080`` (agent) / ``http://localhost:8081`` (orchestrator).
+        Start the stack with ``docker compose up`` from
+        https://github.com/getaxonflow/axonflow before calling this.
+
+        For the hosted community sandbox at https://try.getaxonflow.com, use
+        the registration flow instead: call ``POST /api/v1/register`` to mint
+        tenant credentials, then construct an ``AxonFlow(...)`` client directly
+        or set ``AXONFLOW_TRY=1``.
 
         Args:
-            client_id: Optional client ID (defaults to demo-key)
-            client_secret: Optional client secret (defaults to demo-key)
+            client_id: Optional client ID (defaults to demo-client)
+            client_secret: Optional client secret (defaults to demo-secret)
 
         Returns:
-            Configured AxonFlow client for sandbox environment
+            Configured AxonFlow client for a local sandbox environment
         """
         return cls(
-            endpoint="https://try.getaxonflow.com",
+            endpoint="http://localhost:8080",
             client_id=client_id,
             client_secret=client_secret,
             mode=Mode.SANDBOX,

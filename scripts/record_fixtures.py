@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Record real API responses from staging for contract testing.
+"""Record real API responses from a running AxonFlow agent for contract testing.
 
-This script makes actual API calls to staging and saves the responses
-as JSON fixtures for use in contract tests.
+This script makes actual API calls against AGENT_URL (defaults to the local
+community docker-compose stack at http://localhost:8080) and saves the
+responses as JSON fixtures for use in contract tests.
 
 Run: python scripts/record_fixtures.py
 """
@@ -137,9 +138,9 @@ def save_fixture(name: str, data: Optional[Any]) -> None:
 
 
 async def main() -> None:
-    """Record all fixtures from staging."""
+    """Record all fixtures from a running AxonFlow agent."""
     print(f"\n{'=' * 60}")
-    print("Recording API Fixtures from Staging")
+    print("Recording API Fixtures")
     print(f"{'=' * 60}")
     print(f"Agent URL: {AGENT_URL}")
     print(f"Client ID: {CLIENT_ID}")

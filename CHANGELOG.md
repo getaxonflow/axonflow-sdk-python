@@ -5,12 +5,49 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+<!-- Before tagging a release: rename "[Unreleased]" to "[X.Y.Z] - YYYY-MM-DD"
+     and tag v{X.Y.Z}. The release workflow's preflight checks the section
+     header matches the tag. -->
+
 ## [Unreleased]
 
 ### Fixed
 
 - Telemetry pings now deliver reliably from short-lived processes (CLI, serverless, cold-starts).
 - Telemetry path is bounded at `_TIMEOUT_SECONDS` (3s) total; the `/health` probe and checkpoint POST share a single deadline instead of stacking.
+- **Retire dead staging endpoint across the SDK.** The decommissioned
+  `staging-eu.getaxonflow.com` host was still referenced in 11 places,
+  including the public `AxonFlow.sandbox()` factory, every example's default
+  endpoint, the fixture-recording script, `SECURITY.md`, `CONTRIBUTING.md`,
+  and the integration workflow. Callers hitting any of these defaults would
+  silently connect to a dead host.
+  - `AxonFlow.sandbox()` now targets a local community docker-compose stack
+    at `http://localhost:8080` with `demo-client` / `demo-secret` credentials.
+    Docstring updated to point users at the hosted registration flow
+    (`POST /api/v1/register` + `AXONFLOW_TRY=1`) for the live community SaaS.
+  - `examples/quickstart.py`, `examples/gateway_mode.py`,
+    `examples/openai_integration.py`, and `scripts/record_fixtures.py` now
+    default `AXONFLOW_AGENT_URL` to `http://localhost:8080`.
+  - `SECURITY.md` "credentials in code" example uses the neutral
+    `https://axonflow.example.com` placeholder.
+  - `CONTRIBUTING.md` "Running Examples" section now documents the local
+    docker-compose setup, replaces the unused `AXONFLOW_LICENSE_KEY`
+    reference with the correct `AXONFLOW_CLIENT_ID` / `AXONFLOW_CLIENT_SECRET`
+    variables, and lists the four example files that actually exist
+    (previously referenced stale `basic_usage.py` and `interceptors.py`).
+- **Integration workflow now exercises a real community stack.** The
+  `integration-tests` job previously targeted the retired staging URL under
+  `continue-on-error: true`, so failures never blocked a merge. The workflow
+  is now modelled on the Go SDK pattern: it clones the community repo, runs
+  `docker compose up`, waits for the agent (8080) and orchestrator (8081)
+  health endpoints, runs `tests/test_integration.py` with
+  `RUN_INTEGRATION_TESTS=1`, and runs `examples/quickstart.py` and
+  `examples/gateway_mode.py` against the live stack. `continue-on-error` is
+  removed so failures block. The new `Integration Tests (Community Stack)`
+  job is intentionally skipped on pull requests (to keep PR latency
+  reasonable) and is exercised via `workflow_dispatch` and on every merge
+  to `main`, plus a weekly drift-catching cron (Mon 06:00 UTC). The
+  redundant `community-stack-tests` job is dropped.
 
 ## [6.6.0] - 2026-04-22
 

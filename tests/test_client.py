@@ -37,7 +37,7 @@ class TestClientInitialization:
     def test_sandbox_mode(self) -> None:
         """Test sandbox client creation."""
         client = AxonFlow.sandbox()
-        assert client.config.endpoint == "https://try.getaxonflow.com"
+        assert client.config.endpoint == "http://localhost:8080"
         assert client.config.debug is True
         assert client.config.mode == Mode.SANDBOX
 

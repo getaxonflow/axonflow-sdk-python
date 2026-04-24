@@ -5,12 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
-    inputs:
-      agent_url:
-        description: 'AxonFlow Agent URL (defaults to local docker-compose)'
-        required: false
-        default: 'http://localhost:8080'
+  workflow_dispatch: {}
   # Weekly drift catch
   schedule:
     - cron: '0 6 * * 1'  # Monday 06:00 UTC
