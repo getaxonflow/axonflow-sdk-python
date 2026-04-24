@@ -13,11 +13,14 @@ Override endpoint:
 
 from __future__ import annotations
 
+import atexit
+import contextlib
 import ipaddress
 import logging
 import os
 import platform
 import threading
+import time
 import uuid
 from urllib.parse import urlparse
 
@@ -30,6 +33,35 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CHECKPOINT_URL = "https://checkpoint.getaxonflow.com/v1/ping"
 _TIMEOUT_SECONDS = 3
 _HTTP_OK = 200
+# Minimum HTTP budget (seconds) — below this, skip the operation rather than
+# issue a request that is almost guaranteed to time out before any useful
+# work completes. Keeps the telemetry path from making "essentially zero
+# budget" calls when the shared deadline is nearly spent.
+_MIN_BUDGET_SECONDS = 0.1
+
+# Flush-on-exit bookkeeping: track spawned telemetry threads so we can join
+# them on interpreter shutdown. Without this, a `daemon=True` thread is killed
+# before its HTTP POST completes in short-lived scripts (CLI one-liners,
+# serverless handlers, test harnesses), silently dropping telemetry.
+_pending_threads: list[threading.Thread] = []
+_pending_threads_lock = threading.Lock()
+_atexit_registered = False
+
+
+def _flush_pending_telemetry() -> None:
+    """Join any still-running telemetry threads on interpreter shutdown.
+
+    Bounded by the per-thread HTTP timeout (``_TIMEOUT_SECONDS``), so total
+    shutdown delay never exceeds the slowest ping's remaining budget.
+    Silent on all errors — telemetry must never disrupt shutdown.
+    """
+    with _pending_threads_lock:
+        threads = list(_pending_threads)
+    for t in threads:
+        # Shutdown-path: any exception from join() must be swallowed silently
+        # to not mask the real shutdown reason with a spurious traceback.
+        with contextlib.suppress(Exception):
+            t.join(timeout=_TIMEOUT_SECONDS)
 
 
 def _is_telemetry_enabled(
@@ -71,13 +103,16 @@ def _is_telemetry_enabled(
     return mode != "sandbox"
 
 
-def _detect_platform_version(endpoint: str) -> str | None:
+def _detect_platform_version(endpoint: str, timeout: float = 2.0) -> str | None:
     """Detect platform version by calling the agent's /health endpoint.
 
-    Returns the version string or None on any failure.
+    Returns the version string or None on any failure. The caller passes a
+    timeout derived from the shared telemetry deadline so the health probe
+    and the checkpoint POST don't stack into a larger combined budget — see
+    issue #1692.
     """
     try:
-        resp = httpx.get(f"{endpoint}/health", timeout=2)
+        resp = httpx.get(f"{endpoint}/health", timeout=timeout)
         if resp.status_code == _HTTP_OK:
             body = resp.json()
             version = body.get("version")
@@ -169,12 +204,31 @@ def _build_payload(
 
 
 def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
-    """Execute the HTTP POST (runs inside a daemon thread)."""
+    """Execute the HTTP POST (runs inside a daemon thread).
+
+    All HTTP operations share one monotonic deadline so that the atexit flush
+    handler's ``_TIMEOUT_SECONDS`` budget actually covers the complete
+    telemetry path. Previously the /health probe (2s) and the POST
+    (``_TIMEOUT_SECONDS``) each had independent timeouts, which meant the
+    thread's real worst case was ~5s and the 3s join could return while the
+    POST was still in flight — reintroducing the short-lived-process drop
+    bug on slow or blackholed endpoints. See issue #1692.
+    """
+    deadline = time.monotonic() + _TIMEOUT_SECONDS
     try:
-        platform_version = _detect_platform_version(endpoint) if endpoint else None
+        # Health probe uses remaining budget, capped so the POST still has time.
+        health_budget = min(1.0, max(0.0, deadline - time.monotonic()))
+        platform_version = None
+        if endpoint and health_budget > _MIN_BUDGET_SECONDS:
+            platform_version = _detect_platform_version(endpoint, timeout=health_budget)
         endpoint_type = _classify_endpoint(endpoint)
         payload = _build_payload(mode, platform_version, endpoint_type)
-        resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
+
+        # POST uses all remaining budget.
+        post_budget = max(0.0, deadline - time.monotonic())
+        if post_budget < _MIN_BUDGET_SECONDS:
+            return
+        resp = httpx.post(url, json=payload, timeout=post_budget)
         if resp.status_code == _HTTP_OK:
             try:
                 body = resp.json()
@@ -228,3 +282,17 @@ def send_telemetry_ping(
 
     t = threading.Thread(target=_do_ping, args=(url, mode, endpoint, debug), daemon=True)
     t.start()
+
+    # Register the thread for on-exit flush, and register the atexit handler
+    # once per process. Without this, short-lived processes (CLI scripts,
+    # serverless, quickstart one-liners) exit before the POST completes and
+    # the ping is silently dropped. See issue #1692.
+    global _atexit_registered  # noqa: PLW0603  one-shot module-level registration flag
+    with _pending_threads_lock:
+        # Prune completed threads so the list stays bounded in long-lived
+        # processes that instantiate many clients (e.g. per-request handlers).
+        _pending_threads[:] = [pt for pt in _pending_threads if pt.is_alive()]
+        _pending_threads.append(t)
+        if not _atexit_registered:
+            atexit.register(_flush_pending_telemetry)
+            _atexit_registered = True
