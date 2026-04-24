@@ -19,8 +19,8 @@ from typing import Any, Optional
 
 import httpx
 
-# Staging configuration
-AGENT_URL = os.environ.get("AXONFLOW_AGENT_URL", "https://staging-eu.getaxonflow.com")
+# Defaults to local docker-compose community stack. Override via env.
+AGENT_URL = os.environ.get("AXONFLOW_AGENT_URL", "http://localhost:8080")
 CLIENT_ID = os.environ.get("AXONFLOW_CLIENT_ID", "demo-client")
 CLIENT_SECRET = os.environ.get("AXONFLOW_CLIENT_SECRET", "demo-secret")
 

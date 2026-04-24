@@ -668,7 +668,7 @@ class AxonFlow:
             Configured AxonFlow client for sandbox environment
         """
         return cls(
-            endpoint="https://staging-eu.getaxonflow.com",
+            endpoint="https://try.getaxonflow.com",
             client_id=client_id,
             client_secret=client_secret,
             mode=Mode.SANDBOX,
