@@ -61,7 +61,7 @@ When using the AxonFlow Python SDK:
 ```python
 # BAD - Credentials in code
 client = AxonFlow(
-    endpoint="https://staging-eu.getaxonflow.com",
+    endpoint="https://axonflow.example.com",
     client_id="client-id-here",
     client_secret="secret-here",
 )

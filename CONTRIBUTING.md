@@ -56,24 +56,36 @@ mypy axonflow
 
 ### Running Examples
 
-Set up your environment variables:
+Examples target a local AxonFlow community stack running on
+`http://localhost:8080`. Start the stack before running:
 
 ```bash
-export AXONFLOW_AGENT_URL="https://staging-eu.getaxonflow.com"
-export AXONFLOW_LICENSE_KEY="your-license-key"
+git clone https://github.com/getaxonflow/axonflow.git
+cd axonflow && docker compose up -d
+```
+
+Then, from this repo:
+
+```bash
+export AXONFLOW_AGENT_URL="http://localhost:8080"
+export AXONFLOW_CLIENT_ID="demo-client"
+export AXONFLOW_CLIENT_SECRET="demo-secret"
 ```
 
 Run examples:
 
 ```bash
-# Basic example
-python examples/basic_usage.py
+# Quickstart (async + sync patterns)
+python examples/quickstart.py
 
-# Gateway mode example
+# Gateway mode (pre-check + direct LLM + audit)
 python examples/gateway_mode.py
 
-# Interceptors example
-python examples/interceptors.py
+# OpenAI interceptor (requires OPENAI_API_KEY)
+python examples/openai_integration.py
+
+# WCP retry_context + idempotency_key (enterprise features)
+python examples/wcp_retry_idempotency.py
 ```
 
 ## Code Style
