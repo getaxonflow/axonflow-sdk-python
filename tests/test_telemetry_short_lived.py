@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -38,14 +38,14 @@ def _free_port() -> int:
 class _CapturingHandler(BaseHTTPRequestHandler):
     """HTTP handler that captures POST bodies and serves /health."""
 
-    received: list[dict[str, Any]] = []
+    received: ClassVar[list[dict[str, Any]]] = []
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length) if length else b""
         try:
             payload = json.loads(body)
-        except Exception:
+        except Exception:  # noqa: BLE001  tolerate any malformed-body shape from test inputs
             payload = {}
         self.__class__.received.append(payload)
         self.send_response(200)
@@ -99,7 +99,7 @@ def test_telemetry_flushes_on_immediate_exit(mock_checkpoint: Any) -> None:
     env.pop("AXONFLOW_TELEMETRY", None)
     env["AXONFLOW_CHECKPOINT_URL"] = f"{base_url}/v1/ping"
 
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603  sys.executable is trusted; args are literal
         [
             sys.executable,
             "-c",
