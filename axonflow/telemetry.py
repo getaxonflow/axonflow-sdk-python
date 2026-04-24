@@ -260,6 +260,9 @@ def send_telemetry_ping(
     # the ping is silently dropped. See issue #1692.
     global _atexit_registered
     with _pending_threads_lock:
+        # Prune completed threads so the list stays bounded in long-lived
+        # processes that instantiate many clients (e.g. per-request handlers).
+        _pending_threads[:] = [pt for pt in _pending_threads if pt.is_alive()]
         _pending_threads.append(t)
         if not _atexit_registered:
             atexit.register(_flush_pending_telemetry)
