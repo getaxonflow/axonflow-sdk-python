@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
+## [6.6.2] - 2026-04-25
+
+### Fixed
+
+- **Runtime `axonflow.__version__` correctly reports the installed version.**
+  Wheels for v6.6.1 shipped with `axonflow.__version__` stuck at `"6.6.0"`
+  because the release workflow was targeting the wrong file when bumping
+  the version constant (it was rewriting `axonflow/__init__.py`, but the
+  real constant lives in `axonflow/_version.py` and `__init__.py` only
+  re-exports from there). Package metadata read by `pip show` was correct,
+  so install/upgrade worked fine; the drift only affected code that read
+  `axonflow.__version__` at runtime (telemetry self-identification,
+  version-gated feature detection in user code, log output). No functional
+  changes — this release ships the same binary behavior as v6.6.1 with
+  the runtime version correctly set to `6.6.2`.
+
 ## [6.6.1] - 2026-04-24
 
 ### Fixed
