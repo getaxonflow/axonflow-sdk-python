@@ -13,8 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Telemetry pings now deliver reliably from short-lived processes (CLI, serverless, cold-starts).
-- Telemetry path is bounded at `_TIMEOUT_SECONDS` (3s) total; the `/health` probe and checkpoint POST share a single deadline instead of stacking.
 - **Retire dead staging endpoint across the SDK.** The decommissioned
   `staging-eu.getaxonflow.com` host was still referenced in 11 places,
   including the public `AxonFlow.sandbox()` factory, every example's default
@@ -34,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     reference with the correct `AXONFLOW_CLIENT_ID` / `AXONFLOW_CLIENT_SECRET`
     variables, and lists the four example files that actually exist
     (previously referenced stale `basic_usage.py` and `interceptors.py`).
+- Telemetry pings now deliver reliably from short-lived processes (CLI, serverless, cold-starts).
+- Telemetry path is bounded at `_TIMEOUT_SECONDS` (3s) total; the `/health` probe and checkpoint POST share a single deadline instead of stacking.
 
 ## [6.6.0] - 2026-04-22
 
