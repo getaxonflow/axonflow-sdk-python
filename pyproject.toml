@@ -191,6 +191,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests (requires live agent)",
     "slow: Slow tests",
+    "wire_shape: Wire-shape contract tests vs OpenAPI specs (requires AXONFLOW_OPENAPI_SPECS_DIR)",
 ]
 
 [tool.coverage.run]
