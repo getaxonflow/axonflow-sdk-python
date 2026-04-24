@@ -14,6 +14,7 @@ Override endpoint:
 from __future__ import annotations
 
 import atexit
+import contextlib
 import ipaddress
 import logging
 import os
@@ -32,6 +33,11 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CHECKPOINT_URL = "https://checkpoint.getaxonflow.com/v1/ping"
 _TIMEOUT_SECONDS = 3
 _HTTP_OK = 200
+# Minimum HTTP budget (seconds) — below this, skip the operation rather than
+# issue a request that is almost guaranteed to time out before any useful
+# work completes. Keeps the telemetry path from making "essentially zero
+# budget" calls when the shared deadline is nearly spent.
+_MIN_BUDGET_SECONDS = 0.1
 
 # Flush-on-exit bookkeeping: track spawned telemetry threads so we can join
 # them on interpreter shutdown. Without this, a `daemon=True` thread is killed
@@ -52,10 +58,10 @@ def _flush_pending_telemetry() -> None:
     with _pending_threads_lock:
         threads = list(_pending_threads)
     for t in threads:
-        try:
+        # Shutdown-path: any exception from join() must be swallowed silently
+        # to not mask the real shutdown reason with a spurious traceback.
+        with contextlib.suppress(Exception):
             t.join(timeout=_TIMEOUT_SECONDS)
-        except Exception:
-            pass
 
 
 def _is_telemetry_enabled(
@@ -213,14 +219,14 @@ def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
         # Health probe uses remaining budget, capped so the POST still has time.
         health_budget = min(1.0, max(0.0, deadline - time.monotonic()))
         platform_version = None
-        if endpoint and health_budget > 0.1:
+        if endpoint and health_budget > _MIN_BUDGET_SECONDS:
             platform_version = _detect_platform_version(endpoint, timeout=health_budget)
         endpoint_type = _classify_endpoint(endpoint)
         payload = _build_payload(mode, platform_version, endpoint_type)
 
         # POST uses all remaining budget.
         post_budget = max(0.0, deadline - time.monotonic())
-        if post_budget < 0.1:
+        if post_budget < _MIN_BUDGET_SECONDS:
             return
         resp = httpx.post(url, json=payload, timeout=post_budget)
         if resp.status_code == _HTTP_OK:
@@ -281,7 +287,7 @@ def send_telemetry_ping(
     # once per process. Without this, short-lived processes (CLI scripts,
     # serverless, quickstart one-liners) exit before the POST completes and
     # the ping is silently dropped. See issue #1692.
-    global _atexit_registered
+    global _atexit_registered  # noqa: PLW0603  one-shot module-level registration flag
     with _pending_threads_lock:
         # Prune completed threads so the list stays bounded in long-lived
         # processes that instantiate many clients (e.g. per-request handlers).
