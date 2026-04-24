@@ -115,15 +115,9 @@ async def test_proxy_llm_call_pii_detection(client):
             query="My SSN is 123-45-6789",
             request_type="chat",
         )
-        policies = (
-            response.policy_info.policies_evaluated if response.policy_info else []
-        )
+        policies = response.policy_info.policies_evaluated if response.policy_info else []
         redacted = bool((response.data or {}).get("redacted"))
-        pii_policy_fired = (
-            response.blocked
-            or redacted
-            or any("pii" in p.lower() for p in policies)
-        )
+        pii_policy_fired = response.blocked or redacted or any("pii" in p.lower() for p in policies)
         assert pii_policy_fired, (
             f"Expected PII policy to fire. "
             f"policies_evaluated={policies}, blocked={response.blocked}, "
