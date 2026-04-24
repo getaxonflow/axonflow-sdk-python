@@ -13,6 +13,7 @@ Override endpoint:
 
 from __future__ import annotations
 
+import atexit
 import ipaddress
 import logging
 import os
@@ -30,6 +31,30 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CHECKPOINT_URL = "https://checkpoint.getaxonflow.com/v1/ping"
 _TIMEOUT_SECONDS = 3
 _HTTP_OK = 200
+
+# Flush-on-exit bookkeeping: track spawned telemetry threads so we can join
+# them on interpreter shutdown. Without this, a `daemon=True` thread is killed
+# before its HTTP POST completes in short-lived scripts (CLI one-liners,
+# serverless handlers, test harnesses), silently dropping telemetry.
+_pending_threads: list[threading.Thread] = []
+_pending_threads_lock = threading.Lock()
+_atexit_registered = False
+
+
+def _flush_pending_telemetry() -> None:
+    """Join any still-running telemetry threads on interpreter shutdown.
+
+    Bounded by the per-thread HTTP timeout (``_TIMEOUT_SECONDS``), so total
+    shutdown delay never exceeds the slowest ping's remaining budget.
+    Silent on all errors — telemetry must never disrupt shutdown.
+    """
+    with _pending_threads_lock:
+        threads = list(_pending_threads)
+    for t in threads:
+        try:
+            t.join(timeout=_TIMEOUT_SECONDS)
+        except Exception:
+            pass
 
 
 def _is_telemetry_enabled(
@@ -228,3 +253,14 @@ def send_telemetry_ping(
 
     t = threading.Thread(target=_do_ping, args=(url, mode, endpoint, debug), daemon=True)
     t.start()
+
+    # Register the thread for on-exit flush, and register the atexit handler
+    # once per process. Without this, short-lived processes (CLI scripts,
+    # serverless, quickstart one-liners) exit before the POST completes and
+    # the ping is silently dropped. See issue #1692.
+    global _atexit_registered
+    with _pending_threads_lock:
+        _pending_threads.append(t)
+        if not _atexit_registered:
+            atexit.register(_flush_pending_telemetry)
+            _atexit_registered = True
