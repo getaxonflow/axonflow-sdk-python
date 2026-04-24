@@ -25,6 +25,32 @@ Example:
     >>> result = client.proxy_llm_call("user-token", "What is AI?", "chat")
 """
 
+# ---------------------------------------------------------------------------
+# Python 3.9 end-of-life guard
+#
+# AxonFlow v6.x (the actual current SDK) requires Python >= 3.10. pip
+# resolving on Python 3.9 silently falls back to this 4.2.x line, which
+# drifts a full major version behind the shipping SDK. Users ended up
+# running months-old code without realising it — see
+# getaxonflow/axonflow-enterprise#1694.
+#
+# v4.2.1 adds this explicit import-time guard so Python 3.9 installs fail
+# loudly with an actionable upgrade message instead of silently inheriting
+# a relic. Python 3.10+ users who deliberately pin to v4.2.x still get the
+# original v4.2.0 feature set.
+# ---------------------------------------------------------------------------
+import sys as _sys
+
+if _sys.version_info < (3, 10):
+    raise ImportError(
+        "AxonFlow Python SDK requires Python 3.10 or newer. "
+        f"You are running Python {_sys.version.split()[0]}.\n"
+        "Upgrade Python (e.g. `brew install python@3.11` or use pyenv), then:\n"
+        "    pip install --upgrade axonflow\n"
+        "This version (4.2.1) is a Python-3.9 end-of-life shim for axonflow-sdk-python "
+        "and does not receive new features or fixes. The actively maintained line is v6.x."
+    )
+
 from axonflow._version import __version__
 from axonflow.client import (
     AxonFlow,

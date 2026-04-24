@@ -5,6 +5,12 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] - UNRELEASED
+
+### Changed
+
+- End-of-life shim for Python 3.9. Importing `axonflow` on Python < 3.10 now raises `ImportError` with an upgrade message. Python 3.10+ behaviour is unchanged. The actively maintained line is v6.x (`pip install --upgrade axonflow` on Python 3.10+).
+
 ## [4.2.0] - 2026-03-16
 
 ### Added
