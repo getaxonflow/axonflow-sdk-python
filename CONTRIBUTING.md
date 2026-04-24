@@ -41,6 +41,63 @@ pytest --cov=axonflow --cov-report=term-missing
 pytest -v
 ```
 
+### Wire-shape contract tests
+
+When you add or rename a pydantic `BaseModel` subclass whose class name
+matches an OpenAPI schema in the platform specs, a CI job diffs the
+fields against the spec and fails the PR on drift. This is enforced by
+`tests/test_wire_shape.py` (opt-in via the `wire_shape` marker).
+
+Run locally:
+
+```bash
+# Clone the community mirror — the specs live in docs/api/
+git clone https://github.com/getaxonflow/axonflow.git ../axonflow
+
+# Point the test at the specs dir and run just the wire-shape tests
+AXONFLOW_OPENAPI_SPECS_DIR=../axonflow/docs/api \
+  pytest tests/test_wire_shape.py -m wire_shape -v
+```
+
+Without the env var, the tests skip cleanly — a plain `pytest` run
+doesn't need the specs.
+
+If you legitimately need to update the acknowledged baseline (e.g. a
+drift entry was burned down, or a new acknowledged divergence was
+added), regenerate it with:
+
+```bash
+# Pinning the SHA picks up the current HEAD of the community mirror.
+# Alternately pass --sha <commit-sha> to pin explicitly.
+python scripts/refresh_wire_shape_baseline.py ../axonflow/docs/api
+```
+
+Never regenerate to silence a failure without understanding what drifted;
+that defeats the gate.
+
+#### Bumping `openapi_specs_sha`
+
+The wire-shape gate pins the OpenAPI spec revision via
+`openapi_specs_sha` in the baseline so a given SDK commit always diffs
+against the same spec. Changing that SHA in the same PR that changes
+SDK models can silently retarget the gate past drift it should have
+caught, so the CI job enforces an extra guardrail: any PR that moves
+`openapi_specs_sha` must also carry the `spec-pin-bump` label, which
+surfaces the bump for explicit review.
+
+Recommended flow:
+
+1. Open a dedicated PR that updates only `openapi_specs_sha` (and the
+   parts of the baseline that change as a consequence: drift entries,
+   cross-spec shapes).
+2. Apply the `spec-pin-bump` label.
+3. Merge.
+4. Follow up with the SDK-side changes that the new spec enables.
+
+If it's genuinely one change (platform + SDK shipping together), apply
+the label to the single PR — the label just signals the reviewer to
+scrutinise the SHA move.
+
 ### Running Linting
 
 ```bash

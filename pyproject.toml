@@ -54,6 +54,11 @@ dev = [
     "pre-commit>=3.0.0",
     "mcp>=1.0.0",
     "langchain-core>=0.3.0",
+    # pyyaml: used by tests/test_wire_shape.py. Declared explicitly
+    # rather than relying on transitive availability via langchain-core
+    # or pre-commit, so the wire-shape gate can't break if either of
+    # those deps is removed from [dev] in the future.
+    "pyyaml>=6.0",
 ]
 docs = [
     "sphinx>=7.0.0",
