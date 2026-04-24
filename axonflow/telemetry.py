@@ -19,6 +19,7 @@ import logging
 import os
 import platform
 import threading
+import time
 import uuid
 from urllib.parse import urlparse
 
@@ -96,13 +97,16 @@ def _is_telemetry_enabled(
     return mode != "sandbox"
 
 
-def _detect_platform_version(endpoint: str) -> str | None:
+def _detect_platform_version(endpoint: str, timeout: float = 2.0) -> str | None:
     """Detect platform version by calling the agent's /health endpoint.
 
-    Returns the version string or None on any failure.
+    Returns the version string or None on any failure. The caller passes a
+    timeout derived from the shared telemetry deadline so the health probe
+    and the checkpoint POST don't stack into a larger combined budget — see
+    issue #1692.
     """
     try:
-        resp = httpx.get(f"{endpoint}/health", timeout=2)
+        resp = httpx.get(f"{endpoint}/health", timeout=timeout)
         if resp.status_code == _HTTP_OK:
             body = resp.json()
             version = body.get("version")
@@ -194,12 +198,31 @@ def _build_payload(
 
 
 def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
-    """Execute the HTTP POST (runs inside a daemon thread)."""
+    """Execute the HTTP POST (runs inside a daemon thread).
+
+    All HTTP operations share one monotonic deadline so that the atexit flush
+    handler's ``_TIMEOUT_SECONDS`` budget actually covers the complete
+    telemetry path. Previously the /health probe (2s) and the POST
+    (``_TIMEOUT_SECONDS``) each had independent timeouts, which meant the
+    thread's real worst case was ~5s and the 3s join could return while the
+    POST was still in flight — reintroducing the short-lived-process drop
+    bug on slow or blackholed endpoints. See issue #1692.
+    """
+    deadline = time.monotonic() + _TIMEOUT_SECONDS
     try:
-        platform_version = _detect_platform_version(endpoint) if endpoint else None
+        # Health probe uses remaining budget, capped so the POST still has time.
+        health_budget = min(1.0, max(0.0, deadline - time.monotonic()))
+        platform_version = None
+        if endpoint and health_budget > 0.1:
+            platform_version = _detect_platform_version(endpoint, timeout=health_budget)
         endpoint_type = _classify_endpoint(endpoint)
         payload = _build_payload(mode, platform_version, endpoint_type)
-        resp = httpx.post(url, json=payload, timeout=_TIMEOUT_SECONDS)
+
+        # POST uses all remaining budget.
+        post_budget = max(0.0, deadline - time.monotonic())
+        if post_budget < 0.1:
+            return
+        resp = httpx.post(url, json=payload, timeout=post_budget)
         if resp.status_code == _HTTP_OK:
             try:
                 body = resp.json()

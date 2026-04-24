@@ -285,7 +285,11 @@ class TestSendTelemetryPing:
 
     @patch("axonflow.telemetry.httpx")
     def test_timeout_passed_to_post(self, mock_httpx: MagicMock) -> None:
-        """Verify the 3-second timeout is passed to httpx.post."""
+        """POST timeout is derived from the shared telemetry deadline, so it
+        is bounded by the total budget (``_TIMEOUT_SECONDS``) and comfortably
+        positive after the health probe. Under mocks the health probe returns
+        instantly, so the remaining budget stays close to the full 3s.
+        """
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {}
@@ -301,7 +305,10 @@ class TestSendTelemetryPing:
         _wait_for_threads()
 
         call_kwargs = mock_httpx.post.call_args[1]
-        assert call_kwargs["timeout"] == 3
+        # Total budget is 3s; health probe is mocked and returns instantly,
+        # so the POST should get essentially all of it. Allow slack for
+        # scheduler jitter.
+        assert 2.0 < call_kwargs["timeout"] <= 3.0
 
     @patch("axonflow.telemetry.httpx")
     def test_non_200_response_no_crash(self, mock_httpx: MagicMock) -> None:

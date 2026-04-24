@@ -5,6 +5,27 @@ All notable changes to the AxonFlow Python SDK will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Telemetry delivery on short-lived processes.** `send_telemetry_ping`
+  spawned a daemon thread that was killed on interpreter shutdown before its
+  HTTP POST to the checkpoint completed. CLI one-liners, serverless handlers,
+  quickstart snippets, and cold-start functions silently dropped their
+  telemetry with no error visible to the caller. An `atexit` handler now
+  joins pending telemetry threads with a bounded timeout, so the ping is
+  guaranteed to either land or time out before the interpreter exits. The
+  pending-thread list is pruned on every append so long-lived processes that
+  instantiate many clients do not accumulate Thread objects.
+- **Telemetry budget no longer stacks.** The `/health` probe (2s) and the
+  checkpoint POST (3s) previously had independent timeouts, so the total
+  telemetry path could take up to ~5s — longer than the atexit flush
+  guaranteed to wait, reintroducing the short-lived-process drop on slow or
+  blackholed endpoints. Both network operations now share a single monotonic
+  deadline derived from `_TIMEOUT_SECONDS`, so the atexit flush budget
+  actually covers the complete path.
+
 ## [6.6.0] - 2026-04-22
 
 ### Added
