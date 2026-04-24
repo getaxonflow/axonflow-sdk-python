@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
-## [Unreleased]
+## [6.6.1] - 2026-04-24
 
 ### Fixed
 
@@ -18,9 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Retire dead staging endpoint across the SDK.** The decommissioned
   `staging-eu.getaxonflow.com` host was still referenced in 11 places,
   including the public `AxonFlow.sandbox()` factory, every example's default
-  endpoint, the fixture-recording script, `SECURITY.md`, `CONTRIBUTING.md`,
-  and the integration workflow. Callers hitting any of these defaults would
-  silently connect to a dead host.
+  endpoint, the fixture-recording script, `SECURITY.md`, and `CONTRIBUTING.md`.
+  Callers hitting any of these defaults would silently connect to a dead host.
   - `AxonFlow.sandbox()` now targets a local community docker-compose stack
     at `http://localhost:8080` with `demo-client` / `demo-secret` credentials.
     Docstring updated to point users at the hosted registration flow
@@ -35,19 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     reference with the correct `AXONFLOW_CLIENT_ID` / `AXONFLOW_CLIENT_SECRET`
     variables, and lists the four example files that actually exist
     (previously referenced stale `basic_usage.py` and `interceptors.py`).
-- **Integration workflow now exercises a real community stack.** The
-  `integration-tests` job previously targeted the retired staging URL under
-  `continue-on-error: true`, so failures never blocked a merge. The workflow
-  is now modelled on the Go SDK pattern: it clones the community repo, runs
-  `docker compose up`, waits for the agent (8080) and orchestrator (8081)
-  health endpoints, runs `tests/test_integration.py` with
-  `RUN_INTEGRATION_TESTS=1`, and runs `examples/quickstart.py` and
-  `examples/gateway_mode.py` against the live stack. `continue-on-error` is
-  removed so failures block. The new `Integration Tests (Community Stack)`
-  job is intentionally skipped on pull requests (to keep PR latency
-  reasonable) and is exercised via `workflow_dispatch` and on every merge
-  to `main`, plus a weekly drift-catching cron (Mon 06:00 UTC). The
-  redundant `community-stack-tests` job is dropped.
 
 ## [6.6.0] - 2026-04-22
 
