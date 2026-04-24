@@ -69,16 +69,43 @@ jobs:
   # QF-15: wire-shape contract CI. Blocks drift between Python SDK pydantic
   # models and the OpenAPI specs that are the authoritative wire contract.
   # Runs on every PR. Drift the baseline does not cover fails the check.
+  #
+  # The specs are fetched from the getaxonflow/axonflow community mirror
+  # pinned to the SHA recorded in tests/fixtures/wire_shape_baseline.json
+  # so the gate is deterministic — a given SDK commit always diffs against
+  # the same spec revision, independent of upstream activity. To pick up
+  # new spec changes, regenerate the baseline via
+  # scripts/refresh_wire_shape_baseline.py.
   wire-shape-contract:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout SDK
         uses: actions/checkout@v4
 
-      - name: Checkout OpenAPI specs (from community mirror)
+      - name: Read pinned OpenAPI specs SHA from baseline
+        id: specs_sha
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import sys
+          path = "tests/fixtures/wire_shape_baseline.json"
+          data = json.load(open(path))
+          sha = data.get("openapi_specs_sha", "").strip()
+          if not sha:
+              print(
+                  f"::error::{path} is missing openapi_specs_sha. "
+                  "Regenerate via scripts/refresh_wire_shape_baseline.py.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print(f"sha={sha}")
+          PY
+
+      - name: Checkout OpenAPI specs (pinned to baseline SHA)
         uses: actions/checkout@v4
         with:
           repository: getaxonflow/axonflow
+          ref: ${{ steps.specs_sha.outputs.sha }}
           path: axonflow-community
 
       - name: Set up Python
@@ -89,7 +116,7 @@ jobs:
           cache-dependency-path: 'pyproject.toml'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]" pyyaml
+        run: pip install -e ".[dev]"
 
       - name: Run wire-shape contract tests
         env:

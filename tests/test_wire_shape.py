@@ -50,6 +50,23 @@ EXCLUDED_MODELS: dict[str, str] = {}
 # baseline; baseline entries are intended to be burned down over time.
 BASELINE_PATH = Path(__file__).parent / "fixtures" / "wire_shape_baseline.json"
 
+# Module namespaces under ``axonflow`` whose ``ImportError`` is expected
+# when the corresponding optional third-party dependency is not
+# installed. Both packages themselves and their submodules are covered.
+# Any ImportError OUTSIDE these namespaces surfaces as a test failure
+# so real regressions (a moved symbol, a broken internal import) cannot
+# silently drop whole swathes of the SDK out of wire-shape enforcement.
+#
+# Current entries:
+# - axonflow.adapters: langchain, langgraph, langgraph_wrapper, tool_wrapper,
+#   computer_use — each pulls in langchain-core / langgraph / others.
+# - axonflow.interceptors: openai, anthropic, bedrock, gemini, ollama —
+#   each pulls in its respective provider SDK.
+OPTIONAL_DEP_MODULE_PREFIXES: tuple[str, ...] = (
+    "axonflow.adapters",
+    "axonflow.interceptors",
+)
+
 
 pytestmark = pytest.mark.wire_shape
 
@@ -66,12 +83,51 @@ def _specs_dir() -> Path | None:
 def _wire_fields(model: type[BaseModel]) -> list[str]:
     """Return sorted wire-shape property names for a pydantic model.
 
-    For each field, the wire name is the declared ``alias`` when set,
-    otherwise the Python attribute name.
+    The wire name is what the SDK actually sends/receives on the wire,
+    which in pydantic V2 is resolved with this precedence:
+      1. ``serialization_alias`` if set — explicit outgoing name
+      2. ``alias`` if set — default for both directions
+      3. ``validation_alias`` if set — explicit incoming name; used as
+         a fallback because if only the incoming alias is declared,
+         that is the wire contract the field is written against
+      4. The Python attribute name
+
+    ``AliasChoices`` and ``AliasPath`` are resolved to their canonical
+    string: the first string choice for ``AliasChoices``, or the first
+    string segment for ``AliasPath``. This keeps the check strict even
+    as pydantic features get adopted in the SDK.
     """
+    from pydantic import AliasChoices, AliasPath  # noqa: PLC0415
+
+    def _canonical(alias_obj: Any) -> str | None:  # noqa: PLR0911
+        if alias_obj is None:
+            return None
+        if isinstance(alias_obj, str):
+            return alias_obj
+        if isinstance(alias_obj, AliasChoices):
+            for choice in alias_obj.choices:
+                if isinstance(choice, str):
+                    return choice
+                if isinstance(choice, AliasPath) and choice.path:
+                    head = choice.path[0]
+                    if isinstance(head, str):
+                        return head
+            return None
+        if isinstance(alias_obj, AliasPath) and alias_obj.path:
+            head = alias_obj.path[0]
+            if isinstance(head, str):
+                return head
+        return None
+
     names: list[str] = []
     for field_name, field_info in model.model_fields.items():
-        names.append(field_info.alias or field_name)
+        wire = (
+            _canonical(field_info.serialization_alias)
+            or _canonical(field_info.alias)
+            or _canonical(field_info.validation_alias)
+            or field_name
+        )
+        names.append(wire)
     return sorted(names)
 
 
@@ -88,17 +144,23 @@ def _schema_fields(schema: dict[str, Any]) -> list[str] | None:
 
 def _load_all_schemas(
     spec_dir: Path,
-) -> tuple[dict[str, list[str]], list[tuple[str, str, list[str], str, list[str]]]]:
+) -> tuple[dict[str, list[str]], dict[str, dict[str, list[str]]]]:
     """Load every `*.yaml` in spec_dir and collect schemas with properties.
 
-    Returns (merged_schemas, divergences). When the same schema name is
-    declared in two specs with different shapes, the later-loaded one
-    wins in ``merged_schemas`` and the pair is recorded in ``divergences``
-    as ``(name, first_spec, first_fields, second_spec, second_fields)``.
+    Returns ``(merged_schemas, duplicates_by_spec)``:
+
+    - ``merged_schemas``: ``{schema_name: sorted_fields}`` with last-loaded
+      declaration winning on name collision. This is what SDK models are
+      diffed against.
+    - ``duplicates_by_spec``: ``{schema_name: {spec_filename: sorted_fields}}``
+      — every declaration of a schema name that appears in more than one
+      spec, keyed by the file it came from. The test compares this to the
+      baseline fingerprint so that baselined divergences can't quietly
+      drift further (e.g. an already-acknowledged collision adding a
+      field on one side still fails the gate).
     """
     schemas: dict[str, list[str]] = {}
-    seen_in: dict[str, str] = {}
-    divergences: list[tuple[str, str, list[str], str, list[str]]] = []
+    all_declarations: dict[str, dict[str, list[str]]] = {}
     for spec_file in sorted(spec_dir.glob("*.yaml")):
         with spec_file.open() as f:
             doc = yaml.safe_load(f) or {}
@@ -109,24 +171,48 @@ def _load_all_schemas(
             fields = _schema_fields(schema)
             if fields is None:
                 continue
-            if name in schemas and schemas[name] != fields:
-                divergences.append((name, seen_in[name], schemas[name], spec_file.name, fields))
+            all_declarations.setdefault(name, {})[spec_file.name] = fields
             schemas[name] = fields
-            seen_in[name] = spec_file.name
-    return schemas, divergences
+    # Only schemas whose declarations DIFFER across specs are tracked as
+    # divergences. Redundant identical declarations are benign.
+    duplicates_by_spec = {
+        name: decls
+        for name, decls in all_declarations.items()
+        if len({tuple(f) for f in decls.values()}) > 1
+    }
+    return schemas, duplicates_by_spec
 
 
 def _discover_models() -> dict[str, type[BaseModel]]:
-    """Find every pydantic BaseModel subclass reachable under ``axonflow``."""
+    """Find every pydantic BaseModel subclass reachable under ``axonflow``.
+
+    Modules in ``OPTIONAL_DEP_MODULES`` are allowed to raise ``ImportError``
+    silently when their optional third-party dep is missing. Any other
+    ``ImportError`` is a real regression and is re-raised, so broken
+    internal imports can't quietly remove a swath of the SDK from gate
+    enforcement while the rest of the test happily says "some models
+    matched, good enough".
+    """
     models: dict[str, type[BaseModel]] = {}
     pkg_root = Path(axonflow.__file__).parent
     for mod_info in pkgutil.walk_packages([str(pkg_root)], prefix="axonflow."):
         try:
             mod = importlib.import_module(mod_info.name)
-        except ImportError:
-            # Optional dependencies (langchain, langgraph, openai, etc.)
-            # may not be installed in the test env.
-            continue
+        except ImportError as exc:
+            if any(
+                mod_info.name == prefix or mod_info.name.startswith(prefix + ".")
+                for prefix in OPTIONAL_DEP_MODULE_PREFIXES
+            ):
+                continue
+            msg = (
+                f"Unexpected ImportError importing {mod_info.name!r}: {exc}. "
+                f"If {mod_info.name!r} legitimately requires an optional "
+                f"third-party dep, add its namespace prefix to "
+                f"OPTIONAL_DEP_MODULE_PREFIXES. Otherwise fix the broken "
+                f"import — silently skipping would remove this module's "
+                f"models from wire-shape enforcement."
+            )
+            raise ImportError(msg) from exc
         for _, obj in inspect.getmembers(mod, inspect.isclass):
             if obj is BaseModel:
                 continue
@@ -140,7 +226,7 @@ def _discover_models() -> dict[str, type[BaseModel]]:
 
 
 @pytest.fixture(scope="module")
-def loaded_specs() -> tuple[dict[str, list[str]], list[tuple[str, str, list[str], str, list[str]]]]:
+def loaded_specs() -> tuple[dict[str, list[str]], dict[str, dict[str, list[str]]]]:
     spec_dir = _specs_dir()
     if spec_dir is None:
         pytest.skip(
@@ -154,7 +240,7 @@ def loaded_specs() -> tuple[dict[str, list[str]], list[tuple[str, str, list[str]
 
 @pytest.fixture(scope="module")
 def openapi_schemas(
-    loaded_specs: tuple[dict[str, list[str]], list[tuple[str, str, list[str], str, list[str]]]],
+    loaded_specs: tuple[dict[str, list[str]], dict[str, dict[str, list[str]]]],
 ) -> dict[str, list[str]]:
     return loaded_specs[0]
 
@@ -177,39 +263,86 @@ def test_specs_dir_is_non_empty(openapi_schemas: dict[str, list[str]]) -> None:
 
 
 def test_no_new_cross_spec_schema_divergence(
-    loaded_specs: tuple[dict[str, list[str]], list[tuple[str, str, list[str], str, list[str]]]],
+    loaded_specs: tuple[dict[str, list[str]], dict[str, dict[str, list[str]]]],
     baseline: dict[str, Any],
 ) -> None:
     """Fail if a schema name is declared with different shapes in two
-    specs and is NOT in the baseline allowlist.
+    specs, AND either the name or the per-spec shapes differ from
+    what's in the baseline.
 
     Platform-side spec inconsistencies — the SDK side can only pick one
-    version when the name collides. Entries already in the baseline are
-    tracked for burn-down; newly-introduced divergences block the PR.
+    version when the name collides. The baseline records the **expected
+    per-spec shape** for each acknowledged duplicate so the gate still
+    fails when a duplicate widens (e.g. one side adds a new field after
+    the divergence was baselined). Previously the baseline was a flat
+    list of names, which allowed already-known collisions to drift
+    further without tripping the gate.
     """
-    allowed = set(baseline.get("cross_spec_duplicates", []))
-    divergences = loaded_specs[1]
-    unacknowledged = [d for d in divergences if d[0] not in allowed]
-    if unacknowledged:
-        lines = ["", "NEW cross-spec schema divergence detected (not in baseline):", ""]
-        for name, spec_a, fields_a, spec_b, fields_b in unacknowledged:
-            only_a = sorted(set(fields_a) - set(fields_b))
-            only_b = sorted(set(fields_b) - set(fields_a))
-            lines.append(f"  {name}:")
-            lines.append(f"    {spec_a}: {fields_a}")
-            lines.append(f"    {spec_b}: {fields_b}")
-            if only_a:
-                lines.append(f"    Only in {spec_a}: {only_a}")
-            if only_b:
-                lines.append(f"    Only in {spec_b}: {only_b}")
-        lines.append("")
-        lines.append(
-            "Fix: reconcile in the axonflow-enterprise specs (rename one, "
-            "or merge into a shared supertype). If the divergence is "
-            "intentional and must stand, add the schema name to "
-            "tests/fixtures/wire_shape_baseline.json::cross_spec_duplicates "
-            "with a tracking issue."
+    baseline_dups = baseline.get("cross_spec_duplicates", {})
+    # Back-compat: if the baseline is still a flat list, treat it as
+    # "names acknowledged but shapes not pinned" and degrade to a
+    # name-only check with a loud warning printed. This lets the test
+    # pass a grace period and reminds the reader to regenerate.
+    if isinstance(baseline_dups, list):
+        baseline_dups = dict.fromkeys(baseline_dups)
+        print(
+            "\nWARNING: baseline cross_spec_duplicates is a flat list; "
+            "regenerate the baseline to pin per-spec shapes so the gate "
+            "can catch drift-after-acknowledgement."
         )
+
+    observed = loaded_specs[1]
+    problems: list[str] = []
+
+    for name, observed_decls in observed.items():
+        if name not in baseline_dups:
+            problems.append(
+                f"  {name}: NEW cross-spec divergence (not in baseline).\n"
+                + "\n".join(
+                    f"    {spec}: {fields}" for spec, fields in sorted(observed_decls.items())
+                )
+            )
+            continue
+        expected = baseline_dups[name]
+        if expected is None:
+            # Flat-list legacy entry — accept without shape check this run.
+            continue
+        if not isinstance(expected, dict):
+            problems.append(
+                f"  {name}: baseline entry malformed — expected a "
+                f"{{spec_file: [fields]}} object, got {type(expected).__name__}."
+            )
+            continue
+        observed_norm = {spec: list(fields) for spec, fields in observed_decls.items()}
+        expected_norm = {spec: list(fields) for spec, fields in expected.items()}
+        if observed_norm != expected_norm:
+            diff_lines = [f"  {name}: divergence drifted from baseline."]
+            all_specs = sorted(set(observed_norm) | set(expected_norm))
+            for spec in all_specs:
+                exp = expected_norm.get(spec)
+                obs = observed_norm.get(spec)
+                if exp == obs:
+                    continue
+                diff_lines.append(f"    {spec}:")
+                diff_lines.append(f"      baseline: {exp}")
+                diff_lines.append(f"      observed: {obs}")
+            problems.append("\n".join(diff_lines))
+
+    if problems:
+        lines = [
+            "",
+            "Cross-spec schema divergence gate failed:",
+            "",
+            *problems,
+            "",
+            (
+                "Fix: reconcile in the axonflow-enterprise specs (rename one, "
+                "or merge into a shared supertype). If the divergence is "
+                "intentional and must stand, regenerate "
+                "tests/fixtures/wire_shape_baseline.json with the new "
+                "per-spec shapes via scripts/refresh_wire_shape_baseline.py."
+            ),
+        ]
         pytest.fail("\n".join(lines))
 
 
@@ -318,6 +451,52 @@ def test_baseline_has_not_grown_stale(
                 print(f"    sdk_only entries no longer drifting: {stale_sdk}")
             if stale_spec:
                 print(f"    spec_only entries no longer drifting: {stale_spec}")
+
+
+def test_registered_models_still_map(
+    openapi_schemas: dict[str, list[str]],
+    sdk_models: dict[str, type[BaseModel]],
+    baseline: dict[str, Any],
+) -> None:
+    """Rename-escape guard. Every model name listed in
+    ``baseline.registered_models`` must still match (a) an SDK pydantic
+    class and (b) an OpenAPI schema with concrete properties.
+
+    Without this gate, renaming either side silently drops the model out
+    of the matching loop and the drift check passes trivially. Fail
+    loudly instead so the rename is either done on both sides or the
+    baseline list is updated deliberately.
+    """
+    registered = baseline.get("registered_models", [])
+    if not registered:
+        pytest.skip(
+            "baseline has no registered_models list; rename-escape guard "
+            "is disabled until the baseline is regenerated with that key."
+        )
+    missing_model: list[str] = []
+    missing_schema: list[str] = []
+    for name in registered:
+        if name not in sdk_models:
+            missing_model.append(name)
+        if name not in openapi_schemas:
+            missing_schema.append(name)
+    if missing_model or missing_schema:
+        lines = [
+            "",
+            "Registered-model mapping broken — rename-escape guard fired:",
+            "",
+        ]
+        if missing_model:
+            lines.append(f"  No matching SDK pydantic class for: {missing_model}")
+        if missing_schema:
+            lines.append(f"  No matching OpenAPI schema for: {missing_schema}")
+        lines.append("")
+        lines.append(
+            "Fix: either revert the rename, do it on both sides, or update "
+            "tests/fixtures/wire_shape_baseline.json::registered_models "
+            "(and mirror the rename in baseline.per_model_drift entries)."
+        )
+        pytest.fail("\n".join(lines))
 
 
 def test_unmapped_sdk_models_are_tracked(

@@ -41,6 +41,40 @@ pytest --cov=axonflow --cov-report=term-missing
 pytest -v
 ```
 
+### Wire-shape contract tests
+
+When you add or rename a pydantic `BaseModel` subclass whose class name
+matches an OpenAPI schema in the platform specs, a CI job diffs the
+fields against the spec and fails the PR on drift. This is enforced by
+`tests/test_wire_shape.py` (opt-in via the `wire_shape` marker).
+
+Run locally:
+
+```bash
+# Clone the community mirror — the specs live in docs/api/
+git clone https://github.com/getaxonflow/axonflow.git ../axonflow
+
+# Point the test at the specs dir and run just the wire-shape tests
+AXONFLOW_OPENAPI_SPECS_DIR=../axonflow/docs/api \
+  pytest tests/test_wire_shape.py -m wire_shape -v
+```
+
+Without the env var, the tests skip cleanly — a plain `pytest` run
+doesn't need the specs.
+
+If you legitimately need to update the acknowledged baseline (e.g. a
+drift entry was burned down, or a new acknowledged divergence was
+added), regenerate it with:
+
+```bash
+# Pinning the SHA picks up the current HEAD of the community mirror.
+# Alternately pass --sha <commit-sha> to pin explicitly.
+python scripts/refresh_wire_shape_baseline.py ../axonflow/docs/api
+```
+
+Never regenerate to silence a failure without understanding what drifted;
+that defeats the gate.
+
 ### Running Linting
 
 ```bash
