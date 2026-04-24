@@ -93,11 +93,24 @@ def main() -> int:
         print(f"error: {specs_dir} is not a directory", file=sys.stderr)
         return 2
 
+    # Resolve SHA before touching any models / schemas so a bad SHA fails
+    # fast without wasted work AND without writing a poisoned baseline.
+    sha = args.sha if args.sha is not None else _git_head_sha(specs_dir)
+    if not sha:
+        print(
+            "error: could not determine OpenAPI specs commit SHA.\n"
+            "  Either run this script against a specs_dir that sits inside a git\n"
+            "  checkout of the getaxonflow/axonflow community mirror, or pass\n"
+            "  --sha <commit-sha> explicitly. An empty SHA would poison\n"
+            "  tests/fixtures/wire_shape_baseline.json and break the next CI\n"
+            "  wire-shape-contract run at bootstrap.",
+            file=sys.stderr,
+        )
+        return 2
+
     helpers = _load_test_helpers()
     merged, duplicates_by_spec = helpers._load_all_schemas(specs_dir)
     models = helpers._discover_models()
-
-    sha = args.sha or _git_head_sha(specs_dir)
 
     registered: list[str] = []
     drift: dict[str, dict[str, list[str]]] = {}

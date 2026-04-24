@@ -73,14 +73,20 @@ jobs:
   # The specs are fetched from the getaxonflow/axonflow community mirror
   # pinned to the SHA recorded in tests/fixtures/wire_shape_baseline.json
   # so the gate is deterministic — a given SDK commit always diffs against
-  # the same spec revision, independent of upstream activity. To pick up
-  # new spec changes, regenerate the baseline via
-  # scripts/refresh_wire_shape_baseline.py.
+  # the same spec revision, independent of upstream activity. Changing the
+  # pinned SHA from the same PR that changes SDK models would bypass the
+  # gate, so the workflow also runs a SHA-bump guard that requires a
+  # 'spec-pin-bump' label on PRs that move the SHA.
+  #
+  # To pick up new spec changes, regenerate the baseline via
+  # scripts/refresh_wire_shape_baseline.py (ideally in a dedicated PR).
   wire-shape-contract:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout SDK
+      - name: Checkout SDK (full history for SHA-bump guard)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Read pinned OpenAPI specs SHA from baseline
         id: specs_sha
@@ -100,6 +106,47 @@ jobs:
               sys.exit(1)
           print(f"sha={sha}")
           PY
+
+      # SHA-bump guard: the pinned SHA is the contract's source of truth.
+      # A PR that both changes the SHA and the SDK models can silently
+      # retarget the gate away from the drift it should have caught. Require
+      # explicit 'spec-pin-bump' label to acknowledge the bump. First-time
+      # introductions (base branch has no pin yet) bypass the guard.
+      - name: Guard against unauthorized OpenAPI specs SHA bump
+        if: github.event_name == 'pull_request'
+        env:
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_SHA: ${{ steps.specs_sha.outputs.sha }}
+        run: |
+          set -e
+          BASE_SHA=$(
+            git show "origin/${BASE_REF}:tests/fixtures/wire_shape_baseline.json" 2>/dev/null \
+              | python3 -c "import json, sys; print(json.load(sys.stdin).get('openapi_specs_sha','') or '')" \
+              || true
+          )
+          if [ -z "$BASE_SHA" ]; then
+            echo "::notice::Base branch has no openapi_specs_sha yet; treating this PR as the first pin introduction."
+            exit 0
+          fi
+          if [ "$BASE_SHA" = "$PR_SHA" ]; then
+            echo "openapi_specs_sha unchanged (${PR_SHA})."
+            exit 0
+          fi
+          echo "SHA change detected: ${BASE_SHA} -> ${PR_SHA}"
+          HAS_LABEL=$(printf '%s' "$PR_LABELS" | python3 -c "import json, sys; print('spec-pin-bump' in json.load(sys.stdin))")
+          if [ "$HAS_LABEL" = "True" ]; then
+            echo "::notice::'spec-pin-bump' label present — SHA bump authorized."
+            exit 0
+          fi
+          echo "::error::openapi_specs_sha changed from ${BASE_SHA} to ${PR_SHA}."
+          echo "::error::The wire-shape contract's spec revision is pinned to preserve"
+          echo "::error::review integrity: a SHA change in the same PR as SDK changes"
+          echo "::error::can silence drift by retargeting the contract to a friendlier"
+          echo "::error::revision. Either split this into a dedicated SHA-bump PR, or"
+          echo "::error::apply the 'spec-pin-bump' label to this PR to acknowledge that"
+          echo "::error::the bump is intentional and has been reviewed independently."
+          exit 1
 
       - name: Checkout OpenAPI specs (pinned to baseline SHA)
         uses: actions/checkout@v4

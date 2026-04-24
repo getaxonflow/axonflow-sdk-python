@@ -75,6 +75,29 @@ python scripts/refresh_wire_shape_baseline.py ../axonflow/docs/api
 Never regenerate to silence a failure without understanding what drifted;
 that defeats the gate.
 
+#### Bumping `openapi_specs_sha`
+
+The wire-shape gate pins the OpenAPI spec revision via
+`openapi_specs_sha` in the baseline so a given SDK commit always diffs
+against the same spec. Changing that SHA in the same PR that changes
+SDK models can silently retarget the gate past drift it should have
+caught, so the CI job enforces an extra guardrail: any PR that moves
+`openapi_specs_sha` must also carry the `spec-pin-bump` label, which
+surfaces the bump for explicit review.
+
+Recommended flow:
+
+1. Open a dedicated PR that updates only `openapi_specs_sha` (and the
+   parts of the baseline that change as a consequence: drift entries,
+   cross-spec shapes).
+2. Apply the `spec-pin-bump` label.
+3. Merge.
+4. Follow up with the SDK-side changes that the new spec enables.
+
+If it's genuinely one change (platform + SDK shipping together), apply
+the label to the single PR — the label just signals the reviewer to
+scrutinise the SHA move.
+
 ### Running Linting
 
 ```bash
