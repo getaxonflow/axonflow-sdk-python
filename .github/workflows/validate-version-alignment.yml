@@ -1,0 +1,44 @@
+name: Version Alignment Check
+
+# Blocks merges that would leave pyproject.toml / axonflow/_version.py
+# out of sync with CHANGELOG.md's most recent released section. The
+# invariant on main:
+#   pyproject.toml::version
+#     == axonflow/_version.py::__version__
+#     == first ## [X.Y.Z] section in CHANGELOG
+#
+# When it's time to ship a new release, a single release-prep PR
+# renames [Unreleased] → [X.Y.Z] - YYYY-MM-DD AND bumps both manifest
+# files in the same commit, so this gate always sees them together.
+#
+# See .github/scripts/validate-version-alignment.sh for the script.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'CHANGELOG.md'
+      - 'pyproject.toml'
+      - 'axonflow/_version.py'
+      - '.github/scripts/validate-version-alignment.sh'
+      - '.github/workflows/validate-version-alignment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'CHANGELOG.md'
+      - 'pyproject.toml'
+      - 'axonflow/_version.py'
+      - '.github/scripts/validate-version-alignment.sh'
+      - '.github/workflows/validate-version-alignment.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-versions:
+    name: Validate Version Alignment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version alignment
+        run: ./.github/scripts/validate-version-alignment.sh

@@ -62,12 +62,28 @@ jobs:
 
       - name: Update version in source
         run: |
+          set -e
           VERSION=${{ steps.version.outputs.VERSION }}
+          # The real __version__ single source of truth lives in
+          # axonflow/_version.py; axonflow/__init__.py only re-exports
+          # via `from axonflow._version import __version__`. Targeting
+          # __init__.py was a silent no-op and shipped wheels with a
+          # runtime __version__ that lagged the PyPI metadata version.
           sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
-          sed -i "s/^__version__ = .*/__version__ = \"${VERSION}\"/" axonflow/__init__.py
+          sed -i "s/^__version__ = .*/__version__ = \"${VERSION}\"/" axonflow/_version.py
           echo "Updated version to ${VERSION}"
-          grep version pyproject.toml | head -1
-          grep __version__ axonflow/__init__.py
+          grep "^version" pyproject.toml | head -1
+          grep "^__version__" axonflow/_version.py
+          # Fail fast if either sed missed its target — don't let a
+          # silent no-op ship a wheel with mismatched runtime version.
+          if ! grep -q "^version = \"${VERSION}\"" pyproject.toml; then
+            echo "::error::sed did not bump pyproject.toml to ${VERSION}"
+            exit 1
+          fi
+          if ! grep -q "^__version__ = \"${VERSION}\"" axonflow/_version.py; then
+            echo "::error::sed did not bump axonflow/_version.py to ${VERSION}"
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
