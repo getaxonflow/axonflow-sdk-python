@@ -1,0 +1,351 @@
+{
+  "_comment": "Baseline of KNOWN wire-shape drift between the Python SDK and the OpenAPI specs at the time wire-shape CI was introduced (QF-15). Each entry documents the drift that existed when the gate was installed; the CI gate fails on any NEW drift outside this baseline. Drift listed here should be burned down over time by filing targeted fix PRs and removing the entry. See axonflow-enterprise issue for the tracking epic.",
+  "cross_spec_duplicates": [
+    "APIError",
+    "BiasRecord",
+    "CreatePolicyRequest",
+    "EUAIActExportRequest",
+    "HealthResponse",
+    "MetricsResponse",
+    "PolicyOverride",
+    "UpdatePolicyRequest"
+  ],
+  "per_model_drift": {
+    "AuditLogEntry": {
+      "sdk_only": [
+        "metadata",
+        "model",
+        "policy_violations"
+      ],
+      "spec_only": []
+    },
+    "AuditSearchRequest": {
+      "sdk_only": [
+        "decision_id",
+        "offset",
+        "override_id",
+        "policy_name"
+      ],
+      "spec_only": []
+    },
+    "Budget": {
+      "sdk_only": [
+        "enabled"
+      ],
+      "spec_only": [
+        "org_id",
+        "tenant_id"
+      ]
+    },
+    "BudgetAlert": {
+      "sdk_only": [],
+      "spec_only": [
+        "acknowledged"
+      ]
+    },
+    "CancelPlanResponse": {
+      "sdk_only": [
+        "message"
+      ],
+      "spec_only": [
+        "success"
+      ]
+    },
+    "ClientRequest": {
+      "sdk_only": [
+        "media"
+      ],
+      "spec_only": [
+        "skip_llm"
+      ]
+    },
+    "ClientResponse": {
+      "sdk_only": [
+        "budget_info",
+        "media_analysis"
+      ],
+      "spec_only": []
+    },
+    "CreateStaticPolicyRequest": {
+      "sdk_only": [
+        "organization_id"
+      ],
+      "spec_only": [
+        "priority",
+        "tags"
+      ]
+    },
+    "CreateWorkflowResponse": {
+      "sdk_only": [
+        "created_at",
+        "source"
+      ],
+      "spec_only": [
+        "started_at"
+      ]
+    },
+    "DynamicPolicy": {
+      "sdk_only": [
+        "category",
+        "created_at",
+        "organization_id",
+        "priority",
+        "tier",
+        "type",
+        "updated_at"
+      ],
+      "spec_only": []
+    },
+    "DynamicPolicyInfo": {
+      "sdk_only": [
+        "orchestrator_reachable",
+        "policies_evaluated",
+        "processing_time_ms"
+      ],
+      "spec_only": [
+        "block_reason",
+        "blocked",
+        "enabled",
+        "error",
+        "evaluated",
+        "evaluation_time_ms",
+        "policies_checked",
+        "policies_matched"
+      ]
+    },
+    "DynamicPolicyMatch": {
+      "sdk_only": [
+        "reason"
+      ],
+      "spec_only": [
+        "message"
+      ]
+    },
+    "ExecutionSnapshot": {
+      "sdk_only": [
+        "approval_required",
+        "approved_at",
+        "approved_by"
+      ],
+      "spec_only": [
+        "retry_count"
+      ]
+    },
+    "ExecutionSummary": {
+      "sdk_only": [
+        "input_summary",
+        "output_summary"
+      ],
+      "spec_only": []
+    },
+    "ExfiltrationCheckInfo": {
+      "sdk_only": [
+        "within_limits"
+      ],
+      "spec_only": [
+        "exceeded",
+        "limit_type"
+      ]
+    },
+    "ListWorkflowsResponse": {
+      "sdk_only": [],
+      "spec_only": [
+        "limit",
+        "offset"
+      ]
+    },
+    "MCPCheckInputRequest": {
+      "sdk_only": [],
+      "spec_only": [
+        "client_id",
+        "tenant_id",
+        "user_id",
+        "user_role",
+        "user_token"
+      ]
+    },
+    "MCPCheckOutputRequest": {
+      "sdk_only": [],
+      "spec_only": [
+        "client_id",
+        "tenant_id",
+        "user_id",
+        "user_token"
+      ]
+    },
+    "MarkStepCompletedRequest": {
+      "sdk_only": [
+        "metadata"
+      ],
+      "spec_only": []
+    },
+    "PlanResponse": {
+      "sdk_only": [
+        "complexity",
+        "domain",
+        "parallel",
+        "status"
+      ],
+      "spec_only": [
+        "error",
+        "policy_info",
+        "result",
+        "success",
+        "version",
+        "workflow_execution_id"
+      ]
+    },
+    "PolicyEvaluationInfo": {
+      "sdk_only": [
+        "code_artifact"
+      ],
+      "spec_only": []
+    },
+    "PolicyOverride": {
+      "sdk_only": [
+        "active"
+      ],
+      "spec_only": [
+        "enabled_override",
+        "id"
+      ]
+    },
+    "PolicyVersion": {
+      "sdk_only": [
+        "changeDescription",
+        "changeType",
+        "changedAt",
+        "changedBy",
+        "newValues",
+        "previousValues"
+      ],
+      "spec_only": [
+        "change_summary",
+        "change_type",
+        "changed_at",
+        "changed_by",
+        "id",
+        "policy_id",
+        "snapshot"
+      ]
+    },
+    "ResumePlanResponse": {
+      "sdk_only": [
+        "approved",
+        "message",
+        "next_step",
+        "next_step_name",
+        "step_result",
+        "total_steps",
+        "workflow_id"
+      ],
+      "spec_only": [
+        "result"
+      ]
+    },
+    "StaticPolicy": {
+      "sdk_only": [
+        "createdAt",
+        "hasOverride",
+        "organizationId",
+        "tenantId",
+        "updatedAt"
+      ],
+      "spec_only": [
+        "created_at",
+        "has_override",
+        "organization_id",
+        "policy_id",
+        "priority",
+        "tenant_id",
+        "updated_at"
+      ]
+    },
+    "StepGateRequest": {
+      "sdk_only": [],
+      "spec_only": [
+        "cost_usd",
+        "tokens_in",
+        "tokens_out"
+      ]
+    },
+    "StepGateResponse": {
+      "sdk_only": [],
+      "spec_only": [
+        "decision_id"
+      ]
+    },
+    "UpdatePlanRequest": {
+      "sdk_only": [],
+      "spec_only": [
+        "metadata"
+      ]
+    },
+    "UpdateStaticPolicyRequest": {
+      "sdk_only": [
+        "category"
+      ],
+      "spec_only": [
+        "priority",
+        "tags"
+      ]
+    },
+    "UsageBreakdown": {
+      "sdk_only": [
+        "period",
+        "period_end",
+        "period_start"
+      ],
+      "spec_only": []
+    },
+    "UsageBreakdownItem": {
+      "sdk_only": [],
+      "spec_only": [
+        "group_by"
+      ]
+    },
+    "UsageRecord": {
+      "sdk_only": [
+        "timestamp"
+      ],
+      "spec_only": [
+        "created_at",
+        "error_message",
+        "latency_ms",
+        "success",
+        "team_id",
+        "tenant_id",
+        "user_id",
+        "workflow_id"
+      ]
+    },
+    "UsageSummary": {
+      "sdk_only": [
+        "period"
+      ],
+      "spec_only": []
+    },
+    "WebhookSubscription": {
+      "sdk_only": [],
+      "spec_only": [
+        "org_id",
+        "secret",
+        "tenant_id"
+      ]
+    },
+    "WorkflowStatusResponse": {
+      "sdk_only": [],
+      "spec_only": [
+        "metadata"
+      ]
+    },
+    "WorkflowStepInfo": {
+      "sdk_only": [
+        "approved_by",
+        "completed_at",
+        "decision_reason"
+      ],
+      "spec_only": []
+    }
+  }
+}
