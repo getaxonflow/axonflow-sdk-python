@@ -1335,6 +1335,12 @@ class AxonFlow:
         statement: str,
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_role: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it.
 
@@ -1346,6 +1352,11 @@ class AxonFlow:
             statement: The SQL query or command to validate.
             operation: Operation type - "query" or "execute" (default).
             parameters: Optional query parameters.
+            client_id: Client identifier (overrides client config when set).
+            tenant_id: Tenant identifier for multi-tenant scoping.
+            user_id: End-user identifier for per-user policies.
+            user_role: User role for role-based policies.
+            user_token: User auth token for downstream propagation.
 
         Returns:
             MCPCheckInputResponse with allowed status, block reason, and policy info.
@@ -1361,6 +1372,17 @@ class AxonFlow:
         }
         if parameters:
             body["parameters"] = parameters
+        # Wire-canonical scoping fields surfaced in the v6 sweep.
+        if client_id is not None:
+            body["client_id"] = client_id
+        if tenant_id is not None:
+            body["tenant_id"] = tenant_id
+        if user_id is not None:
+            body["user_id"] = user_id
+        if user_role is not None:
+            body["user_role"] = user_role
+        if user_token is not None:
+            body["user_token"] = user_token
 
         if self._config.debug:
             self._logger.debug(
@@ -1395,6 +1417,11 @@ class AxonFlow:
         message: str | None = None,
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckOutputResponse:
         """Validate MCP response data against configured policies.
 
@@ -1407,6 +1434,10 @@ class AxonFlow:
             message: Execute-style response message (e.g., "5 rows affected").
             metadata: Connector metadata for SQLi scanning.
             row_count: Total number of rows returned.
+            client_id: Client identifier (overrides client config when set).
+            tenant_id: Tenant identifier for multi-tenant scoping.
+            user_id: End-user identifier for per-user policies.
+            user_token: User auth token for downstream propagation.
 
         Returns:
             MCPCheckOutputResponse with allowed status, redacted data, and policy info.
@@ -1426,6 +1457,15 @@ class AxonFlow:
             body["metadata"] = metadata
         if row_count > 0:
             body["row_count"] = row_count
+        # Wire-canonical scoping fields surfaced in the v6 sweep.
+        if client_id is not None:
+            body["client_id"] = client_id
+        if tenant_id is not None:
+            body["tenant_id"] = tenant_id
+        if user_id is not None:
+            body["user_id"] = user_id
+        if user_token is not None:
+            body["user_token"] = user_token
 
         if self._config.debug:
             self._logger.debug(
@@ -1530,19 +1570,32 @@ class AxonFlow:
         plan_id = response.plan_id or (
             response.data.get("plan_id", "") if isinstance(response.data, dict) else ""
         )
+        # Source the wire top-level fields (success / version / result /
+        # error / workflow_execution_id / policy_info) from the parsed
+        # ClientResponse + nested data dict. They appear at the top
+        # level on current platform builds; older nested-only builds
+        # used `data.*`, so fall back through both layers.
+        data_dict: dict[str, Any] = (
+            response.data if isinstance(response.data, dict) else {}
+        )
+        # `policy_info` on PlanResponse is the spec's PolicyEvaluationResult
+        # shape (different from ClientResponse.policy_info, which is
+        # PolicyEvaluationInfo). Source from the wire dict and let
+        # pydantic validate the shape.
+        wire_policy_info = data_dict.get("policy_info")
         return PlanResponse(
             plan_id=plan_id,
             steps=steps,
-            domain=response.data.get("domain", domain or "generic")
-            if response.data and isinstance(response.data, dict)
-            else (domain or "generic"),
-            complexity=response.data.get("complexity", 0)
-            if response.data and isinstance(response.data, dict)
-            else 0,
-            parallel=response.data.get("parallel", False)
-            if response.data and isinstance(response.data, dict)
-            else False,
+            domain=data_dict.get("domain", domain or "generic"),
+            complexity=data_dict.get("complexity", 0),
+            parallel=data_dict.get("parallel", False),
             metadata=response.metadata,
+            success=response.success,
+            version=data_dict.get("version"),
+            result=response.result or data_dict.get("result"),
+            error=response.error,
+            workflow_execution_id=data_dict.get("workflow_execution_id"),
+            policy_info=wire_policy_info if isinstance(wire_policy_info, dict) else None,
         )
 
     async def execute_plan(
@@ -1682,6 +1735,8 @@ class AxonFlow:
             json_data["execution_mode"] = request.execution_mode.value
         if request.domain is not None:
             json_data["domain"] = request.domain
+        if request.metadata is not None:
+            json_data["metadata"] = request.metadata
 
         response = await self._map_request(
             "PUT",
@@ -4045,13 +4100,25 @@ class AxonFlow:
             msg = "Unexpected response type from workflow creation"
             raise TypeError(msg)
 
+        # The wire emits `started_at` (canonical) — `created_at` is a
+        # legacy SDK field that has always read None. Read both for
+        # back-compat: prefer the canonical value, fall through to the
+        # legacy slot only if the server still emits it.
+        started_at_str = response.get("started_at") or response.get("created_at")
+        started_at = _parse_datetime(started_at_str) if started_at_str else None
+        # The wire shape doesn't include `source` on the create
+        # response; if a legacy server still sends it, surface it.
+        source_str = response.get("source")
         return CreateWorkflowResponse(
             workflow_id=response["workflow_id"],
             workflow_name=response["workflow_name"],
-            source=WorkflowSource(response["source"]),
             status=WorkflowStatus(response["status"]),
-            created_at=_parse_datetime(response["created_at"]),
+            started_at=started_at,
             trace_id=response.get("trace_id"),
+            # @deprecated aliases populated for source-compat with
+            # callers that read the legacy field names.
+            created_at=started_at,
+            source=WorkflowSource(source_str) if source_str else None,
         )
 
     async def get_workflow(self, workflow_id: str) -> WorkflowStatusResponse:
@@ -4139,6 +4206,13 @@ class AxonFlow:
             body["retry_policy"] = request.retry_policy.value
         if request.idempotency_key is not None:
             body["idempotency_key"] = request.idempotency_key
+        # Wire-canonical budget-hint fields surfaced in the v6 sweep.
+        if request.tokens_in is not None:
+            body["tokens_in"] = request.tokens_in
+        if request.tokens_out is not None:
+            body["tokens_out"] = request.tokens_out
+        if request.cost_usd is not None:
+            body["cost_usd"] = request.cost_usd
 
         if self._config.debug:
             self._logger.debug(
@@ -4169,6 +4243,7 @@ class AxonFlow:
             reason=response.get("reason"),
             policy_ids=response.get("policy_ids", []),
             approval_url=response.get("approval_url"),
+            decision_id=response.get("decision_id"),
             policies_evaluated=response.get("policies_evaluated"),
             policies_matched=response.get("policies_matched"),
             cached=response.get("cached", False),
@@ -4476,6 +4551,8 @@ class AxonFlow:
         return ListWorkflowsResponse(
             workflows=workflows,
             total=response.get("total", len(workflows)),
+            limit=response.get("limit"),
+            offset=response.get("offset"),
         )
 
     # =========================================================================
@@ -6048,6 +6125,7 @@ class AxonFlow:
                 _parse_datetime(data["completed_at"]) if data.get("completed_at") else None
             ),
             trace_id=data.get("trace_id"),
+            metadata=data.get("metadata"),
             steps=steps,
         )
 
