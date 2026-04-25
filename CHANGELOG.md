@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.8.0] - 2026-04-25 — Plugin Batch 1 / ADR-043 explainability fields on MCP responses
+
+Minor release. Surfaces fields the AxonFlow agent has emitted since v7.1.0 (Plugin Batch 1 / ADR-042 / ADR-043) but the SDK didn't declare. Pure Cat B field-additions on existing methods — no new SDK methods, no breaking changes. Documented in OpenAPI via platform v7.4.3 (axonflow-enterprise#1714); SDK catches up here.
+
+Coordinated cycle: TypeScript v6.1.0 / Go v5.8.0 / Java v6.1.0 ship same day with the same field set.
+
+### Added
+
+- **`MCPCheckInputResponse`** gains 5 optional Plugin Batch 1 fields:
+  - `decision_id: str | None` — audit correlator
+  - `risk_level: Literal["low", "medium", "high", "critical"] | None`
+  - `policy_matches: list[ExplainPolicy] | None` — per-policy explainability records
+  - `override_available: bool | None` — whether session override is permitted for the matched policies
+  - `override_existing_id: str | None` — already-active override consumed by this decision (if any)
+- **`MCPCheckOutputResponse`** gains 3 optional fields:
+  - `decision_id`
+  - `policy_matches: list[ExplainPolicy] | None`
+  - `redacted_message: str | None` — text-redaction counterpart to `redacted_data` (used when the connector returned a string message rather than tabular rows; e.g. execute-style responses)
+- **`ExplainPolicy`** is now re-exported from `axonflow.types` (it was previously only in `axonflow.decisions`). Same Pydantic model — Python's snake_case convention naturally aligns wire-shape and SDK types, so no separate model is needed.
+
+All fields default to `None`. Pre-v7.1.0 platforms return `None` for every field; callers should treat absence as "context not available" rather than an error.
+
+### Deferred
+
+`client.explain_decision(decision_id)` and the full `ExplainRule` / `DecisionExplanation` type surface are tracked separately as feature work — see axonflow-enterprise#1716. This release ships only field-surfacing on existing methods.
+
 ## [6.7.0] - 2026-04-25 — Wire-shape canonicalization
 
 Minor release. Purely additive — new fields default to `None`, deprecated aliases preserved for compile-time compat. Coordinated with TypeScript v6.0.0 / Java v6.0.0 / Go v5.7.0 SDK releases. The wire-shape contract gate's pinned OpenAPI spec SHA bumps with the platform v7.4.2 spec corrections; one baseline drift entry (`DynamicPolicyInfo`) auto-resolves.

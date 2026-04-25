@@ -12,6 +12,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Re-export for use on MCP response types — same logical record per ADR-043.
+from axonflow.decisions import ExplainPolicy as ExplainPolicy
+
 
 class Mode(str, Enum):
     """SDK operation mode."""
@@ -410,6 +413,16 @@ class MCPCheckInputResponse(BaseModel):
     block_reason: str | None = Field(default=None)
     policies_evaluated: int = Field(default=0, ge=0)
     policy_info: ConnectorPolicyInfo | None = Field(default=None)
+    # Plugin Batch 1 / ADR-042 / ADR-043 — richer governance context surfaced
+    # when the platform is v7.1.0+. All fields default to None on older
+    # platforms; callers should treat absence as "context not available"
+    # rather than an error. Source of truth:
+    # platform/agent/mcp_server_handler.go:880-940.
+    decision_id: str | None = Field(default=None)
+    risk_level: Literal["low", "medium", "high", "critical"] | None = Field(default=None)
+    policy_matches: list[ExplainPolicy] | None = Field(default=None)
+    override_available: bool | None = Field(default=None)
+    override_existing_id: str | None = Field(default=None)
 
 
 class MCPCheckOutputRequest(BaseModel):
@@ -433,10 +446,22 @@ class MCPCheckOutputResponse(BaseModel):
 
     allowed: bool
     block_reason: str | None = Field(default=None)
+    # Tabular response data with PII fields masked (used when the connector
+    # returned rows; e.g. SQL/CSV results). None if no redaction needed or
+    # if the response was a text message.
     redacted_data: Any | None = Field(default=None)
+    # Text message with PII fields masked (used when the connector returned
+    # a string message rather than tabular rows; e.g. execute-style
+    # responses). None if no redaction needed or if the response was tabular.
+    # Source of truth: platform/agent/mcp_server_handler.go:988.
+    redacted_message: str | None = Field(default=None)
     policies_evaluated: int = Field(default=0, ge=0)
     exfiltration_info: ExfiltrationCheckInfo | None = Field(default=None)
     policy_info: ConnectorPolicyInfo | None = Field(default=None)
+    # Plugin Batch 1 / ADR-043 — explainability context (matches the
+    # MCPCheckInputResponse fields on the same call site).
+    decision_id: str | None = Field(default=None)
+    policy_matches: list[ExplainPolicy] | None = Field(default=None)
 
 
 class PlanStep(BaseModel):
