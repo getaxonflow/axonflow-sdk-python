@@ -240,6 +240,22 @@ async def test_proxy_llm_call(httpx_mock: HTTPXMock):
 3. Address feedback and update your PR
 4. Once approved, a maintainer will merge your PR
 
+## Baseline burndown policy
+
+Several CI gates use a baseline file to grandfather pre-existing findings — the gate fails on any *new* finding but tolerates the listed ones. Baselines exist to land the gate without a giant cleanup PR; they are not intended to be permanent.
+
+When your PR touches a baselined area (e.g. a function listed in `.lint_baselines/falsey_clobber.json`, or a type in `tests/fixtures/wire-shape-baseline.json`), do one of:
+
+- **Burn it down.** Fix the baselined finding in this PR, remove the entry from the baseline file, and note "burndown: `<entry>`" in the PR description.
+- **Justify it.** If the finding can't be fixed in this PR (different scope, blocked on a platform change, etc.), say so in the PR description in one line.
+
+Baseline files in this repo:
+
+- `.lint_baselines/falsey_clobber.json` — `or`-falsey-clobber on wire-field accesses
+- `tests/fixtures/wire-shape-baseline.json` — wire-shape contract gate
+
+CI does not block PRs that touch a baselined area without addressing it, but reviewers will ask the burndown-or-justify question.
+
 ## License
 
 By contributing to AxonFlow Python SDK, you agree that your contributions will be licensed under the MIT License.
