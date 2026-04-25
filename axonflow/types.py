@@ -282,7 +282,21 @@ class ExfiltrationCheckInfo(BaseModel):
     row_limit: int = Field(default=0, ge=0, description="Configured max rows per query")
     bytes_returned: int = Field(default=0, ge=0, description="Size of response data in bytes")
     byte_limit: int = Field(default=0, ge=0, description="Configured max bytes per response")
-    within_limits: bool = Field(default=True, description="Whether response is within limits")
+    exceeded: bool | None = Field(
+        default=None,
+        description="Whether any exfiltration limit was exceeded (canonical wire field).",
+    )
+    limit_type: str | None = Field(
+        default=None,
+        description='Type of limit that was exceeded ("rows", "bytes", "none").',
+    )
+    within_limits: bool = Field(
+        default=True,
+        description=(
+            "DEPRECATED: the wire emits `exceeded` + `limit_type`, not `within_limits`. "
+            "Use those instead. Removed in v7."
+        ),
+    )
 
 
 class DynamicPolicyMatch(BaseModel):
@@ -295,7 +309,16 @@ class DynamicPolicyMatch(BaseModel):
         description="Type of policy (rate-limit, budget, time-access, role-access, mcp, connector)",
     )
     action: str = Field(default="", description="Action taken (allow, block, log, etc.)")
-    reason: str | None = Field(default=None, description="Context for the policy match")
+    message: str | None = Field(
+        default=None,
+        description="Optional message from the policy evaluation (canonical wire field).",
+    )
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "DEPRECATED: the wire field is `message`, not `reason`. Use `message`. Removed in v7."
+        ),
+    )
 
 
 class DynamicPolicyInfo(BaseModel):
@@ -371,6 +394,13 @@ class MCPCheckInputRequest(BaseModel):
     statement: str
     parameters: dict[str, Any] | None = Field(default=None)
     operation: str = Field(default="execute")
+    client_id: str | None = Field(default=None, description="Client identifier for scoping.")
+    tenant_id: str | None = Field(default=None, description="Tenant identifier for scoping.")
+    user_id: str | None = Field(default=None, description="User identifier for per-user policies.")
+    user_role: str | None = Field(default=None, description="User role for role-based policies.")
+    user_token: str | None = Field(
+        default=None, description="User token for downstream auth propagation."
+    )
 
 
 class MCPCheckInputResponse(BaseModel):
@@ -390,6 +420,12 @@ class MCPCheckOutputRequest(BaseModel):
     message: str | None = Field(default=None)
     metadata: dict[str, Any] | None = Field(default=None)
     row_count: int = Field(default=0, ge=0)
+    client_id: str | None = Field(default=None, description="Client identifier for scoping.")
+    tenant_id: str | None = Field(default=None, description="Tenant identifier for scoping.")
+    user_id: str | None = Field(default=None, description="User identifier for per-user policies.")
+    user_token: str | None = Field(
+        default=None, description="User token for downstream auth propagation."
+    )
 
 
 class MCPCheckOutputResponse(BaseModel):
@@ -425,6 +461,21 @@ class PlanResponse(BaseModel):
     complexity: int = 0
     parallel: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)
+    success: bool | None = Field(
+        default=None,
+        description="Whether the plan was created successfully (wire top-level field).",
+    )
+    version: int | None = Field(default=None, description="Plan version for optimistic locking.")
+    result: Any | None = Field(
+        default=None, description="Final aggregated result if the plan executed inline."
+    )
+    error: str | None = Field(default=None, description="Error message if creation failed.")
+    workflow_execution_id: str | None = Field(
+        default=None, description="Workflow execution ID if the plan was auto-executed."
+    )
+    policy_info: PolicyEvaluationResult | None = Field(
+        default=None, description="Policy evaluation summary for this plan creation."
+    )
 
 
 class PolicyEvaluationResult(BaseModel):
@@ -482,11 +533,25 @@ class ExecutionMode(str, Enum):
 
 
 class CancelPlanResponse(BaseModel):
-    """Response from cancelling a running plan."""
+    """Response from cancelling a running plan.
+
+    The wire shape is ``{success, plan_id, status}``. The legacy
+    ``message`` field reads ``data.message`` which the server doesn't
+    emit; use ``success`` and the ``status`` enum to detect outcome.
+    """
 
     plan_id: str = Field(..., description="ID of the cancelled plan")
     status: str = Field(..., description="Plan status after cancellation")
-    message: str = Field(..., description="Cancellation confirmation message")
+    success: bool | None = Field(
+        default=None, description="Whether the cancel succeeded (canonical wire field)."
+    )
+    message: str | None = Field(
+        default=None,
+        description=(
+            "DEPRECATED: the wire emits success+status, not message. "
+            "This field has always read None against JSON-decoded responses. Removed in v7."
+        ),
+    )
 
 
 class UpdatePlanRequest(BaseModel):
@@ -507,6 +572,9 @@ class UpdatePlanRequest(BaseModel):
         default=None, description="New execution mode for the plan"
     )
     domain: str | None = Field(default=None, description="New domain for the plan")
+    metadata: dict[str, object] | None = Field(
+        default=None, description="Arbitrary plan metadata, opaque to the platform."
+    )
 
 
 class UpdatePlanResponse(BaseModel):
@@ -544,17 +612,45 @@ class PlanVersionsResponse(BaseModel):
 
 
 class ResumePlanResponse(BaseModel):
-    """Response from resuming a paused plan."""
+    """Response from resuming a paused plan.
+
+    Wire shape: ``{plan_id, status, result}``. The
+    workflow_id/approved/message/step_result/next_step/next_step_name/
+    total_steps fields are kept for source-compat — none of them are
+    populated by the resume decoder against the actual server
+    response. New code should read ``result``.
+    """
 
     plan_id: str = Field(..., description="ID of the resumed plan")
-    workflow_id: str | None = Field(default=None, description="WCP workflow ID")
     status: str = Field(..., description="Plan status after resume")
+    result: Any | None = Field(
+        default=None,
+        description="Final aggregated result if the resume completed (canonical wire field).",
+    )
     approved: bool | None = Field(default=None, description="Whether the resume was approved")
-    message: str | None = Field(default=None, description="Resume confirmation message")
-    step_result: dict[str, Any] | None = Field(default=None, description="Result of executed step")
-    next_step: int | None = Field(default=None, description="Next step index")
-    next_step_name: str | None = Field(default=None, description="Next step name")
-    total_steps: int | None = Field(default=None, description="Total number of steps")
+    workflow_id: str | None = Field(
+        default=None,
+        description="DEPRECATED: never populated by the transformer. Removed in v7.",
+    )
+    message: str | None = Field(
+        default=None,
+        description=(
+            "DEPRECATED: the wire emits result, not message. Always read None. Removed in v7."
+        ),
+    )
+    step_result: dict[str, Any] | None = Field(
+        default=None,
+        description="DEPRECATED: never populated; use `result`. Removed in v7.",
+    )
+    next_step: int | None = Field(
+        default=None, description="DEPRECATED: not on the wire. Removed in v7."
+    )
+    next_step_name: str | None = Field(
+        default=None, description="DEPRECATED: not on the wire. Removed in v7."
+    )
+    total_steps: int | None = Field(
+        default=None, description="DEPRECATED: not on the wire. Removed in v7."
+    )
 
 
 # Gateway Mode Types
@@ -760,6 +856,9 @@ class ExecutionSnapshot(BaseModel):
     approval_required: bool = Field(default=False, description="Whether approval was required")
     approved_by: str = Field(default="", description="Approver ID")
     approved_at: str = Field(default="", description="Approval timestamp")
+    retry_count: int | None = Field(
+        default=None, description="Number of retry attempts on this step."
+    )
 
 
 class TimelineEntry(BaseModel):
@@ -892,6 +991,8 @@ class Budget(BaseModel):
     alert_thresholds: list[int] = Field(default_factory=list, description="Alert thresholds")
     enabled: bool = Field(default=True, description="Whether budget is enabled")
     scope_id: str | None = Field(default=None, description="Scope entity ID")
+    tenant_id: str | None = Field(default=None, description="Tenant that owns this budget.")
+    org_id: str | None = Field(default=None, description="Organization that owns this budget.")
     created_at: str | None = Field(default=None, description="Created timestamp")
     updated_at: str | None = Field(default=None, description="Updated timestamp")
 
@@ -927,6 +1028,9 @@ class BudgetAlert(BaseModel):
     amount_usd: float = Field(..., description="Amount when alert triggered")
     message: str = Field(..., description="Alert message")
     created_at: str = Field(..., description="Alert timestamp")
+    acknowledged: bool | None = Field(
+        default=None, description="Whether the alert has been dismissed by an operator."
+    )
 
 
 class BudgetAlertsResponse(BaseModel):
@@ -971,6 +1075,9 @@ class UsageSummary(BaseModel):
 class UsageBreakdownItem(BaseModel):
     """An item in a usage breakdown."""
 
+    group_by: str | None = Field(
+        default=None, description="Dimension name (provider, model, agent, etc.)"
+    )
     group_value: str = Field(..., description="Group dimension value")
     cost_usd: float = Field(default=0.0, ge=0, description="Cost in USD")
     percentage: float = Field(default=0.0, ge=0, description="Percentage of total")
@@ -1011,7 +1118,30 @@ class UsageRecord(BaseModel):
     request_id: str | None = Field(default=None, description="Request ID")
     org_id: str | None = Field(default=None, description="Organization ID")
     agent_id: str | None = Field(default=None, description="Agent ID")
-    timestamp: str | None = Field(default=None, description="Record timestamp")
+    created_at: str | None = Field(
+        default=None, description="When the record was created (canonical wire field)."
+    )
+    success: bool | None = Field(
+        default=None, description="Whether the underlying request succeeded."
+    )
+    error_message: str | None = Field(
+        default=None, description="Failure reason when success is False."
+    )
+    latency_ms: int | None = Field(default=None, description="Request latency in milliseconds.")
+    team_id: str | None = Field(default=None, description="Team scope.")
+    tenant_id: str | None = Field(default=None, description="Tenant that owns this record.")
+    user_id: str | None = Field(default=None, description="User that initiated the request.")
+    workflow_id: str | None = Field(
+        default=None, description="Workflow ID if this came from a workflow execution."
+    )
+    timestamp: str | None = Field(
+        default=None,
+        description=(
+            "DEPRECATED: the wire emits `created_at`, not `timestamp`. "
+            "This field has always read None against JSON-decoded responses. "
+            "Use `created_at`. Removed in v7."
+        ),
+    )
 
 
 class UsageRecordsResponse(BaseModel):
@@ -1068,6 +1198,16 @@ class WebhookSubscription(BaseModel):
     url: str = Field(..., description="Webhook URL")
     events: list[str] = Field(default_factory=list, description="Events to subscribe to")
     active: bool = Field(default=True, description="Whether the webhook is active")
+    tenant_id: str | None = Field(default=None, description="Tenant that owns this subscription")
+    org_id: str | None = Field(default=None, description="Organization that owns this subscription")
+    secret: str | None = Field(
+        default=None,
+        description=(
+            "HMAC-SHA256 signing key for verifying inbound webhook payload signatures "
+            "(X-AxonFlow-Signature header). Returned by `create_webhook` on initial "
+            "creation; required for callers to validate payload authenticity."
+        ),
+    )
     created_at: str = Field(..., description="When the webhook was created")
     updated_at: str = Field(..., description="When the webhook was last updated")
 

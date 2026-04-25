@@ -85,14 +85,37 @@ class CreateWorkflowRequest(BaseModel):
 
 
 class CreateWorkflowResponse(BaseModel):
-    """Response from creating a workflow."""
+    """Response from creating a workflow.
+
+    Wire shape: ``{workflow_id, workflow_name, status, started_at, trace_id}``.
+    The legacy ``source`` and ``created_at`` fields are kept for source-compat
+    only — the wire emits ``started_at`` (not ``created_at``) and does not
+    include ``source`` on the create response.
+    """
 
     workflow_id: str = Field(..., description="Unique identifier for the workflow")
     workflow_name: str = Field(..., description="Name of the workflow")
-    source: WorkflowSource = Field(..., description="Source orchestrator")
     status: WorkflowStatus = Field(..., description="Current status (always 'in_progress' for new)")
-    created_at: datetime = Field(..., description="When the workflow was created")
+    started_at: datetime | None = Field(
+        default=None,
+        description="When the workflow started executing (canonical wire field).",
+    )
     trace_id: str | None = None
+    created_at: datetime | None = Field(
+        default=None,
+        description=(
+            "DEPRECATED: the wire emits `started_at`, not `created_at`. "
+            "Always read None against JSON-decoded responses. Use `started_at`. "
+            "Removed in v7."
+        ),
+    )
+    source: WorkflowSource | None = Field(
+        default=None,
+        description=(
+            "DEPRECATED: not emitted on the create response. Read `source` from a "
+            "subsequent `get_workflow()` call instead. Removed in v7."
+        ),
+    )
 
 
 class ToolContext(BaseModel):
@@ -215,6 +238,15 @@ class StepGateRequest(BaseModel):
             "retry_context.idempotency_key."
         ),
     )
+    tokens_in: int | None = Field(
+        default=None, description="Estimated input tokens for this step (used by budget policies)."
+    )
+    tokens_out: int | None = Field(
+        default=None, description="Estimated output tokens for this step (used by budget policies)."
+    )
+    cost_usd: float | None = Field(
+        default=None, description="Estimated cost in USD for this step (used by budget policies)."
+    )
 
 
 class StepGateResponse(BaseModel):
@@ -232,6 +264,12 @@ class StepGateResponse(BaseModel):
     )
     approval_url: str | None = Field(
         default=None, description="URL to the approval portal (if decision is require_approval)"
+    )
+    decision_id: str | None = Field(
+        default=None,
+        description=(
+            "Unique decision identifier for auditing (links a gate response to its audit row)."
+        ),
     )
     policies_evaluated: list[PolicyMatch] | None = Field(
         default=None,
@@ -348,6 +386,9 @@ class WorkflowStatusResponse(BaseModel):
         default_factory=list, description="List of steps in the workflow"
     )
     trace_id: str | None = None
+    metadata: dict[str, object] | None = Field(
+        default=None, description="Arbitrary workflow metadata, opaque to the platform."
+    )
 
     def is_terminal(self) -> bool:
         """Check if the workflow is in a terminal state (completed, aborted, or failed)."""
@@ -373,6 +414,12 @@ class ListWorkflowsResponse(BaseModel):
         default_factory=list, description="List of workflows"
     )
     total: int = Field(default=0, ge=0, description="Total count (for pagination)")
+    limit: int | None = Field(
+        default=None, description="Echo of the limit query parameter (for pagination clients)."
+    )
+    offset: int | None = Field(
+        default=None, description="Echo of the offset query parameter (for pagination clients)."
+    )
 
 
 class MarkStepCompletedRequest(BaseModel):

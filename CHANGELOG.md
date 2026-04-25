@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
+## [Unreleased]
+
+### Added
+
+- **`WebhookSubscription.secret`** — HMAC-SHA256 signing key now exposed on the response from `create_webhook`. Required to verify the `X-AxonFlow-Signature` header on inbound webhook deliveries; without it, callers couldn't validate payload authenticity. Also adds `org_id` and `tenant_id` (ownership scoping).
+- **`StepGateRequest`** carries `tokens_in`, `tokens_out`, `cost_usd` so budget-based policies can evaluate gate-time cost estimates.
+- **`StepGateResponse.decision_id`** — unique audit correlator that links a gate response to its audit row.
+- **`ListWorkflowsResponse.limit` / `offset`** — pagination echo, surfaced on the response.
+- **`StaticPolicy.policy_id` / `priority`** — wire-canonical fields surfaced.
+- **`CreateStaticPolicyRequest.priority` / `tags`** and **`UpdateStaticPolicyRequest.priority` / `tags`** — match the spec.
+- **`UpdatePlanRequest.metadata`** — accept arbitrary plan metadata, opaque to the platform.
+- **`UsageBreakdownItem.group_by`** — dimension name (provider/model/agent/etc.) is now exposed on each item.
+- **`BudgetAlert.acknowledged`** — alert dismissal flag.
+- **`Budget.org_id` / `tenant_id`** — ownership scoping.
+- **`UsageRecord`** gains `created_at`, `success`, `error_message`, `latency_ms`, `team_id`, `tenant_id`, `user_id`, `workflow_id` to match the wire. Legacy `timestamp` field is `DEPRECATED` (orphan read; the wire emits `created_at`).
+- **`WorkflowStatusResponse.metadata`** — arbitrary workflow metadata.
+- **`CreateWorkflowResponse.started_at`** — wire-canonical timestamp. Legacy `created_at` and `source` are `DEPRECATED` (orphan reads on the create response).
+- **`ExecutionSnapshot.retry_count`** — number of retry attempts on a step.
+- **`Finding.article`** — regulatory article reference (e.g. MAS FEAT principle number).
+- **`PolicyOverride.id` / `enabled_override`** — wire-canonical fields. `active` is `DEPRECATED` (orphan read).
+- **`PolicyVersion.id` / `policy_id` / `change_summary` / `snapshot`** — match the wire shape (versions are immutable snapshots, not before/after diffs). `change_description`, `previous_values`, `new_values` are `DEPRECATED` orphan reads.
+- **`DynamicPolicyMatch.message`** — wire-canonical name. `reason` is `DEPRECATED` (orphan read).
+- **`ExfiltrationCheckInfo.exceeded` / `limit_type`** — match the wire. `within_limits` is `DEPRECATED`.
+- **`CancelPlanResponse.success`** — wire-canonical boolean. `message` is `DEPRECATED` (orphan read).
+- **`PlanResponse`** gains the wire top-level fields `success`, `version`, `result`, `error`, `workflow_execution_id`, `policy_info`.
+- **`ResumePlanResponse.result`** — final aggregated result (canonical wire field). Six fields (`workflow_id`, `message`, `step_result`, `next_step`, `next_step_name`, `total_steps`) are now `DEPRECATED` — none of them were populated by the resume decoder against the actual server response.
+- **`MCPCheckInputRequest.client_id` / `tenant_id` / `user_id` / `user_role` / `user_token`** and **`MCPCheckOutputRequest.client_id` / `tenant_id` / `user_id` / `user_token`** — match the spec scoping fields.
+
+### Notes
+
+The above is an audit-driven sweep against the wire-shape contract gate. All changes are additive (new fields default to `None`) or `DEPRECATED`-marked alias fields kept for compile-time compat. Removal scheduled for v7.
+
+The earlier overnight claim that "Python baseline is clean" was wrong — that was a key-name confusion (Python uses `per_model_drift`, the others use `per_type_drift`); a proper audit found 36 drift entries similar in pattern to the TS+Go SDK sweeps. After this sweep, 26 drift entries remain (mostly `DEPRECATED` aliases retained for source-compat + Cat C entries to file separately + Plugin Batch 1 SDK additions pending platform-side spec coverage).
+
+Two platform-side spec corrections filed alongside this work, for issues the audit surfaced where the spec was wrong (server emits the SDK's name): `AISystemRegistry.materiality_classification` (axonflow-enterprise#1708), `DynamicPolicyInfo` schema completely wrong shape (axonflow-enterprise#1709). No SDK change for those — the SDK is correct.
+
 ## [6.6.2] - 2026-04-25
 
 ### Fixed
