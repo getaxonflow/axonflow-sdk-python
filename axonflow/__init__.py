@@ -175,6 +175,7 @@ from axonflow.types import (
     ExecutionSnapshot,
     ExecutionSummary,
     ExfiltrationCheckInfo,
+    ExplainPolicy,
     # Policy Simulation types (Evaluation Tier+)
     ImpactReportInput,
     ImpactReportRequest,
@@ -297,6 +298,7 @@ __all__ = [
     "ConnectorHealthStatus",
     "ConnectorPolicyInfo",
     # MCP Policy Check types
+    "ExplainPolicy",
     "MCPCheckInputRequest",
     "MCPCheckInputResponse",
     "MCPCheckOutputRequest",

@@ -177,7 +177,7 @@
       ]
     }
   },
-  "openapi_specs_sha": "10d44eb4585a7b5321d7286b354ff8b43b8c6a57",
+  "openapi_specs_sha": "8c8d6c9c506aa25fcd8a887f6fc71f71b5d6bc30",
   "per_model_drift": {
     "AuditLogEntry": {
       "sdk_only": [
@@ -274,6 +274,24 @@
         "within_limits"
       ],
       "spec_only": []
+    },
+    "MCPCheckInputResponse": {
+      "sdk_only": [],
+      "spec_only": [
+        "decision_id",
+        "override_available",
+        "override_existing_id",
+        "policy_matches",
+        "risk_level"
+      ]
+    },
+    "MCPCheckOutputResponse": {
+      "sdk_only": [],
+      "spec_only": [
+        "decision_id",
+        "policy_matches",
+        "redacted_message"
+      ]
     },
     "MarkStepCompletedRequest": {
       "sdk_only": [
@@ -398,12 +416,15 @@
     "CreateStaticPolicyRequest",
     "CreateWorkflowRequest",
     "CreateWorkflowResponse",
+    "DecisionExplanation",
     "DynamicPolicy",
     "DynamicPolicyInfo",
     "DynamicPolicyMatch",
     "ExecutionSnapshot",
     "ExecutionSummary",
     "ExfiltrationCheckInfo",
+    "ExplainPolicy",
+    "ExplainRule",
     "ListWorkflowsResponse",
     "MCPCheckInputRequest",
     "MCPCheckInputResponse",
