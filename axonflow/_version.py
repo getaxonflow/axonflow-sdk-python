@@ -1,3 +1,3 @@
 """Single source of truth for the AxonFlow SDK version."""
 
-__version__ = "6.6.2"
+__version__ = "6.7.0"
