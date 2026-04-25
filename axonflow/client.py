@@ -179,6 +179,7 @@ from axonflow.types import (
     PlanVersionsResponse,
     PolicyApprovalResult,
     PolicyConflictResponse,
+    PolicyEvaluationResult,
     PricingInfo,
     PricingListResponse,
     RateLimitInfo,
@@ -1578,9 +1579,14 @@ class AxonFlow:
         data_dict: dict[str, Any] = response.data if isinstance(response.data, dict) else {}
         # `policy_info` on PlanResponse is the spec's PolicyEvaluationResult
         # shape (different from ClientResponse.policy_info, which is
-        # PolicyEvaluationInfo). Source from the wire dict and let
-        # pydantic validate the shape.
-        wire_policy_info = data_dict.get("policy_info")
+        # PolicyEvaluationInfo). Source from the wire dict and validate
+        # against the typed model so callers see the right shape.
+        wire_policy_info_raw = data_dict.get("policy_info")
+        policy_info_typed: PolicyEvaluationResult | None = (
+            PolicyEvaluationResult.model_validate(wire_policy_info_raw)
+            if isinstance(wire_policy_info_raw, dict)
+            else None
+        )
         return PlanResponse(
             plan_id=plan_id,
             steps=steps,
@@ -1593,7 +1599,7 @@ class AxonFlow:
             result=response.result or data_dict.get("result"),
             error=response.error,
             workflow_execution_id=data_dict.get("workflow_execution_id"),
-            policy_info=wire_policy_info if isinstance(wire_policy_info, dict) else None,
+            policy_info=policy_info_typed,
         )
 
     async def execute_plan(
