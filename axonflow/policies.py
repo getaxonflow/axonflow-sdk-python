@@ -113,13 +113,26 @@ class PolicySeverity(str, Enum):
 class PolicyOverride(BaseModel):
     """Policy override configuration."""
 
+    id: str | None = Field(
+        default=None, description="Override identifier (required to revoke a specific override)."
+    )
     policy_id: str
     action_override: OverrideAction
     override_reason: str
     created_by: str | None = None
     created_at: datetime
     expires_at: datetime | None = None
-    active: bool = True
+    enabled_override: bool | None = Field(
+        default=None,
+        description="Override enabled status — canonical wire field.",
+    )
+    active: bool = Field(
+        default=True,
+        description=(
+            "DEPRECATED: the wire emits `enabled_override`, not `active`. "
+            "Use `enabled_override`. Removed in v7."
+        ),
+    )
 
 
 class StaticPolicy(BaseModel):
@@ -128,6 +141,13 @@ class StaticPolicy(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: str
+    policy_id: str | None = Field(
+        default=None,
+        description=(
+            "Human-readable policy identifier (e.g. `sys_sqli_union_select`). "
+            "Distinct from `id` (the UUID)."
+        ),
+    )
     name: str
     description: str | None = None
     category: PolicyCategory
@@ -136,6 +156,9 @@ class StaticPolicy(BaseModel):
     severity: PolicySeverity = PolicySeverity.MEDIUM
     enabled: bool = True
     action: PolicyAction = PolicyAction.BLOCK
+    priority: int | None = Field(
+        default=None, description="Evaluation order — lower values run first."
+    )
     organization_id: str | None = Field(default=None, alias="organizationId")
     tenant_id: str | None = Field(default=None, alias="tenantId")
     created_at: datetime = Field(..., alias="createdAt")
@@ -178,6 +201,12 @@ class CreateStaticPolicyRequest(BaseModel):
     severity: PolicySeverity = PolicySeverity.MEDIUM
     enabled: bool = True
     action: PolicyAction = PolicyAction.BLOCK
+    priority: int | None = Field(
+        default=None, description="Evaluation order — lower values run first."
+    )
+    tags: list[str] | None = Field(
+        default=None, description="Free-form tags for grouping and filtering."
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -192,6 +221,8 @@ class UpdateStaticPolicyRequest(BaseModel):
     severity: PolicySeverity | None = None
     enabled: bool | None = None
     action: PolicyAction | None = None
+    priority: int | None = Field(default=None, description="Updated evaluation priority.")
+    tags: list[str] | None = Field(default=None, description="Updated tag set.")
 
 
 class CreatePolicyOverrideRequest(BaseModel):
@@ -346,17 +377,47 @@ class TestPatternResult(BaseModel):
 
 
 class PolicyVersion(BaseModel):
-    """Policy version history entry."""
+    """Policy version history entry.
+
+    The wire shape is an immutable snapshot, not a before/after diff.
+    The legacy ``changeDescription``, ``previousValues``, ``newValues``
+    aliases are kept for source-compat but the server actually emits
+    ``change_summary`` and a single ``snapshot`` object. Use those.
+    """
 
     model_config = ConfigDict(populate_by_name=True)
 
+    id: str | None = Field(default=None, description="Snapshot identifier (UUID).")
+    policy_id: str | None = Field(default=None, description="Policy this snapshot belongs to.")
     version: int
     changed_by: str | None = Field(default=None, alias="changedBy")
     changed_at: datetime = Field(..., alias="changedAt")
     change_type: str = Field(..., alias="changeType")
-    change_description: str | None = Field(default=None, alias="changeDescription")
-    previous_values: dict[str, Any] | None = Field(default=None, alias="previousValues")
-    new_values: dict[str, Any] | None = Field(default=None, alias="newValues")
+    change_summary: str | None = Field(
+        default=None, description="Summary of the change (canonical wire field)."
+    )
+    snapshot: dict[str, Any] | None = Field(
+        default=None, description="Complete policy state at this version (canonical wire field)."
+    )
+    change_description: str | None = Field(
+        default=None,
+        alias="changeDescription",
+        description=(
+            "DEPRECATED: the wire field is `change_summary`. Always reads None. Removed in v7."
+        ),
+    )
+    previous_values: dict[str, Any] | None = Field(
+        default=None,
+        alias="previousValues",
+        description=(
+            "DEPRECATED: the wire emits a single `snapshot`, not before/after diffs. Removed in v7."
+        ),
+    )
+    new_values: dict[str, Any] | None = Field(
+        default=None,
+        alias="newValues",
+        description="DEPRECATED: same as `previous_values`. Use `snapshot`. Removed in v7.",
+    )
 
 
 # ============================================================================

@@ -122,6 +122,7 @@ class Finding:
     description: str
     status: FindingStatus
     remediation: str | None = None
+    article: str | None = None  # Regulatory article reference (e.g. MAS FEAT principle number).
     due_date: datetime | None = None
 
 
