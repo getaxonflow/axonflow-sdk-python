@@ -37,6 +37,9 @@ jobs:
       - name: Run MyPy
         run: mypy axonflow
 
+      - name: Run falsey-clobber check (no `data.get(...) or X` against pre-existing baseline)
+        run: python3 scripts/lint_no_falsey_clobber.py axonflow/ --baseline .lint_baselines/falsey_clobber.json
+
   test:
     runs-on: ubuntu-latest
     strategy:
