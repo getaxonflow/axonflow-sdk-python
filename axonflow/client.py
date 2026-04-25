@@ -1407,9 +1407,25 @@ class AxonFlow:
         statement: str,
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_role: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckInputResponse:
         """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
-        return await self.mcp_check_input(connector_type, statement, operation, parameters)
+        return await self.mcp_check_input(
+            connector_type,
+            statement,
+            operation,
+            parameters,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            user_role=user_role,
+            user_token=user_token,
+        )
 
     async def mcp_check_output(
         self,
@@ -1491,10 +1507,23 @@ class AxonFlow:
         message: str | None = None,
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckOutputResponse:
         """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return await self.mcp_check_output(
-            connector_type, response_data, message, metadata, row_count
+            connector_type,
+            response_data,
+            message,
+            metadata,
+            row_count,
+            client_id=client_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            user_token=user_token,
         )
 
     async def generate_plan(
@@ -1587,6 +1616,10 @@ class AxonFlow:
             if isinstance(wire_policy_info_raw, dict)
             else None
         )
+        # Use `is not None` rather than `or` to fall through — `or` would
+        # falsey-clobber legitimate empty results (0, False, "", [], {})
+        # with the data_dict fallback.
+        result_value = response.result if response.result is not None else data_dict.get("result")
         return PlanResponse(
             plan_id=plan_id,
             steps=steps,
@@ -1596,7 +1629,7 @@ class AxonFlow:
             metadata=response.metadata,
             success=response.success,
             version=data_dict.get("version"),
-            result=response.result or data_dict.get("result"),
+            result=result_value,
             error=response.error,
             workflow_execution_id=data_dict.get("workflow_execution_id"),
             policy_info=policy_info_typed,
@@ -4107,9 +4140,13 @@ class AxonFlow:
         # The wire emits `started_at` (canonical) — `created_at` is a
         # legacy SDK field that has always read None. Read both for
         # back-compat: prefer the canonical value, fall through to the
-        # legacy slot only if the server still emits it.
-        started_at_str = response.get("started_at") or response.get("created_at")
-        started_at = _parse_datetime(started_at_str) if started_at_str else None
+        # legacy slot only if the canonical key is missing entirely.
+        # `is not None` (not `or`) so an empty string from a buggy
+        # server doesn't silently swap to the legacy slot.
+        started_at_raw = response.get("started_at")
+        if started_at_raw is None:
+            started_at_raw = response.get("created_at")
+        started_at = _parse_datetime(started_at_raw) if started_at_raw else None
         # The wire shape doesn't include `source` on the create
         # response; if a legacy server still sends it, surface it.
         source_str = response.get("source")
@@ -6934,10 +6971,26 @@ class SyncAxonFlow:
         statement: str,
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_role: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it."""
         return self._run_sync(
-            self._async_client.mcp_check_input(connector_type, statement, operation, parameters)
+            self._async_client.mcp_check_input(
+                connector_type,
+                statement,
+                operation,
+                parameters,
+                client_id=client_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                user_role=user_role,
+                user_token=user_token,
+            )
         )
 
     def mcp_check_output(
@@ -6947,11 +7000,24 @@ class SyncAxonFlow:
         message: str | None = None,
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckOutputResponse:
         """Validate MCP response data against configured policies."""
         return self._run_sync(
             self._async_client.mcp_check_output(
-                connector_type, response_data, message, metadata, row_count
+                connector_type,
+                response_data,
+                message,
+                metadata,
+                row_count,
+                client_id=client_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                user_token=user_token,
             )
         )
 
@@ -6961,10 +7027,26 @@ class SyncAxonFlow:
         statement: str,
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_role: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckInputResponse:
         """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
         return self._run_sync(
-            self._async_client.mcp_check_input(connector_type, statement, operation, parameters)
+            self._async_client.mcp_check_input(
+                connector_type,
+                statement,
+                operation,
+                parameters,
+                client_id=client_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                user_role=user_role,
+                user_token=user_token,
+            )
         )
 
     def check_tool_output(
@@ -6974,11 +7056,24 @@ class SyncAxonFlow:
         message: str | None = None,
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
+        *,
+        client_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        user_token: str | None = None,
     ) -> MCPCheckOutputResponse:
         """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return self._run_sync(
             self._async_client.mcp_check_output(
-                connector_type, response_data, message, metadata, row_count
+                connector_type,
+                response_data,
+                message,
+                metadata,
+                row_count,
+                client_id=client_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                user_token=user_token,
             )
         )
 
