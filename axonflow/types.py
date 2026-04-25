@@ -13,7 +13,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Re-export for use on MCP response types — same logical record per ADR-043.
-from axonflow.decisions import ExplainPolicy as ExplainPolicy
+# `as ExplainPolicy` is the explicit-re-export idiom (mypy-friendly).
+from axonflow.decisions import ExplainPolicy as ExplainPolicy  # noqa: PLC0414, TC001
 
 
 class Mode(str, Enum):
