@@ -177,7 +177,7 @@
       ]
     }
   },
-  "openapi_specs_sha": "bf1ca22ae4bee37dbccc91aee7e03c805f73f853",
+  "openapi_specs_sha": "10d44eb4585a7b5321d7286b354ff8b43b8c6a57",
   "per_model_drift": {
     "AuditLogEntry": {
       "sdk_only": [
@@ -247,23 +247,6 @@
         "updated_at"
       ],
       "spec_only": []
-    },
-    "DynamicPolicyInfo": {
-      "sdk_only": [
-        "orchestrator_reachable",
-        "policies_evaluated",
-        "processing_time_ms"
-      ],
-      "spec_only": [
-        "block_reason",
-        "blocked",
-        "enabled",
-        "error",
-        "evaluated",
-        "evaluation_time_ms",
-        "policies_checked",
-        "policies_matched"
-      ]
     },
     "DynamicPolicyMatch": {
       "sdk_only": [
