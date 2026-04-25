@@ -11,9 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [6.8.0] - 2026-04-25 — Plugin Batch 1 / ADR-043 explainability fields on MCP responses
+## [6.8.0] - 2026-04-25 — Plugin Batch 1 explainability fields on MCP responses
 
-Minor release. Surfaces fields the AxonFlow agent has emitted since v7.1.0 (Plugin Batch 1 / ADR-042 / ADR-043) but the SDK didn't declare. Pure Cat B field-additions on existing methods — no new SDK methods, no breaking changes. Documented in OpenAPI via platform v7.4.3 (axonflow-enterprise#1714); SDK catches up here.
+Minor release. Surfaces fields the AxonFlow agent has emitted since v7.1.0 (Plugin Batch 1) but the SDK didn't declare. Pure field-additions on existing methods — no new SDK methods, no breaking changes. Documented in OpenAPI via platform v7.4.3.
 
 Coordinated cycle: TypeScript v6.1.0 / Go v5.8.0 / Java v6.1.0 ship same day with the same field set.
 
@@ -35,7 +35,7 @@ All fields default to `None`. Pre-v7.1.0 platforms return `None` for every field
 
 ### Deferred
 
-`client.explain_decision(decision_id)` and the full `ExplainRule` / `DecisionExplanation` type surface are tracked separately as feature work — see axonflow-enterprise#1716. This release ships only field-surfacing on existing methods.
+`client.explain_decision(decision_id)` and the full `ExplainRule` / `DecisionExplanation` type surface are tracked separately as feature work. This release ships only field-surfacing on existing methods.
 
 ## [6.7.0] - 2026-04-25 — Wire-shape canonicalization
 
@@ -73,7 +73,7 @@ The above is an audit-driven sweep against the wire-shape contract gate. All cha
 
 The earlier overnight claim that "Python baseline is clean" was wrong — that was a key-name confusion (Python uses `per_model_drift`, the others use `per_type_drift`); a proper audit found 36 drift entries similar in pattern to the TS+Go SDK sweeps. After this sweep, 26 drift entries remain (mostly `DEPRECATED` aliases retained for source-compat + Cat C entries to file separately + Plugin Batch 1 SDK additions pending platform-side spec coverage).
 
-Two platform-side spec corrections filed alongside this work, for issues the audit surfaced where the spec was wrong (server emits the SDK's name): `AISystemRegistry.materiality_classification` (axonflow-enterprise#1708), `DynamicPolicyInfo` schema completely wrong shape (axonflow-enterprise#1709). No SDK change for those — the SDK is correct.
+Two platform-side spec corrections filed alongside this work, for issues the audit surfaced where the spec was wrong (server emits the SDK's name): `AISystemRegistry.materiality_classification` and `DynamicPolicyInfo` schema. No SDK change for those — the SDK is correct.
 
 ## [6.6.2] - 2026-04-25
 
@@ -771,7 +771,7 @@ client = AxonFlow(
 ### Breaking Changes
 
 - **BREAKING**: Renamed `agent_url` to `endpoint` in `AxonFlowConfig`
-- **BREAKING**: Removed `orchestrator_url` and `portal_url` config options (Agent now proxies all routes per ADR-026)
+- **BREAKING**: Removed `orchestrator_url` and `portal_url` config options (Agent now proxies all routes)
 - **BREAKING**: Dynamic policy API path changed from `/api/v1/policies/dynamic` to `/api/v1/dynamic-policies`
 
 ### Added
