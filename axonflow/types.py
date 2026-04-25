@@ -310,7 +310,8 @@ class DynamicPolicyMatch(BaseModel):
     )
     action: str = Field(default="", description="Action taken (allow, block, log, etc.)")
     message: str | None = Field(
-        default=None, description="Optional message from the policy evaluation (canonical wire field)."
+        default=None,
+        description="Optional message from the policy evaluation (canonical wire field).",
     )
     reason: str | None = Field(
         default=None,
