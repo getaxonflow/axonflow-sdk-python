@@ -130,7 +130,11 @@ class FalseyClobberFinder(ast.NodeVisitor):
             if self._is_wire_field_access(operand) and not self._has_noqa(operand):
                 lineno = operand.lineno
                 col = operand.col_offset
-                snippet = self.source_lines[lineno - 1].rstrip() if lineno - 1 < len(self.source_lines) else ""
+                snippet = (
+                    self.source_lines[lineno - 1].rstrip()
+                    if lineno - 1 < len(self.source_lines)
+                    else ""
+                )
                 self.findings.append(
                     (
                         lineno,
@@ -151,12 +155,8 @@ class FalseyClobberFinder(ast.NodeVisitor):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             return node.func.attr == "get"
         # `obj.attr` — wire access on a parsed response object.
-        if isinstance(node, ast.Attribute):
-            return True
         # `data["key"]` — direct subscript.
-        if isinstance(node, ast.Subscript):
-            return True
-        return False
+        return isinstance(node, (ast.Attribute, ast.Subscript))
 
     def _has_noqa(self, node: ast.expr) -> bool:
         line_idx = node.lineno - 1
