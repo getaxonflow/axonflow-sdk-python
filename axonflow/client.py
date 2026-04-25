@@ -1575,9 +1575,7 @@ class AxonFlow:
         # ClientResponse + nested data dict. They appear at the top
         # level on current platform builds; older nested-only builds
         # used `data.*`, so fall back through both layers.
-        data_dict: dict[str, Any] = (
-            response.data if isinstance(response.data, dict) else {}
-        )
+        data_dict: dict[str, Any] = response.data if isinstance(response.data, dict) else {}
         # `policy_info` on PlanResponse is the spec's PolicyEvaluationResult
         # shape (different from ClientResponse.policy_info, which is
         # PolicyEvaluationInfo). Source from the wire dict and let

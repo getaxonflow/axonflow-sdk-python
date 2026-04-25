@@ -316,8 +316,7 @@ class DynamicPolicyMatch(BaseModel):
     reason: str | None = Field(
         default=None,
         description=(
-            "DEPRECATED: the wire field is `message`, not `reason`. Use `message`. "
-            "Removed in v7."
+            "DEPRECATED: the wire field is `message`, not `reason`. Use `message`. Removed in v7."
         ),
     )
 
@@ -470,9 +469,7 @@ class PlanResponse(BaseModel):
     result: Any | None = Field(
         default=None, description="Final aggregated result if the plan executed inline."
     )
-    error: str | None = Field(
-        default=None, description="Error message if creation failed."
-    )
+    error: str | None = Field(default=None, description="Error message if creation failed.")
     workflow_execution_id: str | None = Field(
         default=None, description="Workflow execution ID if the plan was auto-executed."
     )
@@ -1130,9 +1127,7 @@ class UsageRecord(BaseModel):
     error_message: str | None = Field(
         default=None, description="Failure reason when success is False."
     )
-    latency_ms: int | None = Field(
-        default=None, description="Request latency in milliseconds."
-    )
+    latency_ms: int | None = Field(default=None, description="Request latency in milliseconds.")
     team_id: str | None = Field(default=None, description="Team scope.")
     tenant_id: str | None = Field(default=None, description="Tenant that owns this record.")
     user_id: str | None = Field(default=None, description="User that initiated the request.")
@@ -1204,9 +1199,7 @@ class WebhookSubscription(BaseModel):
     events: list[str] = Field(default_factory=list, description="Events to subscribe to")
     active: bool = Field(default=True, description="Whether the webhook is active")
     tenant_id: str | None = Field(default=None, description="Tenant that owns this subscription")
-    org_id: str | None = Field(
-        default=None, description="Organization that owns this subscription"
-    )
+    org_id: str | None = Field(default=None, description="Organization that owns this subscription")
     secret: str | None = Field(
         default=None,
         description=(

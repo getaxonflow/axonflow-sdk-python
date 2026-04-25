@@ -268,8 +268,7 @@ class StepGateResponse(BaseModel):
     decision_id: str | None = Field(
         default=None,
         description=(
-            "Unique decision identifier for auditing "
-            "(links a gate response to its audit row)."
+            "Unique decision identifier for auditing (links a gate response to its audit row)."
         ),
     )
     policies_evaluated: list[PolicyMatch] | None = Field(
