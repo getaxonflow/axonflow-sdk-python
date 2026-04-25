@@ -252,7 +252,7 @@ When your PR touches a baselined area (e.g. a function listed in `.lint_baseline
 Baseline files in this repo:
 
 - `.lint_baselines/falsey_clobber.json` — `or`-falsey-clobber on wire-field accesses
-- `tests/fixtures/wire-shape-baseline.json` — wire-shape contract gate
+- `tests/fixtures/wire_shape_baseline.json` — wire-shape contract gate
 
 CI does not block PRs that touch a baselined area without addressing it, but reviewers will ask the burndown-or-justify question.
 
