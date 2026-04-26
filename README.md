@@ -25,13 +25,13 @@ This SDK is a client library for interacting with a running AxonFlow control pla
 
 A deployed AxonFlow platform (self-hosted or cloud) is required for end-to-end AI governance. SDKs alone are not sufficient—the platform and SDKs are designed to be used together.
 
-### Architecture Overview (2 min)
+### See AxonFlow in Action
 
-If you're new to AxonFlow, this short video shows how the control plane and SDKs work together in a real production setup:
+Three short videos covering different angles of the platform:
 
-[![AxonFlow Architecture Overview](https://img.youtube.com/vi/WwQXHKuZhxc/maxresdefault.jpg)](https://youtu.be/WwQXHKuZhxc)
-
-▶️ [Watch on YouTube](https://youtu.be/WwQXHKuZhxc)
+- **[Community Quickstart Demo (Code + Terminal, 2.5 min)](https://youtu.be/BSqU1z0xxCo)** — governed calls, PII block, Gateway Mode with LangChain/CrewAI, and MAP from YAML
+- **[Runtime Control Demo (Portal + Workflow, 3 min)](https://youtu.be/6UatGpn7KwE)** — approvals, retry safety, execution state, and the audit viewer
+- **[Architecture Deep Dive (12 min)](https://youtu.be/Q2CZ1qnquhg)** — how the control plane works, policy enforcement flow, and multi-agent planning
 
 ## Installation
 
