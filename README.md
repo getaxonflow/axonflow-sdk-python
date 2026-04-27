@@ -60,7 +60,9 @@ Need more capacity than Community without moving to Enterprise? Evaluation uses 
 | Evidence export (CSV / JSON) | — | 5,000 records · 14d window · 3/day | Unlimited |
 | Policy simulation | — | 300 / day | Unlimited |
 
-Concurrent executions applies to MAP and WCP executions per tenant. Pending execution approvals applies to MAP confirm/step mode and WCP approval queues. Evidence export pulls audit records as CSV/JSON for compliance review. Policy simulation lets you dry-run a rule against real traffic before enabling it.
+Concurrent executions applies to MAP and WCP executions per tenant. Pending execution approvals applies to MAP confirm/step mode and WCP approval queues.
+
+> **Note:** Evidence export and policy simulation are licensed AxonFlow platform capabilities available alongside the SDK on your deployed platform — not language-specific SDK helpers. Access them via the platform API or customer portal. The SDK row is included to show what your licensed deployment unlocks at each tier.
 
 [Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
 
