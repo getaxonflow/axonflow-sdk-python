@@ -57,8 +57,10 @@ Need more capacity than Community without moving to Enterprise? Evaluation uses 
 | Audit retention | 3 days | 14 days | 3650 days |
 | Concurrent executions | 5 | 25 | Unlimited |
 | Pending execution approvals | 5 | 25 | Unlimited |
+| Evidence export (CSV / JSON) | — | 5,000 records · 14d window · 3/day | Unlimited |
+| Policy simulation | — | 300 / day | Unlimited |
 
-Concurrent executions applies to MAP and WCP executions per tenant. Pending execution approvals applies to MAP confirm/step mode and WCP approval queues.
+Concurrent executions applies to MAP and WCP executions per tenant. Pending execution approvals applies to MAP confirm/step mode and WCP approval queues. Evidence export pulls audit records as CSV/JSON for compliance review. Policy simulation lets you dry-run a rule against real traffic before enabling it.
 
 [Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
 
