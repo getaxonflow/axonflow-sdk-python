@@ -327,15 +327,15 @@ class SDKCompatibility:
 
     def min_sdk_version_for(self, language: str) -> str:
         """Minimum SDK version required for ``language`` (empty string if unknown)."""
-        return self.min_sdk_version.get(language, "") if isinstance(self.min_sdk_version, dict) else ""
+        if not isinstance(self.min_sdk_version, dict):
+            return ""
+        return self.min_sdk_version.get(language, "")
 
     def recommended_sdk_version_for(self, language: str) -> str:
         """Recommended SDK version for ``language`` (empty string if unknown)."""
-        return (
-            self.recommended_sdk_version.get(language, "")
-            if isinstance(self.recommended_sdk_version, dict)
-            else ""
-        )
+        if not isinstance(self.recommended_sdk_version, dict):
+            return ""
+        return self.recommended_sdk_version.get(language, "")
 
 
 @dataclass
