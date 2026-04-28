@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
+
+Minor release. New LLM-provider listing API + pagination wrappers, plus full surfacing of the `LLMProvider` wire shape that previous SDK versions silently dropped on parse. Coordinated cycle: TypeScript v6.2.0 / Go v6.0.0 (major: see SDKCompatibility breaking type change in that release) / Java v6.2.0 ship same day.
+
 ### Added
 
 - **`client.list_providers()`** — list configured LLM providers and their health status. Calls `GET /api/v1/llm-providers`, returns a list of `LLMProvider` records (each with optional `LLMProviderHealth`). Supports `provider_type` and `enabled` filters. Both async and sync entry points. Closes the parity gap with the Java SDK and the in-platform listing endpoint that's been live since v4.4.
@@ -21,13 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A single malformed `health` snapshot on one provider in a `list_providers()` response no longer crashes the entire call. The bad provider's `health` is set to `None` and a warning is logged; well-formed siblings parse normally.
-
-### Fixed
-
 - `health_check_detailed()` no longer crashes with `AttributeError: 'dict' object has no attribute 'split'` when the platform returns per-language `min_sdk_version` and `recommended_sdk_version` maps (the actual on-the-wire shape since v4.8.0). `SDKCompatibility` now declares both fields as `dict[str, str]` and exposes `min_sdk_version_for(language)` / `recommended_sdk_version_for(language)` helpers, matching the Java + TypeScript SDKs. Legacy bare-string responses from older platforms are normalised to a python-keyed dict so callers don't have to branch on platform version.
-- **`examples/openai_integration.py`** — replaced two bare `except Exception:` blocks with narrow handlers (`openai.OpenAIError` / `PolicyViolationError`). The old broad catch printed `(expected if no OpenAI key)` for every error class, masking SDK regressions, schema drift, and governance failures.
-- **`examples/wcp_retry_idempotency.py`** — env-var name corrected from `AXONFLOW_BASE_URL` to `AXONFLOW_AGENT_URL`. The rest of the SDK and all other examples use `AXONFLOW_AGENT_URL`; the original `BASE_URL` worked only because the script had its own fallback default.
-- **`tests/test_integration.py`** — `test_generate_plan` no longer pattern-matches error text to skip on community stacks. Now gates on `AXONFLOW_HAS_PLANNING=1` env var; runs the assertion fully when set, skips with an explanatory message otherwise. The previous broad string-marker (`"LLM"`, `"provider"`, `"Planning Engine"`, `"not available"`, `"not initialized"`) silently absorbed any error containing those words.
+- **`examples/openai_integration.py`** — replaced two bare `except Exception:` blocks with narrow handlers (`openai.OpenAIError` / `PolicyViolationError`). The old broad catch masked SDK regressions, schema drift, and governance failures.
+- **`examples/wcp_retry_idempotency.py`** — env-var name corrected from `AXONFLOW_BASE_URL` to `AXONFLOW_AGENT_URL` to match the rest of the SDK and the other examples.
 
 ## [6.8.0] - 2026-04-25 — Plugin Batch 1 explainability fields on MCP responses
 
