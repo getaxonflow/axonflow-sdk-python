@@ -7266,9 +7266,7 @@ class SyncAxonFlow:
     ) -> list[LLMProvider]:
         """List configured LLM providers (synchronous wrapper)."""
         return self._run_sync(
-            self._async_client.list_providers(
-                provider_type=provider_type, enabled=enabled
-            )
+            self._async_client.list_providers(provider_type=provider_type, enabled=enabled)
         )
 
     # Circuit Breaker Observability sync wrappers

@@ -78,9 +78,7 @@ class TestListProviders:
         assert openai.health.status == "unhealthy"
         assert openai.health.message == "billing exceeded"
 
-    def test_empty_providers_list(
-        self, httpx_mock: HTTPXMock, config_dict: dict[str, Any]
-    ) -> None:
+    def test_empty_providers_list(self, httpx_mock: HTTPXMock, config_dict: dict[str, Any]) -> None:
         httpx_mock.add_response(
             url="https://test.axonflow.com/api/v1/llm-providers",
             json=_provider_response(providers=[]),
