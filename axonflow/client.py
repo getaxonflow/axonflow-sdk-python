@@ -314,10 +314,28 @@ class PlatformCapability:
 
 @dataclass
 class SDKCompatibility:
-    """SDK version compatibility information."""
+    """Per-language SDK version compatibility returned by the platform.
 
-    min_sdk_version: str
-    recommended_sdk_version: str
+    The platform ``/health`` endpoint returns these as per-language maps
+    (e.g. ``{"go": "5.0.0", "python": "6.0.0", ...}``). Older SDK builds
+    typed this as a single string and crashed when parsing the dict; keeping
+    the field as a map aligns Python with Java + TypeScript SDKs.
+    """
+
+    min_sdk_version: dict[str, str]
+    recommended_sdk_version: dict[str, str]
+
+    def min_sdk_version_for(self, language: str) -> str:
+        """Minimum SDK version required for ``language`` (empty string if unknown)."""
+        return self.min_sdk_version.get(language, "") if isinstance(self.min_sdk_version, dict) else ""
+
+    def recommended_sdk_version_for(self, language: str) -> str:
+        """Recommended SDK version for ``language`` (empty string if unknown)."""
+        return (
+            self.recommended_sdk_version.get(language, "")
+            if isinstance(self.recommended_sdk_version, dict)
+            else ""
+        )
 
 
 @dataclass
@@ -879,9 +897,16 @@ class AxonFlow:
         compat_data = response.get("sdk_compatibility")
         compat = None
         if compat_data:
+            raw_min = compat_data.get("min_sdk_version", {})
+            raw_recommended = compat_data.get("recommended_sdk_version", {})
+            # Defensive: accept legacy bare-string shape from old platforms.
+            if isinstance(raw_min, str):
+                raw_min = {"python": raw_min} if raw_min else {}
+            if isinstance(raw_recommended, str):
+                raw_recommended = {"python": raw_recommended} if raw_recommended else {}
             compat = SDKCompatibility(
-                min_sdk_version=compat_data.get("min_sdk_version", ""),
-                recommended_sdk_version=compat_data.get("recommended_sdk_version", ""),
+                min_sdk_version=raw_min,
+                recommended_sdk_version=raw_recommended,
             )
         health = HealthResponse(
             status=response.get("status", "unknown"),
@@ -890,16 +915,14 @@ class AxonFlow:
             capabilities=caps,
             sdk_compatibility=compat,
         )
-        if (
-            compat
-            and compat.min_sdk_version
-            and _parse_version(_SDK_VERSION) < _parse_version(compat.min_sdk_version)
-        ):
-            logging.getLogger("axonflow").warning(
-                "SDK version %s is below minimum supported version %s. Please upgrade.",
-                _SDK_VERSION,
-                compat.min_sdk_version,
-            )
+        if compat:
+            min_for_python = compat.min_sdk_version_for("python")
+            if min_for_python and _parse_version(_SDK_VERSION) < _parse_version(min_for_python):
+                logging.getLogger("axonflow").warning(
+                    "SDK version %s is below minimum supported version %s. Please upgrade.",
+                    _SDK_VERSION,
+                    min_for_python,
+                )
         return health
 
     async def orchestrator_health_check(self) -> bool:

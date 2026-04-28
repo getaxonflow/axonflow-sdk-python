@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `health_check_detailed()` no longer crashes with `AttributeError: 'dict' object has no attribute 'split'` when the platform returns per-language `min_sdk_version` and `recommended_sdk_version` maps (the actual on-the-wire shape since v4.8.0). `SDKCompatibility` now declares both fields as `dict[str, str]` and exposes `min_sdk_version_for(language)` / `recommended_sdk_version_for(language)` helpers, matching the Java + TypeScript SDKs. Legacy bare-string responses from older platforms are normalised to a python-keyed dict so callers don't have to branch on platform version.
+
 ## [6.8.0] - 2026-04-25 — Plugin Batch 1 explainability fields on MCP responses
 
 Minor release. Surfaces fields the AxonFlow agent has emitted since v7.1.0 (Plugin Batch 1) but the SDK didn't declare. Pure field-additions on existing methods — no new SDK methods, no breaking changes. Documented in OpenAPI via platform v7.4.3.
