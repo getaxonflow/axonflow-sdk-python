@@ -19,8 +19,28 @@ from axonflow import AxonFlow
 
 @pytest.fixture(autouse=True)
 def _disable_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Disable telemetry in all tests to prevent unexpected HTTP calls."""
+    """Disable telemetry in all tests AND block real HTTP egress from the
+    telemetry path.
+
+    The DO_NOT_TRACK env var is the documented opt-out, but a future test
+    could legitimately delete it (to exercise the telemetry path itself)
+    and the suite would start firing real pings at the prod checkpoint.
+    Defensive: also patch the httpx.get / httpx.post call sites the
+    telemetry module uses so a deleted DO_NOT_TRACK can't leak.
+    """
+    import httpx
+
     monkeypatch.setenv("DO_NOT_TRACK", "1")
+
+    def _blocked_http(*_args, **_kwargs):
+        raise RuntimeError(
+            "Real HTTP egress is blocked in unit tests. "
+            "Use httpx.MockTransport or a recorded fixture for tests that "
+            "exercise the telemetry path."
+        )
+
+    monkeypatch.setattr(httpx, "get", _blocked_http)
+    monkeypatch.setattr(httpx, "post", _blocked_http)
 
 
 # ============================================================================

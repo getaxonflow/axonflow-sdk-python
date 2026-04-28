@@ -25,17 +25,23 @@ env:
 
 jobs:
   # Contract tests run on every PR and push. No network, no stack.
+  # Matrixed across the same Python versions ci.yml exercises (3.10/3.11/3.12)
+  # so version-specific drift surfaces at PR time, not at release time.
   contract-tests:
-    name: Contract Tests
+    name: Contract Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
       - name: Install dependencies
