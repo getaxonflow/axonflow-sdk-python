@@ -47,7 +47,7 @@ if TYPE_CHECKING:
         RegistrySummary,
     )
 
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 import structlog
@@ -167,6 +167,8 @@ from axonflow.types import (
     ListExecutionsResponse,
     ListUsageRecordsOptions,
     ListWebhooksResponse,
+    LLMProvider,
+    LLMProviderHealth,
     MCPCheckInputResponse,
     MCPCheckOutputResponse,
     MediaContent,
@@ -2125,6 +2127,61 @@ class AxonFlow:
             status=response["status"],
             timestamp=response["timestamp"],
         )
+
+    # =========================================================================
+    # LLM Provider listing
+    # =========================================================================
+
+    async def list_providers(
+        self,
+        *,
+        provider_type: str | None = None,
+        enabled: bool | None = None,
+    ) -> list[LLMProvider]:
+        """List configured LLM providers.
+
+        Calls ``GET /api/v1/llm-providers``. Optional filters narrow by
+        provider type (``openai``, ``anthropic``, etc.) or enabled status.
+
+        Returns:
+            List of :class:`LLMProvider` records, each with health snapshot.
+
+        Raises:
+            AxonFlowError: If the request fails.
+
+        Example:
+            >>> providers = await client.list_providers()
+            >>> for p in providers:
+            ...     print(p.name, p.type, p.health.status if p.health else "?")
+        """
+        query: dict[str, str] = {}
+        if provider_type is not None:
+            query["type"] = provider_type
+        if enabled is not None:
+            query["enabled"] = "true" if enabled else "false"
+
+        path = "/api/v1/llm-providers"
+        if query:
+            path = f"{path}?{urlencode(query)}"
+        response = await self._request("GET", path)
+
+        raw_providers = response.get("providers") or []
+        out: list[LLMProvider] = []
+        for raw in raw_providers:
+            health_raw = raw.get("health")
+            health = LLMProviderHealth(**health_raw) if isinstance(health_raw, dict) else None
+            out.append(
+                LLMProvider(
+                    name=raw.get("name", ""),
+                    type=raw.get("type", ""),
+                    enabled=bool(raw.get("enabled", True)),
+                    priority=int(raw.get("priority", 0) or 0),
+                    weight=int(raw.get("weight", 0) or 0),
+                    has_api_key=bool(raw.get("has_api_key", False)),
+                    health=health,
+                )
+            )
+        return out
 
     # =========================================================================
     # Circuit Breaker Observability Methods
@@ -7200,6 +7257,17 @@ class SyncAxonFlow:
     ) -> AuditToolCallResponse:
         """Record a non-LLM tool call in the audit trail."""
         return self._run_sync(self._async_client.audit_tool_call(request))
+
+    def list_providers(
+        self,
+        *,
+        provider_type: str | None = None,
+        enabled: bool | None = None,
+    ) -> list[LLMProvider]:
+        """List configured LLM providers (synchronous wrapper)."""
+        return self._run_sync(
+            self._async_client.list_providers(provider_type=provider_type, enabled=enabled)
+        )
 
     # Circuit Breaker Observability sync wrappers
 

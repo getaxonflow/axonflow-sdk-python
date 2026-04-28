@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`client.list_providers()`** — list configured LLM providers and their health status. Calls `GET /api/v1/llm-providers`, returns a list of `LLMProvider` records (each with optional `LLMProviderHealth`). Supports `provider_type` and `enabled` filters. Both async and sync entry points. Closes the parity gap with the Java SDK and the in-platform listing endpoint that's been live since v4.4.
+
 ### Fixed
 
 - `health_check_detailed()` no longer crashes with `AttributeError: 'dict' object has no attribute 'split'` when the platform returns per-language `min_sdk_version` and `recommended_sdk_version` maps (the actual on-the-wire shape since v4.8.0). `SDKCompatibility` now declares both fields as `dict[str, str]` and exposes `min_sdk_version_for(language)` / `recommended_sdk_version_for(language)` helpers, matching the Java + TypeScript SDKs. Legacy bare-string responses from older platforms are normalised to a python-keyed dict so callers don't have to branch on platform version.

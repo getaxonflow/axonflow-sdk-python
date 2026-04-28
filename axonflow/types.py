@@ -1531,3 +1531,51 @@ class PolicyConflictResponse(BaseModel):
     conflict_count: int = Field(default=0, description="Number of conflicts found")
     checked_at: str = Field(default="", description="ISO 8601 timestamp")
     tier: str = Field(default="", description="License tier")
+
+
+# =========================================================================
+# LLM Provider listing — GET /api/v1/llm-providers
+# =========================================================================
+
+
+class LLMProviderHealth(BaseModel):
+    """Health snapshot for a registered LLM provider."""
+
+    status: str = Field(default="unknown", description="healthy | unhealthy | unknown")
+    message: str = Field(default="", description="Optional human-readable detail")
+    last_checked: str | None = Field(default=None, description="ISO 8601 timestamp")
+
+
+class LLMProvider(BaseModel):
+    """A registered LLM provider, as returned by ``client.list_providers()``."""
+
+    name: str
+    type: str
+    enabled: bool = True
+    priority: int = 0
+    weight: int = 0
+    has_api_key: bool = False
+    health: LLMProviderHealth | None = None
+
+
+# =========================================================================
+# MAP plane pending approvals — GET /api/v1/plans/approvals/pending  (#1680)
+# =========================================================================
+
+
+class PendingPlanApproval(BaseModel):
+    """A single MAP step awaiting human approval.
+
+    Returned by ``client.get_pending_plan_approvals()``. Mirrors the Java
+    SDK's ``PendingApproval`` shape.
+    """
+
+    plan_id: str = Field(description="MAP plan identifier")
+    step_id: str = Field(description="Step identifier within the plan")
+    workflow_id: str | None = Field(default=None, description="Underlying workflow id, if any")
+    decision: str | None = Field(default=None, description="Decision label (e.g. require_approval)")
+    approval_status: str | None = Field(default=None, description="pending | approved | rejected")
+    step_completed_at: str | None = Field(default=None, description="ISO 8601 timestamp")
+    requested_at: str | None = Field(default=None, description="ISO 8601 timestamp")
+    requester: str | None = Field(default=None, description="User who triggered the request")
+    reason: str | None = Field(default=None, description="Why approval is needed")
