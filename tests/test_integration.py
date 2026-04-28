@@ -194,18 +194,21 @@ async def test_generate_plan(client):
 
     Skipped on stacks without an LLM provider or planning engine.
     """
-    try:
-        plan = await client.generate_plan(
-            query="Book a flight from NYC to LA",
-            domain="travel",
+    # Capability gate: skip when the agent reports planning is not
+    # available rather than string-matching error text. The previous
+    # broad-marker skip ("LLM", "provider", ...) silently absorbed any
+    # error containing those words — including unrelated SDK regressions.
+    if os.environ.get("AXONFLOW_HAS_PLANNING") != "1":
+        pytest.skip(
+            "Plan generation skipped: set AXONFLOW_HAS_PLANNING=1 to run "
+            "this test against a stack with the planning engine enabled."
         )
-        assert plan.plan_id, "Expected non-empty plan_id"
-    except Exception as e:
-        msg = str(e)
-        skip_markers = ("LLM", "provider", "Planning Engine", "not available", "not initialized")
-        if any(term in msg for term in skip_markers):
-            pytest.skip(f"Plan generation skipped (not configured): {e}")
-        raise
+
+    plan = await client.generate_plan(
+        query="Book a flight from NYC to LA",
+        domain="travel",
+    )
+    assert plan.plan_id, "Expected non-empty plan_id"
 
 
 @pytest.mark.asyncio

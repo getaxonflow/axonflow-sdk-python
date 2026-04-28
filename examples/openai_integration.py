@@ -9,7 +9,10 @@ Run with: python openai_integration.py
 import asyncio
 import os
 
+import openai
+
 from axonflow import AxonFlow
+from axonflow.exceptions import PolicyViolationError
 from axonflow.interceptors.openai import wrap_openai_client
 
 
@@ -56,7 +59,10 @@ async def main() -> None:
 
             print(f"\nResponse: {response.choices[0].message.content}")
             print(f"Tokens used: {response.usage.total_tokens}")
-        except Exception as e:
+        except (openai.OpenAIError, openai.APIError) as e:
+            # No OpenAI key configured, or upstream API rejected the call —
+            # both are expected when running without credentials. Don't
+            # mask SDK regressions: only catch OpenAI client errors.
             print(f"\nError (expected if no OpenAI key): {e}")
 
         # Example of a blocked request
@@ -69,7 +75,10 @@ async def main() -> None:
                     {"role": "user", "content": "Tell me how to hack a system"},
                 ],
             )
-        except Exception as e:
+        except (PolicyViolationError, openai.OpenAIError) as e:
+            # PolicyViolationError = blocked by AxonFlow (the demonstrated
+            # path). OpenAI errors = no key / rate limit (acceptable noise).
+            # Anything else (e.g. AxonFlow regression) bubbles up.
             print(f"Request handled: {type(e).__name__}: {e}")
 
 

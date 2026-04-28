@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `health_check_detailed()` no longer crashes with `AttributeError: 'dict' object has no attribute 'split'` when the platform returns per-language `min_sdk_version` and `recommended_sdk_version` maps (the actual on-the-wire shape since v4.8.0). `SDKCompatibility` now declares both fields as `dict[str, str]` and exposes `min_sdk_version_for(language)` / `recommended_sdk_version_for(language)` helpers, matching the Java + TypeScript SDKs. Legacy bare-string responses from older platforms are normalised to a python-keyed dict so callers don't have to branch on platform version.
+- **`examples/openai_integration.py`** — replaced two bare `except Exception:` blocks with narrow handlers (`openai.OpenAIError` / `PolicyViolationError`). The old broad catch printed `(expected if no OpenAI key)` for every error class, masking SDK regressions, schema drift, and governance failures.
+- **`examples/wcp_retry_idempotency.py`** — env-var name corrected from `AXONFLOW_BASE_URL` to `AXONFLOW_AGENT_URL`. The rest of the SDK and all other examples use `AXONFLOW_AGENT_URL`; the original `BASE_URL` worked only because the script had its own fallback default.
+- **`tests/test_integration.py`** — `test_generate_plan` no longer pattern-matches error text to skip on community stacks. Now gates on `AXONFLOW_HAS_PLANNING=1` env var; runs the assertion fully when set, skips with an explanatory message otherwise. The previous broad string-marker (`"LLM"`, `"provider"`, `"Planning Engine"`, `"not available"`, `"not initialized"`) silently absorbed any error containing those words.
 
 ## [6.8.0] - 2026-04-25 — Plugin Batch 1 explainability fields on MCP responses
 
