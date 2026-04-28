@@ -1547,7 +1547,12 @@ class LLMProviderHealth(BaseModel):
 
 
 class LLMProvider(BaseModel):
-    """A registered LLM provider, as returned by ``client.list_providers()``."""
+    """A registered LLM provider, as returned by ``client.list_providers()``.
+
+    Mirrors the platform's ``LLMProviderResource`` schema. Optional fields
+    are populated when the provider config has them set; ``settings`` is
+    a free-form provider-specific dict.
+    """
 
     name: str
     type: str
@@ -1556,6 +1561,30 @@ class LLMProvider(BaseModel):
     weight: int = 0
     has_api_key: bool = False
     health: LLMProviderHealth | None = None
+    endpoint: str | None = Field(default=None, description="API endpoint URL")
+    model: str | None = Field(default=None, description="Default model name")
+    region: str | None = Field(default=None, description="AWS region (Bedrock)")
+    rate_limit: int | None = Field(default=None, description="Max requests per second")
+    timeout_seconds: int | None = Field(default=None, description="Request timeout in seconds")
+    settings: dict[str, object] | None = Field(
+        default=None, description="Provider-specific settings"
+    )
+
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata returned alongside paginated list responses."""
+
+    page: int = Field(default=1, description="Current page (1-indexed)")
+    page_size: int = Field(default=20, description="Number of items per page")
+    total_items: int = Field(default=0, description="Total items across all pages")
+    total_pages: int = Field(default=1, description="Total pages")
+
+
+class LLMProviderListResponse(BaseModel):
+    """Paginated wrapper returned by ``client.list_providers_paged()``."""
+
+    providers: list[LLMProvider] = Field(default_factory=list)
+    pagination: PaginationMeta = Field(default_factory=PaginationMeta)
 
 
 # =========================================================================

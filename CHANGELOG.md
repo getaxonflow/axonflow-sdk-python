@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`client.list_providers()`** — list configured LLM providers and their health status. Calls `GET /api/v1/llm-providers`, returns a list of `LLMProvider` records (each with optional `LLMProviderHealth`). Supports `provider_type` and `enabled` filters. Both async and sync entry points. Closes the parity gap with the Java SDK and the in-platform listing endpoint that's been live since v4.4.
+- **`LLMProvider`** now surfaces the full provider shape: `endpoint`, `model`, `region`, `rate_limit`, `timeout_seconds`, and `settings`. Previously these fields were silently dropped on parse, so deployments couldn't introspect provider configuration via the SDK.
+- **`client.list_providers_paged()`** — same arguments as `list_providers()` plus `page` / `page_size`, returns the full `LLMProviderListResponse` with `pagination` metadata. Use this when you need to walk multi-page responses or display pagination controls.
+- **`client.list_all_providers()`** — convenience wrapper that walks every page (default `page_size=100`, the server-side cap) and returns the combined list. Closes the silent-truncation-at-20-providers bug in `list_providers()`.
+
+### Fixed
+
+- A single malformed `health` snapshot on one provider in a `list_providers()` response no longer crashes the entire call. The bad provider's `health` is set to `None` and a warning is logged; well-formed siblings parse normally.
 
 ### Fixed
 
