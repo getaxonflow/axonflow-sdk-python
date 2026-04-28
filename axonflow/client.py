@@ -52,6 +52,7 @@ from urllib.parse import quote, urlencode
 import httpx
 import structlog
 from cachetools import TTLCache
+from pydantic import ValidationError
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -169,12 +170,14 @@ from axonflow.types import (
     ListWebhooksResponse,
     LLMProvider,
     LLMProviderHealth,
+    LLMProviderListResponse,
     MCPCheckInputResponse,
     MCPCheckOutputResponse,
     MediaContent,
     MediaGovernanceConfig,
     MediaGovernanceStatus,
     Mode,
+    PaginationMeta,
     PlanExecutionResponse,
     PlanResponse,
     PlanStep,
@@ -2137,14 +2140,21 @@ class AxonFlow:
         *,
         provider_type: str | None = None,
         enabled: bool | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
     ) -> list[LLMProvider]:
         """List configured LLM providers.
 
         Calls ``GET /api/v1/llm-providers``. Optional filters narrow by
-        provider type (``openai``, ``anthropic``, etc.) or enabled status.
+        provider type or enabled status; ``page`` / ``page_size`` request
+        a specific page (server-side default: page 1, 20 items, max 100).
+
+        Returns the providers from a SINGLE page. Use
+        :meth:`list_providers_paged` if you need the pagination metadata,
+        or :meth:`list_all_providers` to walk every page.
 
         Returns:
-            List of :class:`LLMProvider` records, each with health snapshot.
+            List of :class:`LLMProvider` records.
 
         Raises:
             AxonFlowError: If the request fails.
@@ -2154,11 +2164,33 @@ class AxonFlow:
             >>> for p in providers:
             ...     print(p.name, p.type, p.health.status if p.health else "?")
         """
+        result = await self.list_providers_paged(
+            provider_type=provider_type, enabled=enabled, page=page, page_size=page_size
+        )
+        return result.providers
+
+    async def list_providers_paged(
+        self,
+        *,
+        provider_type: str | None = None,
+        enabled: bool | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+    ) -> LLMProviderListResponse:
+        """List a page of LLM providers along with pagination metadata.
+
+        Same filters as :meth:`list_providers` but returns the full
+        :class:`LLMProviderListResponse` so callers can paginate.
+        """
         query: dict[str, str] = {}
         if provider_type is not None:
             query["type"] = provider_type
         if enabled is not None:
             query["enabled"] = "true" if enabled else "false"
+        if page is not None:
+            query["page"] = str(int(page))
+        if page_size is not None:
+            query["page_size"] = str(int(page_size))
 
         path = "/api/v1/llm-providers"
         if query:
@@ -2168,8 +2200,19 @@ class AxonFlow:
         raw_providers = response.get("providers") or []
         out: list[LLMProvider] = []
         for raw in raw_providers:
-            health_raw = raw.get("health")
-            health = LLMProviderHealth(**health_raw) if isinstance(health_raw, dict) else None
+            try:
+                health_raw = raw.get("health")
+                health = LLMProviderHealth(**health_raw) if isinstance(health_raw, dict) else None
+            except ValidationError as exc:
+                # Don't let a single malformed health snapshot crash the
+                # whole listing — surface it as a debug warning and continue
+                # with health=None for that provider.
+                self._logger.warning(
+                    "LLMProvider %s has unparseable health snapshot, skipping: %s",
+                    raw.get("name", "<unnamed>"),
+                    exc,
+                )
+                health = None
             out.append(
                 LLMProvider(
                     name=raw.get("name", ""),
@@ -2179,9 +2222,46 @@ class AxonFlow:
                     weight=int(raw.get("weight", 0) or 0),
                     has_api_key=bool(raw.get("has_api_key", False)),
                     health=health,
+                    endpoint=raw.get("endpoint"),
+                    model=raw.get("model"),
+                    region=raw.get("region"),
+                    rate_limit=raw.get("rate_limit"),
+                    timeout_seconds=raw.get("timeout_seconds"),
+                    settings=raw.get("settings"),
                 )
             )
-        return out
+
+        pagination_raw = response.get("pagination") or {}
+        pagination = (
+            PaginationMeta(**pagination_raw)
+            if isinstance(pagination_raw, dict)
+            else PaginationMeta()
+        )
+        return LLMProviderListResponse(providers=out, pagination=pagination)
+
+    async def list_all_providers(
+        self,
+        *,
+        provider_type: str | None = None,
+        enabled: bool | None = None,
+        page_size: int = 100,
+    ) -> list[LLMProvider]:
+        """Walk every page of providers and return the full list.
+
+        For deployments with many providers; uses ``page_size=100`` (the
+        server-side max) by default to minimise round trips.
+        """
+        all_providers: list[LLMProvider] = []
+        page = 1
+        while True:
+            result = await self.list_providers_paged(
+                provider_type=provider_type, enabled=enabled, page=page, page_size=page_size
+            )
+            all_providers.extend(result.providers)
+            if result.pagination.total_pages <= page or len(result.providers) == 0:
+                break
+            page += 1
+        return all_providers
 
     # =========================================================================
     # Circuit Breaker Observability Methods
@@ -7263,10 +7343,43 @@ class SyncAxonFlow:
         *,
         provider_type: str | None = None,
         enabled: bool | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
     ) -> list[LLMProvider]:
         """List configured LLM providers (synchronous wrapper)."""
         return self._run_sync(
-            self._async_client.list_providers(provider_type=provider_type, enabled=enabled)
+            self._async_client.list_providers(
+                provider_type=provider_type, enabled=enabled, page=page, page_size=page_size
+            )
+        )
+
+    def list_providers_paged(
+        self,
+        *,
+        provider_type: str | None = None,
+        enabled: bool | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+    ) -> LLMProviderListResponse:
+        """List providers with pagination metadata (synchronous wrapper)."""
+        return self._run_sync(
+            self._async_client.list_providers_paged(
+                provider_type=provider_type, enabled=enabled, page=page, page_size=page_size
+            )
+        )
+
+    def list_all_providers(
+        self,
+        *,
+        provider_type: str | None = None,
+        enabled: bool | None = None,
+        page_size: int = 100,
+    ) -> list[LLMProvider]:
+        """Walk every page and return all providers (synchronous wrapper)."""
+        return self._run_sync(
+            self._async_client.list_all_providers(
+                provider_type=provider_type, enabled=enabled, page_size=page_size
+            )
         )
 
     # Circuit Breaker Observability sync wrappers
