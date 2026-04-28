@@ -5,7 +5,7 @@ stack. Every assertion fails the process on mismatch.
 
 Run:
     source /tmp/axonflow-e2e-env.sh
-    export AXONFLOW_BASE_URL=http://localhost:8080
+    export AXONFLOW_AGENT_URL=http://localhost:8080
     python examples/wcp_retry_idempotency.py
 """
 
@@ -184,7 +184,7 @@ async def act2(client: AxonFlow) -> None:
 
 
 async def main() -> None:
-    endpoint = os.environ.get("AXONFLOW_BASE_URL", "http://localhost:8080")
+    endpoint = os.environ.get("AXONFLOW_AGENT_URL", "http://localhost:8080")
     client_id = must_env("AXONFLOW_CLIENT_ID")
     client_secret = must_env("AXONFLOW_CLIENT_SECRET")
 
