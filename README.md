@@ -442,7 +442,10 @@ No email required. Optional contact if you want a response.
 ## Telemetry
 
 This SDK sends anonymous usage telemetry (SDK version, OS, enabled features) to help improve AxonFlow.
-No prompts, payloads, or PII are ever collected. Opt out: `AXONFLOW_TELEMETRY=off` or `DO_NOT_TRACK=1`.
+No prompts, payloads, or PII are ever collected. Opt out: `AXONFLOW_TELEMETRY=off`.
+
+`DO_NOT_TRACK` is **not** honored as an opt-out for AxonFlow telemetry. It is commonly inherited from host tools and developer environments, which makes it an unreliable expression of user intent.
+
 See [Telemetry Documentation](https://docs.getaxonflow.com/docs/telemetry) for full details.
 
 ## License
