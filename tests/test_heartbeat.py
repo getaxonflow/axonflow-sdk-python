@@ -116,6 +116,7 @@ def test_stale_stamp_fires_and_updates(isolated_state, mock_ping_success, teleme
     isolated_state.stamp_path.parent.mkdir(parents=True, exist_ok=True)
     isolated_state.stamp_path.write_text("last_sent=test\n")
     import time as _time
+
     eight_days_ago = _time.time() - 8 * 24 * 3600
     os.utime(isolated_state.stamp_path, (eight_days_ago, eight_days_ago))
 
@@ -136,7 +137,9 @@ def test_rate_limit_within_1h_fires_once(isolated_state, mock_ping_success, tele
     assert mock_ping_success.call_count == 1
 
 
-def test_after_rate_limit_expiry_fires_again(isolated_state, mock_ping_success, telemetry_enabled_env):
+def test_after_rate_limit_expiry_fires_again(
+    isolated_state, mock_ping_success, telemetry_enabled_env
+):
     """Case 5: backdate cache + stamp → 2nd ping fires."""
     import time as _time
 
@@ -157,7 +160,9 @@ def test_after_rate_limit_expiry_fires_again(isolated_state, mock_ping_success, 
     assert mock_ping_success.call_count == 2
 
 
-def test_opt_out_mid_process_stops_pings(isolated_state, mock_ping_success, telemetry_enabled_env, monkeypatch):
+def test_opt_out_mid_process_stops_pings(
+    isolated_state, mock_ping_success, telemetry_enabled_env, monkeypatch
+):
     """Case 6: AXONFLOW_TELEMETRY=off after first ping → 0 further pings, stamp unchanged."""
     import time as _time
 
@@ -182,7 +187,9 @@ def test_opt_out_mid_process_stops_pings(isolated_state, mock_ping_success, tele
     assert mtime_before == mtime_after, "stamp mtime must not advance under opt-out"
 
 
-def test_concurrent_callers_coalesce_to_one_ping(isolated_state, mock_ping_success, telemetry_enabled_env):
+def test_concurrent_callers_coalesce_to_one_ping(
+    isolated_state, mock_ping_success, telemetry_enabled_env
+):
     """Case 7: 100 concurrent threads all crossing the boundary → exactly 1 ping."""
     barrier = threading.Barrier(100)
 
@@ -220,11 +227,14 @@ def test_no_cache_dir_pings_but_no_stamp(mock_ping_success, telemetry_enabled_en
 
         # Backdate cache, call again — fires again because no stamp gate exists.
         import time as _time
+
         with state._lock:  # noqa: SLF001
             state._last_checked_monotonic = _time.monotonic() - 2 * 3600  # noqa: SLF001
         maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
-        assert mock_ping_success.call_count == 2, "ping fires again when cache expires and no stamp exists"
+        assert mock_ping_success.call_count == 2, (
+            "ping fires again when cache expires and no stamp exists"
+        )
     finally:
         hb_module._state = previous  # noqa: SLF001
 
@@ -238,6 +248,7 @@ def test_ping_failure_stamp_not_written(isolated_state, mock_ping_failure, telem
 
     # Backdate cache, swap mock to success, retry.
     import time as _time
+
     with isolated_state._lock:  # noqa: SLF001
         isolated_state._last_checked_monotonic = _time.monotonic() - 2 * 3600  # noqa: SLF001
 

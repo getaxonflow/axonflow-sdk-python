@@ -54,9 +54,9 @@ def _swap_state(stamp_path: Path) -> HeartbeatState:
 
 def test_four_run_cycle(stamp_path: Path, telemetry_enabled_env, monkeypatch):
     """Run 1: cold → 1 ping;
-       Run 2: warm → 0;
-       Run 3: stale → 1 (stamp updated);
-       Run 4: stale + 503 → 0 successful (stamp unchanged); retry on 200 → 1, stamp updated."""
+    Run 2: warm → 0;
+    Run 3: stale → 1 (stamp updated);
+    Run 4: stale + 503 → 0 successful (stamp unchanged); retry on 200 → 1, stamp updated."""
 
     # Save real singleton and restore at the end.
     original_state = hb_module._state  # noqa: SLF001
@@ -66,7 +66,9 @@ def test_four_run_cycle(stamp_path: Path, telemetry_enabled_env, monkeypatch):
         success_mock = MagicMock(return_value=True)
         with patch("axonflow.telemetry._send_telemetry_ping_now", success_mock):
             _swap_state(stamp_path)
-            maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+            maybe_send_heartbeat(
+                mode="production", endpoint="http://localhost", telemetry_enabled=True
+            )
             _wait_for_threads()
 
         assert success_mock.call_count == 1, "Run 1: expected 1 ping on cold start"
@@ -76,7 +78,9 @@ def test_four_run_cycle(stamp_path: Path, telemetry_enabled_env, monkeypatch):
         success_mock_2 = MagicMock(return_value=True)
         with patch("axonflow.telemetry._send_telemetry_ping_now", success_mock_2):
             _swap_state(stamp_path)
-            maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+            maybe_send_heartbeat(
+                mode="production", endpoint="http://localhost", telemetry_enabled=True
+            )
             _wait_for_threads()
 
         assert success_mock_2.call_count == 0, "Run 2: fresh stamp must suppress ping"
@@ -88,7 +92,9 @@ def test_four_run_cycle(stamp_path: Path, telemetry_enabled_env, monkeypatch):
         success_mock_3 = MagicMock(return_value=True)
         with patch("axonflow.telemetry._send_telemetry_ping_now", success_mock_3):
             _swap_state(stamp_path)
-            maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+            maybe_send_heartbeat(
+                mode="production", endpoint="http://localhost", telemetry_enabled=True
+            )
             _wait_for_threads()
 
         assert success_mock_3.call_count == 1, "Run 3: stale stamp must trigger a fresh ping"
@@ -102,7 +108,9 @@ def test_four_run_cycle(stamp_path: Path, telemetry_enabled_env, monkeypatch):
         failure_mock = MagicMock(return_value=False)
         with patch("axonflow.telemetry._send_telemetry_ping_now", failure_mock):
             _swap_state(stamp_path)
-            maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+            maybe_send_heartbeat(
+                mode="production", endpoint="http://localhost", telemetry_enabled=True
+            )
             _wait_for_threads()
 
         assert failure_mock.call_count == 1, "Run 4a: ping must be attempted under stale stamp"
@@ -115,7 +123,9 @@ def test_four_run_cycle(stamp_path: Path, telemetry_enabled_env, monkeypatch):
         success_mock_retry = MagicMock(return_value=True)
         with patch("axonflow.telemetry._send_telemetry_ping_now", success_mock_retry):
             _swap_state(stamp_path)
-            maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+            maybe_send_heartbeat(
+                mode="production", endpoint="http://localhost", telemetry_enabled=True
+            )
             _wait_for_threads()
 
         assert success_mock_retry.call_count == 1, "Run 4b: retry on success must land 1 ping"

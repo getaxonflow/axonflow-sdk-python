@@ -161,6 +161,7 @@ class HeartbeatState:
             with os.fdopen(fd, "w") as f:
                 # Format kept human-readable for debugging only — never parsed.
                 from datetime import datetime, timezone
+
                 f.write(f"last_sent={datetime.now(timezone.utc).isoformat()}\n")
             os.replace(tmp_name, self._stamp_path)
         except OSError:
@@ -273,6 +274,7 @@ def maybe_send_heartbeat(
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip()
     if not url:
         from axonflow.telemetry import _DEFAULT_CHECKPOINT_URL
+
         url = _DEFAULT_CHECKPOINT_URL
 
     def _ping_and_stamp() -> None:
