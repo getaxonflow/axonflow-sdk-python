@@ -31,13 +31,22 @@ pytestmark = pytest.mark.skipif(
 
 
 def get_test_config():
-    """Get test configuration from environment."""
+    """Get test configuration from environment.
+
+    ``AXONFLOW_TEST_TIMEOUT`` (seconds) overrides the default request
+    timeout so tests can run against deployments where LLM tail latency
+    is higher than a bare docker-compose stack. The hosted SaaS (e.g.
+    ``try.getaxonflow.com``) routinely sees 60-90s LLM round-trips
+    during traffic spikes; the docker-compose stack returns instantly
+    because no real LLM is configured. Default 30s preserves the
+    existing fast path; the nightly-try workflow bumps this to 120s.
+    """
     return {
         "endpoint": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
         "client_id": os.getenv("AXONFLOW_CLIENT_ID", "demo-client"),
         "client_secret": os.getenv("AXONFLOW_CLIENT_SECRET", "demo-secret"),
         "debug": True,
-        "timeout": 30.0,
+        "timeout": float(os.getenv("AXONFLOW_TEST_TIMEOUT", "30.0")),
     }
 
 

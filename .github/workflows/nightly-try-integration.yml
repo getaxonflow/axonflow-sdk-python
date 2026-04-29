@@ -119,6 +119,11 @@ jobs:
           AXONFLOW_AGENT_URL: https://try.getaxonflow.com
           AXONFLOW_CLIENT_ID: ${{ steps.register.outputs.tenant_id }}
           AXONFLOW_CLIENT_SECRET: ${{ steps.register.outputs.secret }}
+          # Bump the test client timeout for the hosted SaaS path —
+          # try.getaxonflow.com runs real LLM providers whose tail
+          # latency exceeds the 30s default that's adequate for a bare
+          # docker-compose stack with no LLM configured.
+          AXONFLOW_TEST_TIMEOUT: '120.0'
           # Flip this to '1' once axonflow-enterprise#1751 ships and
           # try.getaxonflow.com's plan-generation path stops returning
           # HTTP 504. Today the path consistently times out at the
