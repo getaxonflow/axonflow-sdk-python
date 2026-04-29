@@ -122,22 +122,32 @@ jobs:
           # Bump the test client timeout for the hosted SaaS path —
           # try.getaxonflow.com runs real LLM providers whose tail
           # latency exceeds the 30s default that's adequate for a bare
-          # docker-compose stack with no LLM configured.
+          # docker-compose stack with no LLM configured. Plan generation
+          # routinely lands close to 60s; 120s gives headroom without
+          # masking real wire / agent regressions.
           AXONFLOW_TEST_TIMEOUT: '120.0'
-          # Flip this to '1' once axonflow-enterprise#1751 ships and
-          # try.getaxonflow.com's plan-generation path stops returning
-          # HTTP 504. Today the path consistently times out at the
-          # gateway after ~60s, so test_generate_plan stays skipped
-          # rather than failing every nightly run. The forcing-function
-          # design: when the SaaS-side fix lands, a single-line workflow
-          # PR flips this flag and the test enforces planning-engine
-          # coverage going forward.
-          AXONFLOW_HAS_PLANNING: '0'
-          # Flip this to '1' once axonflow-enterprise#1747 ships and
-          # try.getaxonflow.com restores block-mode SQLi policies. The
-          # test will then require response.blocked=True instead of
-          # accepting alert/log-mode engagement.
-          AXONFLOW_STRICT_SQLI_BLOCK: '0'
+          # MAP timeout is separate — plan generation makes multiple
+          # LLM calls (one per decomposed step), so the worst case is
+          # N × per-call latency. Ollama on a small instance lands
+          # 4-step plans at 150-200s. 240s is the smallest value that
+          # both passes today AND would catch a regression that
+          # doubles per-call latency.
+          AXONFLOW_TEST_MAP_TIMEOUT: '240.0'
+          # try.getaxonflow.com now has the planning engine reachable
+          # within the 300s ALB idle timeout (community-saas re-deploy
+          # for axonflow-enterprise#1751). test_generate_plan exercises
+          # the planning surface against the live SaaS — drop back to
+          # '0' if the SaaS regresses (the test will skip cleanly with
+          # a clear reason rather than 504-ing every nightly).
+          AXONFLOW_HAS_PLANNING: '1'
+          # try.getaxonflow.com's agent task now sets SQLI_ACTION=block
+          # explicitly (axonflow-enterprise#1747); SQLi requests return
+          # response.blocked=True with a sys_sqli_* policy hit. Strict
+          # mode flips test_proxy_llm_call_sql_injection from
+          # "engine engaged" tolerance to "blocked is required" — a
+          # SaaS regression that drops back to alert mode trips the
+          # nightly instead of silently passing.
+          AXONFLOW_STRICT_SQLI_BLOCK: '1'
         run: pytest tests/test_integration.py -v --no-cov
 
       - name: Run quickstart example

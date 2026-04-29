@@ -33,13 +33,22 @@ pytestmark = pytest.mark.skipif(
 def get_test_config():
     """Get test configuration from environment.
 
-    ``AXONFLOW_TEST_TIMEOUT`` (seconds) overrides the default request
-    timeout so tests can run against deployments where LLM tail latency
-    is higher than a bare docker-compose stack. The hosted SaaS (e.g.
-    ``try.getaxonflow.com``) routinely sees 60-90s LLM round-trips
-    during traffic spikes; the docker-compose stack returns instantly
-    because no real LLM is configured. Default 30s preserves the
-    existing fast path; the nightly-try workflow bumps this to 120s.
+    Two env vars override the default timeouts so tests can run against
+    deployments where LLM tail latency is higher than a bare docker-
+    compose stack:
+
+    - ``AXONFLOW_TEST_TIMEOUT`` controls the regular request timeout.
+      try.getaxonflow.com routinely sees 60-90s LLM round-trips during
+      traffic spikes; the docker-compose stack returns instantly because
+      no real LLM is configured. Default 30s preserves the existing
+      fast path; the nightly-try workflow bumps this to 120s.
+    - ``AXONFLOW_TEST_MAP_TIMEOUT`` controls the MAP / planning timeout
+      separately. Plan generation makes multiple LLM calls (one per
+      decomposed step), so the worst-case latency is N x per-call
+      latency. The SDK's default ``map_timeout`` of 120s is fine for
+      docker-compose's mock LLM but trips on slow Ollama deployments
+      where 4-step plans land at 150-200s. The nightly-try workflow
+      sets this to 240s.
     """
     return {
         "endpoint": os.getenv("AXONFLOW_AGENT_URL", "http://localhost:8080"),
@@ -47,6 +56,7 @@ def get_test_config():
         "client_secret": os.getenv("AXONFLOW_CLIENT_SECRET", "demo-secret"),
         "debug": True,
         "timeout": float(os.getenv("AXONFLOW_TEST_TIMEOUT", "30.0")),
+        "map_timeout": float(os.getenv("AXONFLOW_TEST_MAP_TIMEOUT", "120.0")),
     }
 
 
