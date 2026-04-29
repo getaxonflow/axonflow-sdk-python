@@ -1,0 +1,238 @@
+name: Nightly Try Integration
+
+# Live integration vs https://try.getaxonflow.com.
+#
+# Layered on top of the docker-compose integration job in integration.yml,
+# which validates the SDK <-> agent wire on every main merge. This nightly
+# adds coverage that docker-compose can't provide:
+#
+#   - Full-config stack: planning engine + LLM providers configured the
+#     way a real community SaaS deployment is, not the bare minimum a
+#     local docker-compose ships with.
+#   - Production canary: try.getaxonflow.com is the hosted sandbox real
+#     users hit; if it regresses, every download-and-try newcomer hits a
+#     broken stack. Nightly cron makes that loud.
+#
+# Operates entirely through the documented register-flow path:
+#   1. POST /api/v1/register -> ephemeral tenant_id + secret
+#   2. Run integration suite against the live endpoint with those creds
+#
+# Read-only against try.getaxonflow.com. No destructive writes — all
+# operations are LLM queries through the gateway, policy evaluation,
+# or read endpoints (health, list_connectors, generate_plan).
+
+on:
+  schedule:
+    # 06:00 UTC daily — low-traffic hour, aligns with the existing
+    # weekly-cron slot used by integration.yml for the docker-compose run.
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+  # Self-validating trigger: PRs that modify the workflow file itself,
+  # the integration tests it runs, or the live example scripts it
+  # exercises run the workflow once as a pre-merge sanity check. Path
+  # filter is intentionally narrow — this is not a per-PR gate, just a
+  # guarantee that any change to the live-stack-exercising surface
+  # lands working.
+  pull_request:
+    paths:
+      - '.github/workflows/nightly-try-integration.yml'
+      - 'tests/test_integration.py'
+      - 'examples/quickstart.py'
+      - 'examples/gateway_mode.py'
+
+# Auto-filing a tracking issue on scheduled-run failures requires
+# `issues: write`. PRs (which never trigger this workflow) and dispatch
+# runs only need read.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nightly-try-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  nightly-try:
+    name: Live integration vs try.getaxonflow.com
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DO_NOT_TRACK: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install SDK + dev deps
+        run: pip install -e ".[dev,all]"
+
+      # Capture the resolved dependency graph so a failure two months
+      # from now doesn't leave us guessing which transitive bumped.
+      - name: Snapshot resolved deps
+        run: pip freeze > /tmp/pip-freeze.txt
+
+      - name: Probe try.getaxonflow.com /health
+        run: |
+          if ! curl -sSf --max-time 15 https://try.getaxonflow.com/health > /tmp/health.json; then
+            echo "FAIL: https://try.getaxonflow.com/health unreachable"
+            exit 1
+          fi
+          cat /tmp/health.json
+          echo
+
+      - name: Register ephemeral tenant on try.getaxonflow.com
+        id: register
+        run: |
+          set -euo pipefail
+          response=$(curl -sSf --max-time 20 \
+            -H 'Content-Type: application/json' \
+            -d "{\"label\":\"sdk-python-nightly-${GITHUB_RUN_ID}\"}" \
+            https://try.getaxonflow.com/api/v1/register)
+          tenant_id=$(printf '%s' "$response" | jq -r 'try .tenant_id // empty')
+          secret=$(printf '%s' "$response" | jq -r 'try .secret // empty')
+          if [ -z "$tenant_id" ] || [ -z "$secret" ]; then
+            echo "FAIL: register response missing tenant_id and/or secret"
+            # Don't echo $response verbatim — it may contain a freshly
+            # minted secret if the response shape is partially valid.
+            # Wrap the redaction in `try ... catch` so a non-object
+            # response (string, array, malformed JSON) falls back to a
+            # safe placeholder rather than printing whatever jq received.
+            printf '%s' "$response" \
+              | jq 'try (with_entries(select(.key != "secret"))) catch "<unparseable register response>"' \
+              || echo "<jq failed to parse register response>"
+            exit 1
+          fi
+          echo "::add-mask::$secret"
+          {
+            echo "tenant_id=$tenant_id"
+            echo "secret=$secret"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run integration tests against try
+        env:
+          RUN_INTEGRATION_TESTS: '1'
+          AXONFLOW_AGENT_URL: https://try.getaxonflow.com
+          AXONFLOW_CLIENT_ID: ${{ steps.register.outputs.tenant_id }}
+          AXONFLOW_CLIENT_SECRET: ${{ steps.register.outputs.secret }}
+          # Bump the test client timeout for the hosted SaaS path —
+          # try.getaxonflow.com runs real LLM providers whose tail
+          # latency exceeds the 30s default that's adequate for a bare
+          # docker-compose stack with no LLM configured.
+          AXONFLOW_TEST_TIMEOUT: '120.0'
+          # Flip this to '1' once axonflow-enterprise#1751 ships and
+          # try.getaxonflow.com's plan-generation path stops returning
+          # HTTP 504. Today the path consistently times out at the
+          # gateway after ~60s, so test_generate_plan stays skipped
+          # rather than failing every nightly run. The forcing-function
+          # design: when the SaaS-side fix lands, a single-line workflow
+          # PR flips this flag and the test enforces planning-engine
+          # coverage going forward.
+          AXONFLOW_HAS_PLANNING: '0'
+          # Flip this to '1' once axonflow-enterprise#1747 ships and
+          # try.getaxonflow.com restores block-mode SQLi policies. The
+          # test will then require response.blocked=True instead of
+          # accepting alert/log-mode engagement.
+          AXONFLOW_STRICT_SQLI_BLOCK: '0'
+        run: pytest tests/test_integration.py -v --no-cov
+
+      - name: Run quickstart example
+        env:
+          AXONFLOW_AGENT_URL: https://try.getaxonflow.com
+          AXONFLOW_CLIENT_ID: ${{ steps.register.outputs.tenant_id }}
+          AXONFLOW_CLIENT_SECRET: ${{ steps.register.outputs.secret }}
+        run: |
+          cd examples
+          timeout 120 python quickstart.py
+
+      - name: Run gateway_mode example
+        env:
+          AXONFLOW_AGENT_URL: https://try.getaxonflow.com
+          AXONFLOW_CLIENT_ID: ${{ steps.register.outputs.tenant_id }}
+          AXONFLOW_CLIENT_SECRET: ${{ steps.register.outputs.secret }}
+        run: |
+          cd examples
+          timeout 120 python gateway_mode.py
+
+      # Persist the dependency snapshot on failure so the tracking
+      # issue can pin the resolved graph at the time of the regression.
+      - name: Upload dep snapshot on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-freeze-${{ github.run_id }}
+          path: /tmp/pip-freeze.txt
+          if-no-files-found: ignore
+
+      # Auto-file an issue on scheduled-run failure. Skipped on
+      # workflow_dispatch — manual dispatch is intentional ad-hoc work,
+      # not a regression signal worth filing.
+      - name: Open / comment tracking issue on scheduled failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const title = 'Nightly try.getaxonflow.com integration failing';
+            const body = [
+              `Scheduled nightly run against \`https://try.getaxonflow.com\` failed.`,
+              ``,
+              `**Run:** ${runUrl}`,
+              `**Commit:** ${context.sha}`,
+              ``,
+              `try.getaxonflow.com is the production canary for the Python SDK. Investigate:`,
+              ``,
+              `1. Is the endpoint itself reachable / healthy?`,
+              `2. Did \`POST /api/v1/register\` change shape (expecting \`tenant_id\` + \`secret\`)?`,
+              `3. Did \`tests/test_integration.py\` regress vs the live stack?`,
+              `4. Did \`examples/quickstart.py\` or \`examples/gateway_mode.py\` regress?`,
+              ``,
+              `Pinned dependency graph for this run is uploaded as the \`pip-freeze-${context.runId}\` artifact.`,
+              `Logs and reproduction details in the run link above.`,
+            ].join('\n');
+
+            // Prefer label-based dedup: search is eventually-consistent and
+            // can miss a sister-run issue created seconds earlier. Falling
+            // through to the search query covers older issues that may
+            // pre-date the canary label set.
+            let existingIssueNumber = null;
+            const labelMatches = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'nightly-canary',
+              per_page: 10,
+            });
+            if (labelMatches.data.length > 0) {
+              existingIssueNumber = labelMatches.data[0].number;
+            } else {
+              const search = await github.rest.search.issuesAndPullRequests({
+                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`,
+              });
+              if (search.data.total_count > 0) {
+                existingIssueNumber = search.data.items[0].number;
+              }
+            }
+
+            if (existingIssueNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssueNumber,
+                body: `Another scheduled run failed: ${runUrl}`,
+              });
+              core.notice(`Commented on existing issue #${existingIssueNumber}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['nightly-canary', 'ci-failure'],
+              });
+              core.notice(`Opened tracking issue #${created.data.number}`);
+            }

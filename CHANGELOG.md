@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI / Testing
+
+- Nightly integration workflow runs the SDK against `try.getaxonflow.com` via the documented `POST /api/v1/register` flow. Catches drift between the SDK and the hosted community sandbox that the existing docker-compose integration job (bare local stack) cannot see. Failures auto-file or comment a tracking issue; available via `workflow_dispatch` for ad-hoc validation.
+
 ## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
 
 Minor release. New LLM-provider listing API + pagination wrappers, plus full surfacing of the `LLMProvider` wire shape that previous SDK versions silently dropped on parse. Coordinated cycle: TypeScript v6.2.0 / Go v6.0.0 (major: see SDKCompatibility breaking type change in that release) / Java v6.2.0 ship same day.
