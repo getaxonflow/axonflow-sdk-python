@@ -57,7 +57,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      DO_NOT_TRACK: '1'
+      # Suppress SDK telemetry pings from this CI run. We hit
+      # try.getaxonflow.com as the integration target, so without an
+      # explicit opt-out the SDK would fire an anonymous heartbeat
+      # against the production checkpoint endpoint and pollute external
+      # adoption metrics. AXONFLOW_TELEMETRY=off is the canonical and
+      # only opt-out as of v7.0.0 — DO_NOT_TRACK is no longer honored.
+      AXONFLOW_TELEMETRY: 'off'
 
     steps:
       - uses: actions/checkout@v4
