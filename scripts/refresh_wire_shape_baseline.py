@@ -41,6 +41,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_MODULE_PATH = REPO_ROOT / "tests" / "test_wire_shape.py"
@@ -112,8 +113,22 @@ def main() -> int:
     merged, duplicates_by_spec = helpers._load_all_schemas(specs_dir)
     models = helpers._discover_models()
 
+    # Preserve `note` annotations from the previous baseline so a regen
+    # doesn't silently strip the human-authored burn-down rationale.
+    # Notes are carried forward verbatim — when a model's drift changes,
+    # the note may need updating, and that is a reviewer's call. The
+    # gate itself only reads sdk_only/spec_only; `note` is informational.
+    existing_notes: dict[str, str] = {}
+    if BASELINE_PATH.is_file():
+        with BASELINE_PATH.open() as f:
+            old = json.load(f) or {}
+        for name, entry in (old.get("per_model_drift") or {}).items():
+            note = entry.get("note") if isinstance(entry, dict) else None
+            if isinstance(note, str) and note:
+                existing_notes[name] = note
+
     registered: list[str] = []
-    drift: dict[str, dict[str, list[str]]] = {}
+    drift: dict[str, dict[str, Any]] = {}
     for name, model in models.items():
         if name not in merged:
             continue
@@ -122,10 +137,13 @@ def main() -> int:
         spec_fields = merged[name]
         if sdk_fields == spec_fields:
             continue
-        drift[name] = {
+        entry: dict[str, Any] = {
             "sdk_only": sorted(set(sdk_fields) - set(spec_fields)),
             "spec_only": sorted(set(spec_fields) - set(sdk_fields)),
         }
+        if name in existing_notes:
+            entry["note"] = existing_notes[name]
+        drift[name] = entry
 
     cross_spec: dict[str, dict[str, list[str]]] = {
         name: {spec: list(fields) for spec, fields in sorted(decls.items())}
