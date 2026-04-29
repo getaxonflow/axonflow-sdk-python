@@ -7,7 +7,7 @@ Enterprise AI Governance in 3 Lines of Code.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Type hints](https://img.shields.io/badge/type%20hints-mypy-brightgreen.svg)](http://mypy-lang.org/)
 
-> **Upgrade strongly recommended.** Over the past month we've shipped substantial production, quality, and security hardening across the AxonFlow SDKs and platform — see the [v7.0.0 release notes](./CHANGELOG.md), the per-SDK advisory [`GHSA-7f4h-6264-89fr`](https://github.com/getaxonflow/axonflow-sdk-python/security/advisories/GHSA-7f4h-6264-89fr), and the consolidated platform advisory [`GHSA-9h64-2846-7x7f`](https://github.com/getaxonflow/axonflow/security/advisories/GHSA-9h64-2846-7x7f). Upgrade to the latest major for a more secure, reliable, and bug-free experience.
+> **Upgrade strongly recommended.** AxonFlow ships substantial monthly security and quality hardening; staying on the latest major is the security-supported release line. [Latest release](https://github.com/getaxonflow/axonflow-sdk-python/releases/latest) · [Security advisories](https://github.com/getaxonflow/axonflow-sdk-python/security/advisories)
 
 > **Evaluating AxonFlow in production?** We're opening limited Design Partner slots.
 >
