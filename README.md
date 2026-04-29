@@ -7,6 +7,8 @@ Enterprise AI Governance in 3 Lines of Code.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Type hints](https://img.shields.io/badge/type%20hints-mypy-brightgreen.svg)](http://mypy-lang.org/)
 
+> **Upgrade strongly recommended.** AxonFlow ships substantial monthly security and quality hardening; staying on the latest major is the security-supported release line. [Latest release](https://github.com/getaxonflow/axonflow-sdk-python/releases/latest) · [Security advisories](https://github.com/getaxonflow/axonflow-sdk-python/security/advisories)
+
 > **Evaluating AxonFlow in production?** We're opening limited Design Partner slots.
 >
 > Free 30-minute architecture and incident-readiness review, priority issue triage, roadmap input, and early feature access.

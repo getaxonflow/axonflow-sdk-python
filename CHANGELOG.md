@@ -9,34 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
-## [Unreleased]
+## [7.0.0] - 2026-04-29 — Production, quality, and security hardening — upgrade encouraged
 
-### Removed
+**Upgrade strongly recommended.** Over the past month we've shipped substantial production, quality, and security hardening across the AxonFlow SDKs and platform — upgrade to the latest major for a more secure, reliable, and bug-free experience.
 
-- **BREAKING:** `DO_NOT_TRACK` is no longer honored as an AxonFlow telemetry opt-out. Use `AXONFLOW_TELEMETRY=off` instead.
+**Security highlights from this release cycle:**
+- **Webhook signing-key now exposed by SDK request type** (this release). The `webhook_signing_key` (HMAC-SHA256) field on `RegisterRequest` was missing from the SDK type, so callers had no way to retrieve the signing key and webhook signature verification was effectively un-implementable. The field is now wired through end-to-end. Documented in [`GHSA-7f4h-6264-89fr`](https://github.com/getaxonflow/axonflow-sdk-python/security/advisories/GHSA-7f4h-6264-89fr).
+- **`DO_NOT_TRACK` opt-out removed in favor of `AXONFLOW_TELEMETRY=off`** (this release). `DO_NOT_TRACK` was unreliable because host CLIs and runtimes commonly inject `DO_NOT_TRACK=1` regardless of user intent; an explicit AxonFlow-scoped opt-out is the only signal we honor now.
+- **Nightly integration in strict mode against `try.getaxonflow.com`** (this release). A canary that catches platform-side regressions affecting the SDK before they reach a release; failures auto-file a GitHub issue.
 
-  `DO_NOT_TRACK` was deprecated because it is commonly inherited from host tools and developer environments (CLIs like Codex and Claude Code inject it unconditionally), which makes it an unreliable expression of user intent for AxonFlow telemetry.
+Major release across the AxonFlow SDK family. Companion releases ship the same day: TypeScript v7.0.0 / Python v7.0.0 / Go v7.0.0 (with `/v7` module path migration) / Java v7.0.0. The full set of platform-side security fixes shipped alongside this release is documented in the consolidated platform advisory [`GHSA-9h64-2846-7x7f`](https://github.com/getaxonflow/axonflow/security/advisories/GHSA-9h64-2846-7x7f).
+
+**Reliability and bug-fix highlights:**
+- **`retry_context` + `idempotency_key` for cross-step de-duplication** (last cycle, v6.x). Workflow steps that retry across pod restarts no longer record duplicate audit entries; idempotency_key flows end-to-end through MAP HITL approve/reject responses.
+- **`atexit` flush so short-lived processes deliver telemetry** (last cycle, v6.x). Previously a Python script that registered the client and exited immediately could lose the ping; the queue is now flushed on interpreter exit.
+- **Wire-shape contract CI + baseline burndown** (last cycle, v6.x). PR-blocking gate that catches drift between SDK types and platform OpenAPI before consumers hit it; baseline drift list shrunk from 36 to 24 entries with 0 unannotated.
+
+### BREAKING
+
+- **`DO_NOT_TRACK` is no longer honored as an AxonFlow telemetry opt-out.** Use `AXONFLOW_TELEMETRY=off` instead. Host tools and CLIs commonly inject `DO_NOT_TRACK=1` regardless of user intent, which makes it unreliable as a signal.
 
 ### Changed
 
-- **Telemetry now follows the 7-day delivered-heartbeat contract** instead of firing on every `AxonFlow()` construction. The SDK emits at most one anonymous heartbeat per environment every 7 days during SDK activity. A stamp file at the OS-native user cache dir tracks last successful delivery; mtime is the source of truth across process restarts. Failed POSTs do NOT advance the stamp — a transient network error does not silence telemetry for 7 days. An in-memory 1-hour cache caps `os.path.getmtime` syscalls on hot request paths; an in-flight flag coalesces concurrent threads so only one ping fires under load. `AXONFLOW_TELEMETRY=off` is re-evaluated on every gate run. Restricted environments where no cache dir is available (e.g. AWS Lambda with no `HOME`/`LOCALAPPDATA`) fall back transparently to the previous "one ping per process" behavior.
-- `StaticPolicy` and `PolicyVersion` now serialize their wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases (`createdAt`, `changedBy`, etc.) remain accepted on input via `validation_alias=AliasChoices(...)` so existing consumers keep working; only outgoing serialization changes. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts: `StaticPolicy.model_validate({"createdAt": "..."}).model_dump()` now emits `created_at`, not `createdAt`. Code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change; switch comparisons to operate on the snake_case shape.
+- **Telemetry switched to a 7-day delivered-heartbeat.** At most one anonymous ping per environment every 7 days, with the stamp advanced only after the POST returns 2xx — a transient network failure doesn't silence telemetry until the next window. Concurrent threads are de-duplicated by an in-flight gate. Restricted environments where no cache dir is available (e.g. AWS Lambda) fall back transparently to the previous "one ping per process" behavior.
+- `StaticPolicy` and `PolicyVersion` now serialize wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases remain accepted on input via `validation_alias=AliasChoices(...)`. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts — code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change.
 
 ### Added
 
-- `ClientRequest.skip_llm` — optional flag to run policy evaluation only and return without invoking the LLM. Matches the existing platform-side request schema.
+- `ClientRequest.skip_llm` — optional flag to run policy evaluation only and return without invoking the LLM.
 
 ### Fixed
 
-- The one-line `DO_NOT_TRACK=1 is deprecated...` `logger.warning` is no longer emitted. Removing the warning eliminates log noise that previously appeared on every client construction when `DO_NOT_TRACK=1` was set.
-
-### CI / Testing
-
-- Nightly integration workflow runs the SDK against `try.getaxonflow.com` via the documented `POST /api/v1/register` flow. Catches drift between the SDK and the hosted community sandbox that the existing docker-compose integration job (bare local stack) cannot see. Failures auto-file or comment a tracking issue; available via `workflow_dispatch` for ad-hoc validation.
-- Wire-shape baseline burndown: every entry in `tests/fixtures/wire_shape_baseline.json::per_model_drift` now carries a `note` annotation classifying the drift (`spec-bug-pending`, `deprecated-pending-removal`, `sdk-aggregation`, or `acknowledged-sdk-superset`). Four entries remain tagged `spec-bug-pending` with a single linked tracking issue; the rest are documented as intentional or scheduled-for-removal so the baseline doubles as the burn-down ledger.
-- `scripts/refresh_wire_shape_baseline.py` now preserves the `note` field on each drift entry across regen runs so a routine refresh doesn't strip the human-authored rationale.
-- Test harness (`tests/conftest.py` autouse fixture) and CI workflows (`ci.yml`, `integration.yml`, `release.yml`) now use `AXONFLOW_TELEMETRY=off` to suppress telemetry during automated runs.
-- Nightly integration against `try.getaxonflow.com` now runs in strict mode: SQL-injection requests must return `response.blocked=True` (not just engaged-but-not-blocked), and `test_generate_plan` runs against the live planning engine without skipping. The community-saas re-deploy that fixes upstream `SQLI_ACTION=block` enforcement and the 300s ALB idle timeout is now in production, so the forcing-function flags `AXONFLOW_STRICT_SQLI_BLOCK` and `AXONFLOW_HAS_PLANNING` flip from `0` to `1`. `tests/test_integration.py::get_test_config` gains an `AXONFLOW_TEST_MAP_TIMEOUT` knob (separate from the regular request timeout) so plan generation has 240s of headroom for the multi-LLM-call decomposition path.
+- The `DO_NOT_TRACK=1 is deprecated...` `logger.warning` is no longer emitted on every client construction when `DO_NOT_TRACK=1` is set.
 
 
 ## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
