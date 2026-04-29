@@ -275,9 +275,7 @@ def maybe_send_heartbeat(
     # so short-lived processes don't drop the ping (mirrors issue #1692 fix).
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip()
     if not url:
-        from axonflow.telemetry import (
-            _DEFAULT_CHECKPOINT_URL,  # noqa: PLC0415 — see lazy-import comment above
-        )
+        from axonflow.telemetry import _DEFAULT_CHECKPOINT_URL  # noqa: PLC0415
 
         url = _DEFAULT_CHECKPOINT_URL
 
@@ -286,10 +284,14 @@ def maybe_send_heartbeat(
             ok = _send_telemetry_ping_now(url, mode, endpoint, debug)
         except Exception:  # noqa: BLE001 — defensive; ping must never throw to the worker
             ok = False
+        # Clear in_flight first so other waiters can fast-path through;
+        # the stamp write is independent and runs OUTSIDE the lock so its
+        # mkdir + tempfile + rename syscalls don't serialize concurrent
+        # gate runs through disk IO.
         with h._lock:
             h._in_flight = False
-            if ok:
-                h.write_stamp_atomic()
+        if ok:
+            h.write_stamp_atomic()
 
     t = threading.Thread(target=_ping_and_stamp, daemon=True)
     t.start()

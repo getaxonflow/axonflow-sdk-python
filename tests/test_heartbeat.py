@@ -26,7 +26,6 @@ from axonflow import heartbeat as hb_module
 from axonflow.heartbeat import (
     HEARTBEAT_GUARD_INTERVAL_S,
     HEARTBEAT_INTERVAL_S,
-    HeartbeatState,
     maybe_send_heartbeat,
     replace_heartbeat_state_for_test,
 )
@@ -210,11 +209,11 @@ def test_concurrent_callers_coalesce_to_one_ping(
 
 def test_no_cache_dir_pings_but_no_stamp(mock_ping_success, telemetry_enabled_env):
     """Case 8: stamp_path=None (Lambda-like) → ping per process, no crash, no stamp."""
+    # ``stamp_path=None`` simulates the UserCacheDir() failure case (e.g. AWS
+    # Lambda where HOME is unset and LOCALAPPDATA is absent).
     previous = replace_heartbeat_state_for_test(None)
-    # Force stamp_path to None to simulate UserCacheDir() failure.
-    state = HeartbeatState(stamp_path=None)
-    hb_module._state = state  # noqa: SLF001
     try:
+        state = hb_module._state  # noqa: SLF001 — the freshly-installed singleton
         maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
         assert mock_ping_success.call_count == 1, "1st ping must fire even without cache dir"
