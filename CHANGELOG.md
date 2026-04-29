@@ -17,20 +17,20 @@ Major release across the AxonFlow SDK family. Companion releases ship the same d
 
 ### BREAKING
 
-- **`DO_NOT_TRACK` is no longer honored as an AxonFlow telemetry opt-out.** Use `AXONFLOW_TELEMETRY=off` instead. `DO_NOT_TRACK` was deprecated because it is commonly inherited from host tools and developer environments (CLIs like Codex and Claude Code inject it unconditionally), which makes it an unreliable expression of user intent for AxonFlow telemetry.
+- **`DO_NOT_TRACK` is no longer honored as an AxonFlow telemetry opt-out.** Use `AXONFLOW_TELEMETRY=off` instead. Host tools and CLIs commonly inject `DO_NOT_TRACK=1` regardless of user intent, which makes it unreliable as a signal.
 
 ### Changed
 
-- **Telemetry now follows the 7-day delivered-heartbeat contract** instead of firing on every `AxonFlow()` construction. The SDK emits at most one anonymous heartbeat per environment every 7 days during SDK activity. A stamp file at the OS-native user cache dir tracks last successful delivery; mtime is the source of truth across process restarts. Failed POSTs do NOT advance the stamp — a transient network error does not silence telemetry for 7 days. An in-memory 1-hour cache caps `os.path.getmtime` syscalls on hot request paths; an in-flight flag coalesces concurrent threads so only one ping fires under load. `AXONFLOW_TELEMETRY=off` is re-evaluated on every gate run. Restricted environments where no cache dir is available (e.g. AWS Lambda with no `HOME`/`LOCALAPPDATA`) fall back transparently to the previous "one ping per process" behavior.
-- `StaticPolicy` and `PolicyVersion` now serialize their wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases (`createdAt`, `changedBy`, etc.) remain accepted on input via `validation_alias=AliasChoices(...)` so existing consumers keep working; only outgoing serialization changes. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts: `StaticPolicy.model_validate({"createdAt": "..."}).model_dump()` now emits `created_at`, not `createdAt`. Code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change; switch comparisons to operate on the snake_case shape.
+- **Telemetry switched to a 7-day delivered-heartbeat.** At most one anonymous ping per environment every 7 days, with the stamp advanced only after the POST returns 2xx — a transient network failure doesn't silence telemetry until the next window. Concurrent threads are de-duplicated by an in-flight gate. Restricted environments where no cache dir is available (e.g. AWS Lambda) fall back transparently to the previous "one ping per process" behavior.
+- `StaticPolicy` and `PolicyVersion` now serialize wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases remain accepted on input via `validation_alias=AliasChoices(...)`. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts — code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change.
 
 ### Added
 
-- `ClientRequest.skip_llm` — optional flag to run policy evaluation only and return without invoking the LLM. Matches the existing platform-side request schema.
+- `ClientRequest.skip_llm` — optional flag to run policy evaluation only and return without invoking the LLM.
 
 ### Fixed
 
-- The one-line `DO_NOT_TRACK=1 is deprecated...` `logger.warning` is no longer emitted. Removing the warning eliminates log noise that previously appeared on every client construction when `DO_NOT_TRACK=1` was set.
+- The `DO_NOT_TRACK=1 is deprecated...` `logger.warning` is no longer emitted on every client construction when `DO_NOT_TRACK=1` is set.
 
 
 ## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
