@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
-## [Unreleased]
+## [7.0.0] - 2026-04-29 — DO_NOT_TRACK removal + StaticPolicy snake_case + skip_llm
 
-### Removed
+Major release. The headline breaking change is the removal of `DO_NOT_TRACK` as an AxonFlow telemetry opt-out — `AXONFLOW_TELEMETRY=off` is now the canonical and only opt-out signal. Bundles `StaticPolicy` / `PolicyVersion` snake_case alignment with the OpenAPI spec and the new `ClientRequest.skip_llm` request flag. Companion releases on the same day: TypeScript v7.0.0 / Go v7.0.0 / Java v7.0.0.
 
-- **BREAKING:** `DO_NOT_TRACK` is no longer honored as an AxonFlow telemetry opt-out. Use `AXONFLOW_TELEMETRY=off` instead.
+### BREAKING
 
-  `DO_NOT_TRACK` was deprecated because it is commonly inherited from host tools and developer environments (CLIs like Codex and Claude Code inject it unconditionally), which makes it an unreliable expression of user intent for AxonFlow telemetry.
+- **`DO_NOT_TRACK` is no longer honored as an AxonFlow telemetry opt-out.** Use `AXONFLOW_TELEMETRY=off` instead. `DO_NOT_TRACK` was deprecated because it is commonly inherited from host tools and developer environments (CLIs like Codex and Claude Code inject it unconditionally), which makes it an unreliable expression of user intent for AxonFlow telemetry.
 
 ### Changed
 
@@ -28,14 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The one-line `DO_NOT_TRACK=1 is deprecated...` `logger.warning` is no longer emitted. Removing the warning eliminates log noise that previously appeared on every client construction when `DO_NOT_TRACK=1` was set.
-
-### CI / Testing
-
-- Nightly integration workflow runs the SDK against `try.getaxonflow.com` via the documented `POST /api/v1/register` flow. Catches drift between the SDK and the hosted community sandbox that the existing docker-compose integration job (bare local stack) cannot see. Failures auto-file or comment a tracking issue; available via `workflow_dispatch` for ad-hoc validation.
-- Wire-shape baseline burndown: every entry in `tests/fixtures/wire_shape_baseline.json::per_model_drift` now carries a `note` annotation classifying the drift (`spec-bug-pending`, `deprecated-pending-removal`, `sdk-aggregation`, or `acknowledged-sdk-superset`). Four entries remain tagged `spec-bug-pending` with a single linked tracking issue; the rest are documented as intentional or scheduled-for-removal so the baseline doubles as the burn-down ledger.
-- `scripts/refresh_wire_shape_baseline.py` now preserves the `note` field on each drift entry across regen runs so a routine refresh doesn't strip the human-authored rationale.
-- Test harness (`tests/conftest.py` autouse fixture) and CI workflows (`ci.yml`, `integration.yml`, `release.yml`) now use `AXONFLOW_TELEMETRY=off` to suppress telemetry during automated runs.
-- Nightly integration against `try.getaxonflow.com` now runs in strict mode: SQL-injection requests must return `response.blocked=True` (not just engaged-but-not-blocked), and `test_generate_plan` runs against the live planning engine without skipping. The community-saas re-deploy that fixes upstream `SQLI_ACTION=block` enforcement and the 300s ALB idle timeout is now in production, so the forcing-function flags `AXONFLOW_STRICT_SQLI_BLOCK` and `AXONFLOW_HAS_PLANNING` flip from `0` to `1`. `tests/test_integration.py::get_test_config` gains an `AXONFLOW_TEST_MAP_TIMEOUT` knob (separate from the regular request timeout) so plan generation has 240s of headroom for the multi-LLM-call decomposition path.
 
 
 ## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
