@@ -45,9 +45,7 @@ class TestIsTelemetryEnabled:
 
     def test_axonflow_off_still_disables_with_dnt_also_set(self) -> None:
         """AXONFLOW_TELEMETRY=off is the canonical opt-out and wins regardless of DNT."""
-        with patch.dict(
-            "os.environ", {"DO_NOT_TRACK": "1", "AXONFLOW_TELEMETRY": "off"}
-        ):
+        with patch.dict("os.environ", {"DO_NOT_TRACK": "1", "AXONFLOW_TELEMETRY": "off"}):
             assert _is_telemetry_enabled("production", None, True) is False
             assert _is_telemetry_enabled("production", True, True) is False
 
