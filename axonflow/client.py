@@ -127,6 +127,7 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
+from axonflow.heartbeat import maybe_send_heartbeat
 from axonflow.telemetry import send_telemetry_ping
 from axonflow.types import (
     AuditLogEntry,
@@ -566,12 +567,18 @@ class AxonFlow:
                 endpoint=endpoint,
             )
 
-        # Send telemetry ping (fire-and-forget).
-        send_telemetry_ping(
+        # Heartbeat gate: at most one anonymous ping per environment per
+        # 7 days, gated by SDK activity. The constructor runs the gate
+        # synchronously enough to schedule the daemon thread; the thread
+        # is tracked by an atexit flush handler so short-lived processes
+        # (CLI, serverless cold-starts) still deliver the ping. Subsequent
+        # gate runs happen async via ``_pre_request_hook`` on every
+        # public HTTP request. See axonflow/heartbeat.py for the contract
+        # and stamp-on-DELIVERY semantics.
+        maybe_send_heartbeat(
             mode=self._config.mode.value,
             endpoint=self._config.endpoint,
             telemetry_enabled=telemetry,
-            has_credentials=bool(client_id and client_secret),
             debug=debug,
         )
 
@@ -714,6 +721,23 @@ class AxonFlow:
         key = f"{request_type}:{query}:{user_token}"
         return hashlib.sha256(key.encode()).hexdigest()[:32]
 
+    def _pre_request_hook(self) -> None:
+        """Single hook invoked at the start of every public HTTP request path.
+
+        Schedules a heartbeat-gate evaluation via ``maybe_send_heartbeat``.
+        The gate spawns its own daemon thread for any actual POST, so this
+        method is non-blocking — user API calls are never delayed by
+        telemetry. The gate's in-memory 1-hour cache plus the in-flight
+        flag mean the typical hot-path cost is a single mutex acquire and
+        a monotonic-time read.
+        """
+        maybe_send_heartbeat(
+            mode=self._config.mode.value,
+            endpoint=self._config.endpoint,
+            telemetry_enabled=self._config.telemetry,
+            debug=self._config.debug,
+        )
+
     async def _request(
         self,
         method: str,
@@ -722,6 +746,7 @@ class AxonFlow:
         json_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Make HTTP request to Agent."""
+        self._pre_request_hook()
         url = f"{self._config.endpoint}{path}"
 
         try:
@@ -808,6 +833,7 @@ class AxonFlow:
         This uses the longer map_timeout for MAP operations that involve
         multiple LLM calls and can take 30-60+ seconds.
         """
+        self._pre_request_hook()
         url = f"{self._config.endpoint}{path}"
 
         try:
@@ -3801,6 +3827,7 @@ class AxonFlow:
         json_data: dict[str, Any] | None = None,
     ) -> dict[str, Any] | list[Any] | None:
         """Make HTTP request to Orchestrator."""
+        self._pre_request_hook()
         base_url = self._config.endpoint
         url = f"{base_url}{path}"
 

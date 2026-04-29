@@ -194,10 +194,20 @@ def _build_payload(
     }
 
 
-def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
-    """Execute the HTTP POST (runs inside a daemon thread).
+def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) -> bool:
+    """Synchronously POST a single telemetry ping.
 
-    All HTTP operations share one monotonic deadline so that the atexit flush
+    Returns ``True`` on HTTP 2xx delivery, ``False`` on any failure (network
+    error, timeout, non-2xx response). Runs in the caller's thread — used by
+    the heartbeat orchestrator's worker thread, where the boolean return
+    drives stamp-on-DELIVERY semantics: only successful POSTs advance the
+    stamp file.
+
+    The caller is responsible for the gating decision (whether to send at
+    all) — this function does NOT consult ``AXONFLOW_TELEMETRY``,
+    ``_is_telemetry_enabled``, the stamp file, or any rate-limit state.
+
+    All HTTP operations share one monotonic deadline so the atexit flush
     handler's ``_TIMEOUT_SECONDS`` budget actually covers the complete
     telemetry path. Previously the /health probe (2s) and the POST
     (``_TIMEOUT_SECONDS``) each had independent timeouts, which meant the
@@ -218,27 +228,44 @@ def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
         # POST uses all remaining budget.
         post_budget = max(0.0, deadline - time.monotonic())
         if post_budget < _MIN_BUDGET_SECONDS:
-            return
+            return False
         resp = httpx.post(url, json=payload, timeout=post_budget)
-        if resp.status_code == _HTTP_OK:
-            try:
-                body = resp.json()
-            except (ValueError, KeyError, TypeError, AttributeError):
-                return
-            latest = body.get("latest_version")
-            if latest and latest != _SDK_VERSION:
-                logger.warning(
-                    "A newer AxonFlow Python SDK is available: %s (current: %s). "
-                    "Upgrade with: pip install --upgrade axonflow",
-                    latest,
-                    _SDK_VERSION,
-                )
+        if resp.status_code != _HTTP_OK:
             if debug:
-                logger.debug("Telemetry ping successful: %s", body)
+                logger.debug("Telemetry ping returned non-2xx: %d", resp.status_code)
+            return False
+        try:
+            body = resp.json()
+        except (ValueError, KeyError, TypeError, AttributeError):
+            # Body parse failure on a 2xx response is still a successful
+            # delivery — the server got the ping, the response decoder is
+            # advisory (used only for the version-check warning below).
+            return True
+        latest = body.get("latest_version")
+        if latest and latest != _SDK_VERSION:
+            logger.warning(
+                "A newer AxonFlow Python SDK is available: %s (current: %s). "
+                "Upgrade with: pip install --upgrade axonflow",
+                latest,
+                _SDK_VERSION,
+            )
+        if debug:
+            logger.debug("Telemetry ping successful: %s", body)
+        return True
     except (httpx.HTTPError, OSError, ValueError, TypeError, AttributeError):
         # Silent failure -- never disrupt the caller.
         if debug:
             logger.debug("Telemetry ping failed (non-fatal)", exc_info=True)
+        return False
+
+
+def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
+    """Backward-compat wrapper for tests that exercise the legacy fire-and-forget
+    code path. Delegates to ``_send_telemetry_ping_now`` and discards the
+    boolean. Production code goes through the heartbeat orchestrator
+    (``axonflow.heartbeat.maybe_send_heartbeat``) instead of this function.
+    """
+    _send_telemetry_ping_now(url, mode, endpoint, debug)
 
 
 def send_telemetry_ping(
