@@ -9,11 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
-## [7.0.0] - 2026-04-29
+## [7.0.0] - 2026-04-29 — Production, quality, and security hardening — upgrade encouraged
 
-**Upgrade strongly recommended.** Over the past month we've shipped substantial production, quality, and security hardening across all AxonFlow SDKs and plugins — upgrade to the latest version for a more secure, reliable, and bug-free experience.
+**Upgrade strongly recommended.** Over the past month we've shipped substantial production, quality, and security hardening across the AxonFlow SDKs and platform — upgrade to the latest major for a more secure, reliable, and bug-free experience.
 
-Major release across the AxonFlow SDK family. Companion releases ship the same day: TypeScript v7.0.0 / Python v7.0.0 / Go v7.0.0 (with `/v7` module path migration) / Java v7.0.0.
+**Security highlights from this release cycle:**
+- **Webhook signing-key now exposed by SDK request type** (this release). The `webhook_signing_key` (HMAC-SHA256) field on `RegisterRequest` was missing from the SDK type, so callers had no way to retrieve the signing key and webhook signature verification was effectively un-implementable. The field is now wired through end-to-end. Documented in [`GHSA-7f4h-6264-89fr`](https://github.com/getaxonflow/axonflow-sdk-python/security/advisories/GHSA-7f4h-6264-89fr).
+- **`DO_NOT_TRACK` opt-out removed in favor of `AXONFLOW_TELEMETRY=off`** (this release). `DO_NOT_TRACK` was unreliable because host CLIs and runtimes commonly inject `DO_NOT_TRACK=1` regardless of user intent; an explicit AxonFlow-scoped opt-out is the only signal we honor now.
+- **Nightly integration in strict mode against `try.getaxonflow.com`** (this release). A canary that catches platform-side regressions affecting the SDK before they reach a release; failures auto-file a GitHub issue.
+
+Major release across the AxonFlow SDK family. Companion releases ship the same day: TypeScript v7.0.0 / Python v7.0.0 / Go v7.0.0 (with `/v7` module path migration) / Java v7.0.0. The full set of platform-side security fixes shipped alongside this release is documented in the consolidated platform advisory [`GHSA-9h64-2846-7x7f`](https://github.com/getaxonflow/axonflow/security/advisories/GHSA-9h64-2846-7x7f).
+
+**Reliability and bug-fix highlights:**
+- **`retry_context` + `idempotency_key` for cross-step de-duplication** (last cycle, v6.x). Workflow steps that retry across pod restarts no longer record duplicate audit entries; idempotency_key flows end-to-end through MAP HITL approve/reject responses.
+- **`atexit` flush so short-lived processes deliver telemetry** (last cycle, v6.x). Previously a Python script that registered the client and exited immediately could lose the ping; the queue is now flushed on interpreter exit.
+- **Wire-shape contract CI + baseline burndown** (last cycle, v6.x). PR-blocking gate that catches drift between SDK types and platform OpenAPI before consumers hit it; baseline drift list shrunk from 36 to 24 entries with 0 unannotated.
 
 ### BREAKING
 
