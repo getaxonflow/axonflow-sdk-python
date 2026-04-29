@@ -15,6 +15,9 @@ on:
 env:
   AXONFLOW_TELEMETRY: 'off'
 
+permissions:
+  contents: read
+
 jobs:
   real-stack:
     name: real-stack ${{ matrix.os }}
