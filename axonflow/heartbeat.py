@@ -210,7 +210,8 @@ def _flush_pending_heartbeats() -> None:
     """Join still-running heartbeat threads on interpreter shutdown.
 
     Bounded by each thread's HTTP timeout (``_TIMEOUT_SECONDS`` in
-    telemetry.py — 3s), so total shutdown delay is ≤3s × in-flight count.
+    telemetry.py — 3s), so total shutdown delay is at most 3s per
+    in-flight thread.
     Silent on every failure; never disrupts shutdown.
     """
     with _pending_threads_lock:
@@ -274,7 +275,9 @@ def maybe_send_heartbeat(
     # so short-lived processes don't drop the ping (mirrors issue #1692 fix).
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip()
     if not url:
-        from axonflow.telemetry import _DEFAULT_CHECKPOINT_URL  # noqa: PLC0415 — see lazy-import comment above
+        from axonflow.telemetry import (
+            _DEFAULT_CHECKPOINT_URL,  # noqa: PLC0415 — see lazy-import comment above
+        )
 
         url = _DEFAULT_CHECKPOINT_URL
 
