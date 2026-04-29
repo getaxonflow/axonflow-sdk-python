@@ -149,6 +149,23 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "S105", "S106", "ANN", "PLR2004", "ARG", "PLC0415", "PT011", "PT012", "TC001", "TC002", "UP035", "F401", "F841", "EM101", "TRY301"]
+# Cross-platform real-stack harness: a thin process orchestrator (subprocess +
+# urllib + global counters in the fake server). The lints flagged below are
+# intentional for harness/test infrastructure: subprocess usage with non-shell
+# args is safe; Yoda comparisons and global state in the fake server keep the
+# code readable; line length nudges are not worth ad-hoc reflows.
+"tests/heartbeat-real-stack/**/*.py" = [
+    "S310",   # urlopen — calling a localhost endpoint we just spun up; trusted by construction
+    "S603",   # subprocess — args are constructed by the test, not from user input
+    "S110",   # try/except/pass — silent catch in the fake server is appropriate
+    "PLR0911", "PLR0912", "PLR0915",  # complexity in the orchestrator main()
+    "PLW0603",  # globals — fake server uses module-level counters by design
+    "PLW1510",  # subprocess.run check kwarg — explicit returncode handling instead
+    "SIM105", "SIM300",  # stylistic
+    "PTH119", "PTH123",  # Path vs os.path — old-style is fine for this small file
+    "BLE001",  # bare except in the smoke for "best-effort" health check
+    "E501",   # 100-col over by 2-5 chars on a few descriptive lines
+]
 "axonflow/adapters/langgraph_wrapper.py" = ["ARG002", "PLC0415", "E501"]  # Callback signatures must match base; lazy import of langchain-core
 "axonflow/adapters/langchain.py" = ["PLC0415", "A002", "BLE001", "S110", "SIM105"]  # Lazy import of langchain-core; `input` matches LangChain interface; broad except is intentional for non-fatal audit
 "axonflow/adapters/tool_wrapper.py" = ["PLC0415", "A002", "TRY301"]  # Lazy import of langchain-core; `input` matches BaseTool interface; raise in _run_coro_sync try block
