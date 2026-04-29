@@ -27,16 +27,27 @@ from axonflow.telemetry import (
 class TestIsTelemetryEnabled:
     """Tests for the telemetry opt-in / opt-out logic."""
 
-    def test_disabled_by_env_do_not_track(self) -> None:
-        """DO_NOT_TRACK=1 disables telemetry regardless of other settings."""
-        with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}):
-            assert _is_telemetry_enabled("production", None, True) is False
-            assert _is_telemetry_enabled("production", True, True) is False
+    def test_do_not_track_alone_does_NOT_disable(self) -> None:
+        """DO_NOT_TRACK=1 alone is no longer honored as an AxonFlow opt-out.
+
+        Regression guard: host CLIs like Codex and Claude Code inject DNT=1
+        unconditionally, so honoring it would prevent telemetry from any
+        plugin/SDK running inside those hosts regardless of user intent.
+        """
+        with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}, clear=True):
+            assert _is_telemetry_enabled("production", None, True) is True
+            assert _is_telemetry_enabled("production", True, True) is True
 
     def test_disabled_by_env_axonflow(self) -> None:
         """AXONFLOW_TELEMETRY=off disables telemetry."""
         with patch.dict("os.environ", {"AXONFLOW_TELEMETRY": "off"}):
             assert _is_telemetry_enabled("production", None, True) is False
+
+    def test_axonflow_off_still_disables_with_dnt_also_set(self) -> None:
+        """AXONFLOW_TELEMETRY=off is the canonical opt-out and wins regardless of DNT."""
+        with patch.dict("os.environ", {"DO_NOT_TRACK": "1", "AXONFLOW_TELEMETRY": "off"}):
+            assert _is_telemetry_enabled("production", None, True) is False
+            assert _is_telemetry_enabled("production", True, True) is False
 
     def test_disabled_by_env_axonflow_case_insensitive(self) -> None:
         """AXONFLOW_TELEMETRY=OFF (uppercase) also disables."""
@@ -68,10 +79,10 @@ class TestIsTelemetryEnabled:
         with patch.dict("os.environ", {}, clear=True):
             assert _is_telemetry_enabled("production", False, True) is False
 
-    def test_env_do_not_track_beats_config_true(self) -> None:
-        """Environment opt-out always wins over config=True."""
-        with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}):
-            assert _is_telemetry_enabled("production", True, True) is False
+    def test_env_do_not_track_alone_does_NOT_beat_config_true(self) -> None:
+        """DNT=1 alone is no longer honored, so config=True still wins."""
+        with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}, clear=True):
+            assert _is_telemetry_enabled("production", True, True) is True
 
     def test_env_axonflow_telemetry_beats_config_true(self) -> None:
         """AXONFLOW_TELEMETRY=off beats config=True."""
@@ -153,8 +164,8 @@ class TestSendTelemetryPing:
 
     @patch("axonflow.telemetry.httpx")
     def test_disabled_skips_post(self, mock_httpx: MagicMock) -> None:
-        """When telemetry is disabled, no HTTP call is made."""
-        with patch.dict("os.environ", {"DO_NOT_TRACK": "1"}):
+        """When telemetry is disabled (AXONFLOW_TELEMETRY=off), no HTTP call is made."""
+        with patch.dict("os.environ", {"AXONFLOW_TELEMETRY": "off"}):
             send_telemetry_ping(
                 mode="production",
                 endpoint="https://agent.axonflow.com",

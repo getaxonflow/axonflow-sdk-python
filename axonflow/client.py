@@ -460,8 +460,8 @@ class AxonFlow:
             mode: Operation mode (production or sandbox)
             debug: Enable debug logging
             telemetry: Enable/disable anonymous telemetry. ``None`` uses mode default
-                (ON for production, OFF for sandbox). Set ``DO_NOT_TRACK=1`` or
-                ``AXONFLOW_TELEMETRY=off`` to opt out via environment.
+                (ON for production, OFF for sandbox). Set ``AXONFLOW_TELEMETRY=off``
+                to opt out via environment.
             timeout: Request timeout in seconds
             map_timeout: Timeout for MAP operations in seconds (default: 120s)
                         MAP operations involve multiple LLM calls and need longer timeouts

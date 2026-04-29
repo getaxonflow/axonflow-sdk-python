@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DO_NOT_TRACK: '1'
+  AXONFLOW_TELEMETRY: 'off'
 
 jobs:
   # Contract tests run on every PR and push. No network, no stack.
