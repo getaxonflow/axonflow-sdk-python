@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 # ============================================================================
 # Policy Categories and Tiers
@@ -159,12 +159,18 @@ class StaticPolicy(BaseModel):
     priority: int | None = Field(
         default=None, description="Evaluation order — lower values run first."
     )
-    organization_id: str | None = Field(default=None, alias="organizationId")
-    tenant_id: str | None = Field(default=None, alias="tenantId")
-    created_at: datetime = Field(..., alias="createdAt")
-    updated_at: datetime = Field(..., alias="updatedAt")
+    organization_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("organization_id", "organizationId")
+    )
+    tenant_id: str | None = Field(
+        default=None, validation_alias=AliasChoices("tenant_id", "tenantId")
+    )
+    created_at: datetime = Field(..., validation_alias=AliasChoices("created_at", "createdAt"))
+    updated_at: datetime = Field(..., validation_alias=AliasChoices("updated_at", "updatedAt"))
     version: int | None = None
-    has_override: bool | None = Field(default=None, alias="hasOverride")
+    has_override: bool | None = Field(
+        default=None, validation_alias=AliasChoices("has_override", "hasOverride")
+    )
     override: PolicyOverride | None = None
 
 
@@ -390,9 +396,11 @@ class PolicyVersion(BaseModel):
     id: str | None = Field(default=None, description="Snapshot identifier (UUID).")
     policy_id: str | None = Field(default=None, description="Policy this snapshot belongs to.")
     version: int
-    changed_by: str | None = Field(default=None, alias="changedBy")
-    changed_at: datetime = Field(..., alias="changedAt")
-    change_type: str = Field(..., alias="changeType")
+    changed_by: str | None = Field(
+        default=None, validation_alias=AliasChoices("changed_by", "changedBy")
+    )
+    changed_at: datetime = Field(..., validation_alias=AliasChoices("changed_at", "changedAt"))
+    change_type: str = Field(..., validation_alias=AliasChoices("change_type", "changeType"))
     change_summary: str | None = Field(
         default=None, description="Summary of the change (canonical wire field)."
     )
@@ -401,21 +409,21 @@ class PolicyVersion(BaseModel):
     )
     change_description: str | None = Field(
         default=None,
-        alias="changeDescription",
+        validation_alias=AliasChoices("change_description", "changeDescription"),
         description=(
             "DEPRECATED: the wire field is `change_summary`. Always reads None. Removed in v7."
         ),
     )
     previous_values: dict[str, Any] | None = Field(
         default=None,
-        alias="previousValues",
+        validation_alias=AliasChoices("previous_values", "previousValues"),
         description=(
             "DEPRECATED: the wire emits a single `snapshot`, not before/after diffs. Removed in v7."
         ),
     )
     new_values: dict[str, Any] | None = Field(
         default=None,
-        alias="newValues",
+        validation_alias=AliasChoices("new_values", "newValues"),
         description="DEPRECATED: same as `previous_values`. Use `snapshot`. Removed in v7.",
     )
 

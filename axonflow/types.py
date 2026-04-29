@@ -144,6 +144,13 @@ class ClientRequest(BaseModel):
     media: list[MediaContent] | None = Field(
         default=None, description="Optional media for multimodal governance"
     )
+    skip_llm: bool | None = Field(
+        default=None,
+        description=(
+            "Run policy evaluation only and return without invoking the LLM. "
+            "Useful for pre-flight policy checks. Defaults to platform-side false."
+        ),
+    )
 
 
 class CodeArtifact(BaseModel):

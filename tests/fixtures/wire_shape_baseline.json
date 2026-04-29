@@ -177,9 +177,10 @@
       ]
     }
   },
-  "openapi_specs_sha": "8c8d6c9c506aa25fcd8a887f6fc71f71b5d6bc30",
+  "openapi_specs_sha": "0bd9256237ebbffb9c0101126da71f2c940a1695",
   "per_model_drift": {
     "AuditLogEntry": {
+      "note": "spec-bug-pending: #1745 \u2014 agent-api.yaml AuditLogEntry omits metadata/model/policy_violations the agent emits on every audit-log read.",
       "sdk_only": [
         "metadata",
         "model",
@@ -188,6 +189,7 @@
       "spec_only": []
     },
     "AuditSearchRequest": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts decision_id/offset/override_id/policy_name as query params; agent-api.yaml AuditSearchRequest doesn't yet declare them.",
       "sdk_only": [
         "decision_id",
         "offset",
@@ -197,26 +199,28 @@
       "spec_only": []
     },
     "Budget": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `enabled`; platform emits it but spec doesn't yet declare it.",
       "sdk_only": [
         "enabled"
       ],
       "spec_only": []
     },
     "CancelPlanResponse": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `message`; platform emits it but spec doesn't yet declare it.",
       "sdk_only": [
         "message"
       ],
       "spec_only": []
     },
     "ClientRequest": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `media` on the request; the platform's multimodal governance code path consumes it but the request schema in the spec doesn't yet declare it.",
       "sdk_only": [
         "media"
       ],
-      "spec_only": [
-        "skip_llm"
-      ]
+      "spec_only": []
     },
     "ClientResponse": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `budget_info` (Issue #1082) and `media_analysis` on the response; the platform emits both but the spec doesn't yet declare them.",
       "sdk_only": [
         "budget_info",
         "media_analysis"
@@ -224,12 +228,14 @@
       "spec_only": []
     },
     "CreateStaticPolicyRequest": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `organization_id` for org-tier policies (Enterprise); spec doesn't yet declare it on the request schema.",
       "sdk_only": [
         "organization_id"
       ],
       "spec_only": []
     },
     "CreateWorkflowResponse": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `created_at`/`source`; platform emits both but spec doesn't yet declare them.",
       "sdk_only": [
         "created_at",
         "source"
@@ -237,6 +243,7 @@
       "spec_only": []
     },
     "DynamicPolicy": {
+      "note": "spec-bug-pending: #1745 \u2014 policy-api.yaml DynamicPolicy omits 7 fields (category, created_at, organization_id, priority, tier, type, updated_at) every policy-CRUD caller needs.",
       "sdk_only": [
         "category",
         "created_at",
@@ -249,12 +256,14 @@
       "spec_only": []
     },
     "DynamicPolicyMatch": {
+      "note": "deprecated-pending-removal: `reason` is marked DEPRECATED + 'Removed in v7' on its Field() docstring; the canonical wire field is `message` (already present, matches spec).",
       "sdk_only": [
         "reason"
       ],
       "spec_only": []
     },
     "ExecutionSnapshot": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `approval_required`/`approved_at`/`approved_by`; platform emits these in HITL flows but spec doesn't yet declare them.",
       "sdk_only": [
         "approval_required",
         "approved_at",
@@ -263,6 +272,7 @@
       "spec_only": []
     },
     "ExecutionSummary": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `input_summary`/`output_summary`; platform emits both but spec doesn't yet declare them.",
       "sdk_only": [
         "input_summary",
         "output_summary"
@@ -270,36 +280,21 @@
       "spec_only": []
     },
     "ExfiltrationCheckInfo": {
+      "note": "deprecated-pending-removal: `within_limits` is marked DEPRECATED + 'Removed in v7' on its Field() docstring; the canonical wire fields are `exceeded` + `limit_type` (already present, match spec).",
       "sdk_only": [
         "within_limits"
       ],
       "spec_only": []
     },
-    "MCPCheckInputResponse": {
-      "sdk_only": [],
-      "spec_only": [
-        "decision_id",
-        "override_available",
-        "override_existing_id",
-        "policy_matches",
-        "risk_level"
-      ]
-    },
-    "MCPCheckOutputResponse": {
-      "sdk_only": [],
-      "spec_only": [
-        "decision_id",
-        "policy_matches",
-        "redacted_message"
-      ]
-    },
     "MarkStepCompletedRequest": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `metadata` on step-completed; platform reads it but spec doesn't yet declare it.",
       "sdk_only": [
         "metadata"
       ],
       "spec_only": []
     },
     "PlanResponse": {
+      "note": "spec-bug-pending: #1745 \u2014 orchestrator-api.yaml PlanResponse omits complexity/domain/parallel/status returned from every generate_plan call.",
       "sdk_only": [
         "complexity",
         "domain",
@@ -309,33 +304,30 @@
       "spec_only": []
     },
     "PolicyEvaluationInfo": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `code_artifact` on the policy_info block; the platform's code-governance path emits it but the spec doesn't yet declare it.",
       "sdk_only": [
         "code_artifact"
       ],
       "spec_only": []
     },
     "PolicyOverride": {
+      "note": "deprecated-pending-removal: `active` is marked DEPRECATED + 'Removed in v7' on its Field() docstring; the canonical wire field is `enabled_override` (already present, matches spec).",
       "sdk_only": [
         "active"
       ],
       "spec_only": []
     },
     "PolicyVersion": {
+      "note": "deprecated-pending-removal: `change_description`, `new_values`, `previous_values` are each marked DEPRECATED + 'Removed in v7' on their Field() docstrings; the canonical wire fields are `change_summary` + `snapshot` (already present, match spec).",
       "sdk_only": [
-        "changeDescription",
-        "changeType",
-        "changedAt",
-        "changedBy",
-        "newValues",
-        "previousValues"
+        "change_description",
+        "new_values",
+        "previous_values"
       ],
-      "spec_only": [
-        "change_type",
-        "changed_at",
-        "changed_by"
-      ]
+      "spec_only": []
     },
     "ResumePlanResponse": {
+      "note": "spec-bug-pending: #1745 \u2014 orchestrator-api.yaml ResumePlanResponse omits 7 fields returned on every WCP step approval/resume.",
       "sdk_only": [
         "approved",
         "message",
@@ -347,29 +339,15 @@
       ],
       "spec_only": []
     },
-    "StaticPolicy": {
-      "sdk_only": [
-        "createdAt",
-        "hasOverride",
-        "organizationId",
-        "tenantId",
-        "updatedAt"
-      ],
-      "spec_only": [
-        "created_at",
-        "has_override",
-        "organization_id",
-        "tenant_id",
-        "updated_at"
-      ]
-    },
     "UpdateStaticPolicyRequest": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `category` on update; platform applies it but spec doesn't yet declare it.",
       "sdk_only": [
         "category"
       ],
       "spec_only": []
     },
     "UsageBreakdown": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `period`/`period_end`/`period_start`; platform emits these on usage rollups but spec doesn't yet declare them.",
       "sdk_only": [
         "period",
         "period_end",
@@ -378,18 +356,21 @@
       "spec_only": []
     },
     "UsageRecord": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `timestamp`; platform emits it but spec doesn't yet declare it.",
       "sdk_only": [
         "timestamp"
       ],
       "spec_only": []
     },
     "UsageSummary": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `period`; platform emits it but spec doesn't yet declare it.",
       "sdk_only": [
         "period"
       ],
       "spec_only": []
     },
     "WorkflowStepInfo": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `approved_by`/`completed_at`/`decision_reason` for per-step audit context; platform emits these but spec doesn't yet declare them.",
       "sdk_only": [
         "approved_by",
         "completed_at",
@@ -425,6 +406,7 @@
     "ExfiltrationCheckInfo",
     "ExplainPolicy",
     "ExplainRule",
+    "LLMProviderListResponse",
     "ListWorkflowsResponse",
     "MCPCheckInputRequest",
     "MCPCheckInputResponse",
@@ -435,6 +417,7 @@
     "MediaGovernanceConfig",
     "MediaGovernanceStatus",
     "ModelPricing",
+    "PaginationMeta",
     "PendingApproval",
     "PendingApprovalsResponse",
     "PlanResponse",

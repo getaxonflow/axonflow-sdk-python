@@ -11,9 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `StaticPolicy` and `PolicyVersion` now serialize their wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases (`createdAt`, `changedBy`, etc.) remain accepted on input via `validation_alias=AliasChoices(...)` so existing consumers keep working; only outgoing serialization changes. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts: `StaticPolicy.model_validate({"createdAt": "..."}).model_dump()` now emits `created_at`, not `createdAt`. Code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change; switch comparisons to operate on the snake_case shape.
+
+### Added
+
+- `ClientRequest.skip_llm` — optional flag to run policy evaluation only and return without invoking the LLM. Matches the existing platform-side request schema.
+
 ### CI / Testing
 
 - Nightly integration workflow runs the SDK against `try.getaxonflow.com` via the documented `POST /api/v1/register` flow. Catches drift between the SDK and the hosted community sandbox that the existing docker-compose integration job (bare local stack) cannot see. Failures auto-file or comment a tracking issue; available via `workflow_dispatch` for ad-hoc validation.
+- Wire-shape baseline burndown: every entry in `tests/fixtures/wire_shape_baseline.json::per_model_drift` now carries a `note` annotation classifying the drift (`spec-bug-pending`, `deprecated-pending-removal`, `sdk-aggregation`, or `acknowledged-sdk-superset`). Four entries remain tagged `spec-bug-pending` with a single linked tracking issue; the rest are documented as intentional or scheduled-for-removal so the baseline doubles as the burn-down ledger.
+- `scripts/refresh_wire_shape_baseline.py` now preserves the `note` field on each drift entry across regen runs so a routine refresh doesn't strip the human-authored rationale.
 
 ## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
 
