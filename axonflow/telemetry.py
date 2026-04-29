@@ -251,7 +251,7 @@ def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) ->
             )
         if debug:
             logger.debug("Telemetry ping successful: %s", body)
-        return True
+        return True  # noqa: TRY300 — restructuring as else: would force splitting the try block; the linear flow here is more readable
     except (httpx.HTTPError, OSError, ValueError, TypeError, AttributeError):
         # Silent failure -- never disrupt the caller.
         if debug:

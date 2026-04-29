@@ -137,9 +137,7 @@ def test_four_run_cycle_real_http(stamp_path: Path, telemetry_enabled_env, http_
         # ---- Run 1: cold start, no stamp ----------------------------------
         _reset_hits(200)
         _swap_state(stamp_path)
-        maybe_send_heartbeat(
-            mode="production", endpoint="http://localhost", telemetry_enabled=True
-        )
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
 
         assert _hits() == 1, f"Run 1: expected 1 ping on cold start, got {_hits()}"
@@ -148,9 +146,7 @@ def test_four_run_cycle_real_http(stamp_path: Path, telemetry_enabled_env, http_
         # ---- Run 2: simulate fresh process — fresh state, same stamp file -
         _reset_hits(200)
         _swap_state(stamp_path)
-        maybe_send_heartbeat(
-            mode="production", endpoint="http://localhost", telemetry_enabled=True
-        )
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
 
         assert _hits() == 0, f"Run 2: fresh stamp must suppress ping, got {_hits()}"
@@ -161,9 +157,7 @@ def test_four_run_cycle_real_http(stamp_path: Path, telemetry_enabled_env, http_
 
         _reset_hits(200)
         _swap_state(stamp_path)
-        maybe_send_heartbeat(
-            mode="production", endpoint="http://localhost", telemetry_enabled=True
-        )
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
 
         assert _hits() == 1, f"Run 3: stale stamp must trigger a fresh ping, got {_hits()}"
@@ -176,9 +170,7 @@ def test_four_run_cycle_real_http(stamp_path: Path, telemetry_enabled_env, http_
 
         _reset_hits(503)
         _swap_state(stamp_path)
-        maybe_send_heartbeat(
-            mode="production", endpoint="http://localhost", telemetry_enabled=True
-        )
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
 
         assert _hits() == 1, f"Run 4a: ping must be attempted under stale stamp, got {_hits()}"
@@ -190,9 +182,7 @@ def test_four_run_cycle_real_http(stamp_path: Path, telemetry_enabled_env, http_
         # ---- Run 4b: retry against the same server, now returning 200 -----
         _reset_hits(200)
         _swap_state(stamp_path)
-        maybe_send_heartbeat(
-            mode="production", endpoint="http://localhost", telemetry_enabled=True
-        )
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
         _wait_for_threads()
 
         assert _hits() == 1, f"Run 4b: retry on success must land 1 ping, got {_hits()}"

@@ -21,6 +21,7 @@ The smoke command is invoked twice with these environment variables set:
 
 Exits 0 on success, non-zero on any failure.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,7 +48,9 @@ def main(argv: list[str]) -> int:
     smoke_cmd = list(argv[1:])
     # Java quirk: the JVM resolves user.home from native APIs at startup
     # and ignores $HOME on macOS / Windows. Detect and rewrite.
-    java_target = any("java" == os.path.basename(p).lower().replace(".exe", "") for p in [smoke_cmd[0]])
+    java_target = any(
+        "java" == os.path.basename(p).lower().replace(".exe", "") for p in [smoke_cmd[0]]
+    )
     here = Path(__file__).resolve().parent
     server_script = here / "server.py"
 
@@ -66,16 +69,42 @@ def main(argv: list[str]) -> int:
     )
 
     try:
-        # Wait for port file to appear.
-        deadline = time.time() + 15
+        # Wait for port file to appear. 60s is generous — macos-latest GitHub
+        # runners can be slow to cold-start Python; 15s sometimes wasn't enough.
+        # On any timeout we surface the server's stdout+stderr so the cause is
+        # visible in CI logs instead of failing silently.
+        deadline = time.time() + 60
+        port_text: str | None = None
         while time.time() < deadline:
+            if server_proc.poll() is not None:
+                # Server crashed before writing the port file.
+                stdout_bytes, _ = server_proc.communicate(timeout=2)
+                output = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+                print(
+                    f"FAIL: server exited with code {server_proc.returncode} before writing port file.\n"
+                    f"--- server stdout/stderr ---\n{output}",
+                    file=sys.stderr,
+                )
+                return 1
             if port_file.exists():
                 port_text = port_file.read_text().strip()
                 if port_text:
                     break
             time.sleep(0.1)
-        else:
-            print("FAIL: server didn't write port file in 15s", file=sys.stderr)
+        if not port_text:
+            # Port file timeout — kill server and surface its output.
+            server_proc.terminate()
+            try:
+                stdout_bytes, _ = server_proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_proc.kill()
+                stdout_bytes, _ = server_proc.communicate()
+            output = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
+            print(
+                "FAIL: server didn't write port file in 60s.\n"
+                f"--- server stdout/stderr ---\n{output}",
+                file=sys.stderr,
+            )
             return 1
 
         port = int(port_text)
@@ -91,16 +120,18 @@ def main(argv: list[str]) -> int:
         clean_home.mkdir()
 
         smoke_env = os.environ.copy()
-        smoke_env.update({
-            "AXONFLOW_AGENT_URL": server_url,
-            "AXONFLOW_CHECKPOINT_URL": f"{server_url}/v1/ping",
-            "AXONFLOW_TELEMETRY": "",
-            # Reroute cache dir on every OS:
-            "HOME": str(clean_home),                         # macOS, Linux
-            "USERPROFILE": str(clean_home),                  # Windows
-            "LOCALAPPDATA": str(clean_home / "AppData" / "Local"),  # Windows
-            "XDG_CACHE_HOME": str(clean_home / ".cache"),    # Linux
-        })
+        smoke_env.update(
+            {
+                "AXONFLOW_AGENT_URL": server_url,
+                "AXONFLOW_CHECKPOINT_URL": f"{server_url}/v1/ping",
+                "AXONFLOW_TELEMETRY": "",
+                # Reroute cache dir on every OS:
+                "HOME": str(clean_home),  # macOS, Linux
+                "USERPROFILE": str(clean_home),  # Windows
+                "LOCALAPPDATA": str(clean_home / "AppData" / "Local"),  # Windows
+                "XDG_CACHE_HOME": str(clean_home / ".cache"),  # Linux
+            }
+        )
         # Ensure those nested dirs exist for Windows.
         Path(smoke_env["LOCALAPPDATA"]).mkdir(parents=True, exist_ok=True)
         Path(smoke_env["XDG_CACHE_HOME"]).mkdir(parents=True, exist_ok=True)

@@ -11,6 +11,7 @@ plus a stamp lands at the OS-native cache path. Reads:
 
 Exits 0 on success, 1 on failure (any reason).
 """
+
 from __future__ import annotations
 
 import asyncio

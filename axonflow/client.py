@@ -103,6 +103,7 @@ from axonflow.execution import (
     UnifiedStepStatus,
     UnifiedStepType,
 )
+from axonflow.heartbeat import maybe_send_heartbeat
 from axonflow.hitl import (
     HITLApprovalRequest,
     HITLQueueListOptions,
@@ -127,8 +128,6 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
-from axonflow.heartbeat import maybe_send_heartbeat
-from axonflow.telemetry import send_telemetry_ping
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,

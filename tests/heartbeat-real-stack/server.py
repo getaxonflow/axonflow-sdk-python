@@ -4,6 +4,7 @@
 Same as /tmp/heartbeat-real-e2e/server.py but vendored alongside the
 per-SDK smokes so it can ship inside each SDK repo's tests/ directory.
 """
+
 import json
 import os
 import sys
@@ -32,7 +33,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, {"version": SDK_VERSION, "status": "ok"})
         elif self.path == "/__counter":
             with LOCK:
-                self._send_json(200, {"checkpoint_hits": CHECKPOINT_HITS, "health_hits": HEALTH_HITS})
+                self._send_json(
+                    200, {"checkpoint_hits": CHECKPOINT_HITS, "health_hits": HEALTH_HITS}
+                )
         else:
             self._send_json(503, {"error": "not implemented"})
 
