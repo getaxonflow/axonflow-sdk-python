@@ -43,6 +43,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,9 @@ HEARTBEAT_INTERVAL_S: float = 7 * 24 * 60 * 60  # 7 days
 HEARTBEAT_GUARD_INTERVAL_S: float = 60 * 60  # 1 hour
 
 
-def _resolve_stamp_path() -> Path | None:
+def _resolve_stamp_path() -> Path | None:  # noqa: PLR0911
+    # PLR0911: per-platform branches each return a clearly-labeled path
+    # or None. Refactoring to a single return obscures the platform map.
     """Return the OS-native path to the heartbeat stamp file.
 
     Returns ``None`` when no user-writable cache directory is available
@@ -160,13 +163,11 @@ class HeartbeatState:
         try:
             with os.fdopen(fd, "w") as f:
                 # Format kept human-readable for debugging only — never parsed.
-                from datetime import datetime, timezone
-
                 f.write(f"last_sent={datetime.now(timezone.utc).isoformat()}\n")
-            os.replace(tmp_name, self._stamp_path)
+            Path(tmp_name).replace(self._stamp_path)
         except OSError:
             with contextlib.suppress(OSError):
-                os.unlink(tmp_name)
+                Path(tmp_name).unlink(missing_ok=True)
 
 
 # Module-level singleton. Tests that need isolation either monkey-patch
@@ -246,7 +247,7 @@ def maybe_send_heartbeat(
     """
     # Lazy imports break the heartbeat → telemetry → heartbeat cycle that
     # would otherwise occur if these were top-level imports.
-    from axonflow.telemetry import _is_telemetry_enabled, _send_telemetry_ping_now
+    from axonflow.telemetry import _is_telemetry_enabled, _send_telemetry_ping_now  # noqa: PLC0415
 
     if not _is_telemetry_enabled(mode, telemetry_enabled, has_credentials=False):
         return
@@ -273,7 +274,7 @@ def maybe_send_heartbeat(
     # so short-lived processes don't drop the ping (mirrors issue #1692 fix).
     url = os.environ.get("AXONFLOW_CHECKPOINT_URL", "").strip()
     if not url:
-        from axonflow.telemetry import _DEFAULT_CHECKPOINT_URL
+        from axonflow.telemetry import _DEFAULT_CHECKPOINT_URL  # noqa: PLC0415 — see lazy-import comment above
 
         url = _DEFAULT_CHECKPOINT_URL
 

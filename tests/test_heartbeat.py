@@ -31,7 +31,6 @@ from axonflow.heartbeat import (
     replace_heartbeat_state_for_test,
 )
 
-
 # Helpers --------------------------------------------------------------------
 
 
