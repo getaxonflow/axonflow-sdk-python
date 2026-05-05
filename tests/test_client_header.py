@@ -15,7 +15,6 @@ import pytest
 from axonflow import AxonFlow
 from axonflow._version import __version__
 
-
 EXPECTED_CLIENT = f"sdk-python/{__version__}"
 
 
