@@ -172,6 +172,26 @@ ignore = [
 "examples/**/*.py" = ["T201", "ANN", "S106", "ERA001", "PLC0415", "F541"]  # BLE001 (blind-except) intentionally NOT in this list — examples must demonstrate proper exception handling
 "examples/wcp_retry_idempotency.py" = ["T201", "ANN", "S101", "S106", "ERA001", "BLE001", "PLC0415", "F541", "E501"]  # E2E validation script: bare asserts + long assertion strings are intentional
 "scripts/**/*.py" = ["T201", "ANN", "S106", "BLE001", "UP045", "DTZ005", "PTH123"]
+# runtime-e2e/ is the real-stack assertion harness (CLAUDE.md HARD RULE #0):
+# driver scripts that hit a real running agent and assert on its real
+# responses. These are intentionally not pytest tests; they're standalone
+# scripts. The same carve-outs as tests/heartbeat-real-stack/ apply: print()
+# is the report channel, monkey-patching httpx is how we force scope-mismatch
+# assertions, and broad except is appropriate when inspecting whatever
+# wrapped error the SDK surfaces.
+"runtime-e2e/**/*.py" = [
+    "T201",     # print — the report channel for these scripts
+    "ANN",      # type annotations — driver scripts, not library code
+    "BLE001",   # blind except — we inspect whatever the SDK wraps
+    "S101", "S106",  # assert / hardcoded fixture creds via env
+    "PLC0415",  # lazy/local imports
+    "PLR2004",  # magic numbers — fine in assertion scripts
+    "E501",     # long descriptive lines
+    "F541",     # f-string without placeholders
+    "RET504",   # explicit return for clarity
+    "PLR0911", "PLR0912", "PLR0915",  # complexity in main()
+    "SLF001",   # private member access (httpx.AsyncClient.request monkey-patch)
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["axonflow"]
