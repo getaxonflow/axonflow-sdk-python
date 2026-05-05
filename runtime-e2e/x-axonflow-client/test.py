@@ -18,14 +18,16 @@ TENANT = os.environ.get("AXONFLOW_TENANT_ID")
 SECRET = os.environ.get("AXONFLOW_TENANT_SECRET")
 PLUGIN_TOKEN = os.environ.get("AXONFLOW_E2E_PLUGIN_TOKEN")
 
-for name, val in (
-    ("AXONFLOW_TENANT_ID", TENANT),
-    ("AXONFLOW_TENANT_SECRET", SECRET),
-    ("AXONFLOW_E2E_PLUGIN_TOKEN", PLUGIN_TOKEN),
-):
-    if not val:
-        print(f"{name} not set; see ../README.md", file=sys.stderr)
-        sys.exit(2)
+_missing = []
+if not TENANT:
+    _missing.append("AXONFLOW_TENANT_ID")
+if not SECRET:
+    _missing.append("AXONFLOW_TENANT_SECRET")  # noqa: S105
+if not PLUGIN_TOKEN:
+    _missing.append("AXONFLOW_E2E_PLUGIN_TOKEN")  # noqa: S105
+if _missing:
+    sys.stderr.write("required env vars not set; see ../README.md\n")
+    sys.exit(2)
 
 # Wrap httpx so we can inject X-License-Token (forces scope-mismatch path
 # so the agent echoes our X-Axonflow-Client value back in its response).
