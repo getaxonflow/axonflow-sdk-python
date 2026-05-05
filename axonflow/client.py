@@ -509,10 +509,16 @@ class AxonFlow:
         # Configure SSL verification
         verify_ssl: bool = not insecure_skip_verify
 
-        # Build headers
+        # Build headers.
+        # ADR-050 §4: every governed request to the agent carries
+        # X-Axonflow-Client so the agent can derive request scope (sdk) and
+        # validate it against the token's aud.scope via HasScope(). Sourced
+        # from the bundled _SDK_VERSION constant; no env override (the
+        # consumer doesn't get to spoof its own client identity to the agent).
         headers: dict[str, str] = {
             "Content-Type": "application/json",
             "User-Agent": f"axonflow-sdk-python/{_SDK_VERSION}",
+            "X-Axonflow-Client": f"sdk-python/{_SDK_VERSION}",
         }
         # Always send Basic auth — server derives tenant from clientId.
         # Uses effective client_id ("community" default when not configured).
