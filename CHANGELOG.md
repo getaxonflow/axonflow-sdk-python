@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
+## [7.7.0] - 2026-05-06 — X-Axonflow-Client header + scope-aware license validation
+
+**Companion release to platform v7.7.0.** The Python SDK now sends an
+`X-Axonflow-Client` identification header on every governed request, which
+the agent uses to derive the SDK request scope and validate it against any
+license token's audience claim per the ADR-050 license matrix.
+
+### Added
+
+- **`X-Axonflow-Client: sdk-python/<version>` header** on every governed
+  outbound request. Set automatically by the SDK transport; not
+  configurable. Agents at v7.7.0+ derive request scope from this header
+  and reject cross-quadrant token misuse (e.g. a SaaS Plugin Pro token
+  paired with an SDK request) at the validator boundary. Older agents
+  (pre-v7.7.0) ignore the header and continue to work unchanged.
+
+### Compatibility
+
+- **No public API changes.** Existing v7.0.x callers `pip install
+  --upgrade axonflow` and rebuild against v7.7.0 with no source changes.
+- **Backward-compatible against pre-v7.7.0 agents.** The header is
+  silently dropped by older agents; the SDK behaves identically against
+  v7.0.x / v7.1.x / v7.6.x agents as before.
+- **Forward-compatible.** Future agent releases that require the header
+  on specific governed surfaces will work with this SDK without further
+  client changes.
+
+### Companion releases (same day)
+
+- **Platform v7.7.0** — V1 SaaS Plugin Pro launch, license matrix,
+  per-tenant tier resolution, GDPR right-to-erasure
+  ([CHANGELOG](https://github.com/getaxonflow/axonflow/blob/main/CHANGELOG.md))
+- **Go SDK v7.7.0** / **TypeScript SDK v7.7.0** /
+  **Java SDK v7.7.0** — same `X-Axonflow-Client` injection
+- **Plugins** — Claude Code / Cursor / Codex v1.2.0; OpenClaw v2.2.0
+  with Pro license token paste activating Pro features
+
+axonflow-sdk-rust remains at v0.1.0 (preview); SDK-Rust will gain the
+header in a future preview release.
+
 ## [7.0.0] - 2026-04-29 — Production, quality, and security hardening — upgrade encouraged
 
 **Upgrade strongly recommended.** Over the past month we've shipped substantial production, quality, and security hardening across the AxonFlow SDKs and platform — upgrade to the latest major for a more secure, reliable, and bug-free experience.
