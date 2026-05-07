@@ -205,3 +205,252 @@ class TestAuditSearchRequestNewFilters:
         assert "decision_id" not in dumped
         assert "policy_name" not in dumped
         assert "override_id" not in dumped
+
+
+# ============================================================================
+# list_decisions — list_decisions contract tests (#1982)
+# ============================================================================
+
+import pytest_httpx  # noqa: F401, E402
+
+from axonflow.decisions import DecisionSummary, ListDecisionsOptions  # noqa: E402
+from axonflow.exceptions import RateLimitError  # noqa: E402
+
+
+class TestDecisionSummaryShape:
+    """Slim 5-field type — pre-V1.1 + dynamic-only blocks may omit policy_id
+    + tool_signature; SDK must accept and round-trip cleanly."""
+
+    def test_minimum_fields_parse(self) -> None:
+        d = DecisionSummary(
+            decision_id="dec-1",
+            timestamp=datetime(2026, 5, 7, 12, 0, 0, tzinfo=timezone.utc),
+            decision="deny",
+        )
+        assert d.policy_id is None
+        assert d.tool_signature is None
+
+    def test_full_fields_round_trip(self) -> None:
+        raw = {
+            "decision_id": "dec-x",
+            "timestamp": "2026-05-07T12:00:00Z",
+            "decision": "allow",
+            "policy_id": "pol-default",
+            "tool_signature": "github.status",
+        }
+        d = DecisionSummary.model_validate(raw)
+        assert d.decision == "allow"
+        assert d.policy_id == "pol-default"
+        # extra='ignore' accepts arbitrary unknown fields
+        raw_extra = {**raw, "policy_version": 7, "future_field": "shrug"}
+        d2 = DecisionSummary.model_validate(raw_extra)
+        assert d2.decision_id == "dec-x"
+
+
+class TestListDecisions:
+    """Tests for AxonFlowClient.list_decisions."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path(self, httpx_mock) -> None:
+        from axonflow.client import AxonFlow
+
+        httpx_mock.add_response(
+            method="GET",
+            url="http://localhost:8080/api/v1/decisions",
+            json={
+                "decisions": [
+                    {
+                        "decision_id": "dec-1",
+                        "timestamp": "2026-05-07T12:00:00Z",
+                        "decision": "deny",
+                        "policy_id": "pol-sqli",
+                        "tool_signature": "postgres.query",
+                    },
+                    {
+                        "decision_id": "dec-2",
+                        "timestamp": "2026-05-07T11:00:00Z",
+                        "decision": "allow",
+                        "policy_id": "pol-default",
+                        "tool_signature": "github.status",
+                    },
+                    {
+                        "decision_id": "dec-3",
+                        "timestamp": "2026-05-07T10:00:00Z",
+                        "decision": "require_approval",
+                        "policy_id": "pol-amount",
+                        "tool_signature": "stripe.charge",
+                    },
+                ]
+            },
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        got = await client.list_decisions()
+        assert len(got) == 3
+        assert got[0].decision_id == "dec-1"
+        assert got[2].decision == "require_approval"
+
+    @pytest.mark.asyncio
+    async def test_filter_serialization(self, httpx_mock) -> None:
+        from axonflow.client import AxonFlow
+
+        # Mock matches the EXACT URL — if we forget to register a field
+        # in the URL builder, no mock matches and httpx_mock raises.
+        httpx_mock.add_response(
+            method="GET",
+            url=(
+                "http://localhost:8080/api/v1/decisions?"
+                "since=2026-05-07T00%3A00%3A00Z&"
+                "decision=deny&"
+                "policy_id=pol-sqli&"
+                "tool_signature=postgres.query&"
+                "limit=25"
+            ),
+            json={"decisions": []},
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        opts = ListDecisionsOptions(
+            since=datetime(2026, 5, 7, 0, 0, 0, tzinfo=timezone.utc),
+            decision="deny",
+            policy_id="pol-sqli",
+            tool_signature="postgres.query",
+            limit=25,
+        )
+        got = await client.list_decisions(opts)
+        assert got == []
+
+    @pytest.mark.asyncio
+    async def test_omits_unset_filters(self, httpx_mock) -> None:
+        from axonflow.client import AxonFlow
+
+        # Only decision is set; URL must omit the others entirely.
+        httpx_mock.add_response(
+            method="GET",
+            url="http://localhost:8080/api/v1/decisions?decision=deny",
+            json={"decisions": []},
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        await client.list_decisions(ListDecisionsOptions(decision="deny"))
+
+    @pytest.mark.asyncio
+    async def test_429_upgrade_envelope(self, httpx_mock) -> None:
+        from axonflow.client import AxonFlow
+
+        httpx_mock.add_response(
+            method="GET",
+            url="http://localhost:8080/api/v1/decisions?limit=10",
+            status_code=429,
+            json={
+                "error": (
+                    "Free tier shows the last 5 decisions in 24h. "
+                    "Pro raises this to 100 decisions in the last 30 days."
+                ),
+                "limit_type": "decision_list_size",
+                "tier": "Community",
+                "limit": 5,
+                "remaining": 0,
+                "upgrade": {
+                    "tier": "Pro",
+                    "wording": (
+                        "Free tier shows the last 5 decisions in 24h. "
+                        "Pro raises this to 100 decisions in the last 30 days."
+                    ),
+                    "compare_url": "https://getaxonflow.com/pricing/",
+                    "buy_url": "https://buy.stripe.com/bJe28qbztcdVchjdkw8k800",
+                },
+            },
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        with pytest.raises(RateLimitError) as excinfo:
+            await client.list_decisions(ListDecisionsOptions(limit=10))
+        rle = excinfo.value
+        assert rle.tier == "Community"
+        assert rle.limit_type == "decision_list_size"
+        assert rle.limit == 5
+        assert rle.upgrade is not None
+        assert rle.upgrade.tier == "Pro"
+        assert rle.upgrade.compare_url == "https://getaxonflow.com/pricing/"
+        assert rle.upgrade.buy_url == "https://buy.stripe.com/bJe28qbztcdVchjdkw8k800"
+
+    @pytest.mark.asyncio
+    async def test_429_malformed_body(self, httpx_mock) -> None:
+        """Malformed 429 body must NOT silently succeed — surfaces RateLimitError
+        without upgrade context."""
+        from axonflow.client import AxonFlow
+
+        httpx_mock.add_response(
+            method="GET",
+            url="http://localhost:8080/api/v1/decisions",
+            status_code=429,
+            text="not a json envelope",
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        with pytest.raises(RateLimitError) as excinfo:
+            await client.list_decisions()
+        # Upgrade is None when we can't parse the body, but the error is
+        # still typed so callers can branch on it.
+        assert excinfo.value.upgrade is None
+        assert excinfo.value.limit_type is None
+
+    @pytest.mark.asyncio
+    async def test_401(self, httpx_mock) -> None:
+        from axonflow.client import AxonFlow
+        from axonflow.exceptions import AxonFlowError
+
+        httpx_mock.add_response(
+            method="GET",
+            url="http://localhost:8080/api/v1/decisions",
+            status_code=401,
+            json={"error": "X-Tenant-ID header is required"},
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        with pytest.raises(AxonFlowError) as excinfo:
+            await client.list_decisions()
+        assert "401" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_forward_compat_unknown_fields(self, httpx_mock) -> None:
+        """Additive unknown fields on summaries + outer envelope parse cleanly."""
+        from axonflow.client import AxonFlow
+
+        httpx_mock.add_response(
+            method="GET",
+            url="http://localhost:8080/api/v1/decisions",
+            json={
+                "decisions": [
+                    {
+                        "decision_id": "dec-fwd",
+                        "timestamp": "2026-05-07T12:00:00Z",
+                        "decision": "deny",
+                        "policy_id": "pol-x",
+                        "tool_signature": "tool-x",
+                        "policy_version": 7,
+                        "latest_policy_version": 9,
+                        "arbitrary_unknown": "ignored",
+                    }
+                ],
+                "next_cursor": "future_cursor_pagination",
+            },
+        )
+        client = AxonFlow(endpoint="http://localhost:8080")
+        got = await client.list_decisions()
+        assert len(got) == 1
+        assert got[0].decision_id == "dec-fwd"
+
+
+class TestBuildListDecisionsQuery:
+    def test_none_options_returns_empty(self) -> None:
+        from axonflow.client import _build_list_decisions_query
+
+        assert _build_list_decisions_query(None) == ""
+
+    def test_empty_options_returns_empty(self) -> None:
+        from axonflow.client import _build_list_decisions_query
+
+        assert _build_list_decisions_query(ListDecisionsOptions()) == ""
+
+    def test_partial_options_omit_none_fields(self) -> None:
+        from axonflow.client import _build_list_decisions_query
+
+        opts = ListDecisionsOptions(decision="deny", limit=7)
+        qs = _build_list_decisions_query(opts)
+        assert qs == "decision=deny&limit=7"

@@ -42,8 +42,42 @@ class PolicyViolationError(AxonFlowError):
         self.block_reason = block_reason
 
 
+class UpgradeInfo:
+    """Pricing-tier upgrade context emitted in a V1 429 envelope.
+
+    Mirrors the platform-side
+    feedback_429_no_upgrade_hint_is_conversion_gap.md contract.
+    Cross-SDK parity:
+
+      Go:     axonflow-sdk-go/decisions.go (UpgradeInfo)
+      TS:     axonflow-sdk-typescript/src/types/decisions.ts (UpgradeInfo)
+      Java:   .../sdk/types/UpgradeInfo.java
+      Rust:   axonflow-sdk-rust/src/types/decisions.rs (UpgradeInfo)
+    """
+
+    __slots__ = ("buy_url", "compare_url", "tier", "wording")
+
+    def __init__(
+        self,
+        tier: str,
+        wording: str,
+        compare_url: str,
+        buy_url: str,
+    ) -> None:
+        self.tier = tier
+        self.wording = wording
+        self.compare_url = compare_url
+        self.buy_url = buy_url
+
+
 class RateLimitError(AxonFlowError):
-    """Rate limit exceeded."""
+    """Rate limit exceeded.
+
+    Holds the parsed V1 429 envelope when available. ``limit_type`` and
+    ``tier`` and ``upgrade`` are populated for tier-cap 429s (e.g.
+    ``list_decisions`` page-size cap, daily-quota cap); legacy 429s
+    leave them ``None`` for backwards compatibility.
+    """
 
     def __init__(
         self,
@@ -51,14 +85,27 @@ class RateLimitError(AxonFlowError):
         limit: int,
         remaining: int,
         reset_at: str | None = None,
+        *,
+        limit_type: str | None = None,
+        tier: str | None = None,
+        upgrade: UpgradeInfo | None = None,
     ) -> None:
         super().__init__(
             message,
-            details={"limit": limit, "remaining": remaining, "reset_at": reset_at},
+            details={
+                "limit": limit,
+                "remaining": remaining,
+                "reset_at": reset_at,
+                "limit_type": limit_type,
+                "tier": tier,
+            },
         )
         self.limit = limit
         self.remaining = remaining
         self.reset_at = reset_at
+        self.limit_type = limit_type
+        self.tier = tier
+        self.upgrade = upgrade
 
 
 class BudgetExceededError(AxonFlowError):
