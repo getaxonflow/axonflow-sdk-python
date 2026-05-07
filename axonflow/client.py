@@ -2851,9 +2851,7 @@ class AxonFlow:
             raise RateLimitError(
                 error_msg,
                 limit=int(raw_limit) if isinstance(raw_limit, (int, float)) else 0,
-                remaining=(
-                    int(raw_remaining) if isinstance(raw_remaining, (int, float)) else 0
-                ),
+                remaining=(int(raw_remaining) if isinstance(raw_remaining, (int, float)) else 0),
                 limit_type=limit_type,
                 tier=envelope.get("tier"),
                 upgrade=upgrade,
