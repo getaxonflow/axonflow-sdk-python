@@ -2834,19 +2834,26 @@ class AxonFlow:
             except (ValueError, json.JSONDecodeError):
                 envelope = {}
             limit_type = envelope.get("limit_type")
-            upgrade_dict = envelope.get("upgrade") or {}
+            upgrade_dict = envelope.get("upgrade")
             upgrade = None
-            if upgrade_dict and isinstance(upgrade_dict, dict):
+            if isinstance(upgrade_dict, dict):
                 upgrade = UpgradeInfo(
                     tier=upgrade_dict.get("tier", ""),
                     wording=upgrade_dict.get("wording", ""),
                     compare_url=upgrade_dict.get("compare_url", ""),
                     buy_url=upgrade_dict.get("buy_url", ""),
                 )
+            error_msg = envelope.get("error")
+            if not isinstance(error_msg, str) or error_msg == "":
+                error_msg = "rate limit exceeded"
+            raw_limit = envelope.get("limit")
+            raw_remaining = envelope.get("remaining")
             raise RateLimitError(
-                envelope.get("error") or "rate limit exceeded",
-                limit=int(envelope.get("limit") or 0),
-                remaining=int(envelope.get("remaining") or 0),
+                error_msg,
+                limit=int(raw_limit) if isinstance(raw_limit, (int, float)) else 0,
+                remaining=(
+                    int(raw_remaining) if isinstance(raw_remaining, (int, float)) else 0
+                ),
                 limit_type=limit_type,
                 tier=envelope.get("tier"),
                 upgrade=upgrade,
@@ -2859,7 +2866,9 @@ class AxonFlow:
         body = response.json()
         if not isinstance(body, dict):
             return []
-        rows = body.get("decisions") or []
+        rows = body.get("decisions")
+        if not isinstance(rows, list):
+            return []
         return [DecisionSummary.model_validate(r) for r in rows]
 
     async def get_audit_logs_by_tenant(
