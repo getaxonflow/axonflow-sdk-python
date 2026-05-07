@@ -35,8 +35,7 @@ async def main() -> None:
     decision_id = os.environ.get("AXONFLOW_DECISION_ID", "")
     if not decision_id:
         print(
-            "AXONFLOW_DECISION_ID must be set "
-            "(a decision_id from a recent blocked call)",
+            "AXONFLOW_DECISION_ID must be set (a decision_id from a recent blocked call)",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -80,10 +79,7 @@ async def main() -> None:
         print(f"\n  override_available:           {exp.override_available}")
         if exp.override_existing_id:
             print(f"  override_existing_id:         {exp.override_existing_id}")
-        print(
-            f"  historical_hit_count_session: "
-            f"{exp.historical_hit_count_session}"
-        )
+        print(f"  historical_hit_count_session: {exp.historical_hit_count_session}")
         if exp.policy_source_link:
             print(f"  policy_source_link:           {exp.policy_source_link}")
 
