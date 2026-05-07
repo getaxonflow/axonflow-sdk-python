@@ -78,7 +78,11 @@ from axonflow.code_governance import (
     ValidateGitProviderRequest,
     ValidateGitProviderResponse,
 )
-from axonflow.decisions import DecisionExplanation
+from axonflow.decisions import (
+    DecisionExplanation,
+    DecisionSummary,
+    ListDecisionsOptions,
+)
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
@@ -88,7 +92,9 @@ from axonflow.exceptions import (
     IdempotencyKeyMismatchError,
     PlanExecutionError,
     PolicyViolationError,
+    RateLimitError,
     TimeoutError,
+    UpgradeInfo,
     VersionConflictError,
 )
 from axonflow.execution import (
@@ -383,6 +389,35 @@ def _parse_pending_approvals_response(response: dict[str, Any]) -> PendingApprov
         pending_approvals=approvals,
         count=response.get("count", len(approvals)),
     )
+
+
+def _build_list_decisions_query(opts: ListDecisionsOptions | None) -> str:
+    """Serialize :class:`ListDecisionsOptions` into the URL query string.
+
+    ``None`` values are omitted so the platform applies its tier-default
+    page. Stable field order so test mocks can match the URL exactly.
+    """
+    if opts is None:
+        return ""
+    pairs: list[tuple[str, str]] = []
+    if opts.since is not None:
+        # Use the "Z" suffix for UTC; isoformat() emits +00:00 which
+        # would urlencode to %2B00%3A00 and over-noise the URL. The
+        # platform parses both, but the Z form matches the explain
+        # endpoint's response shape byte-for-byte.
+        ts = opts.since
+        if ts.utcoffset() is not None:
+            ts = ts.astimezone(tz=ts.tzinfo).replace(tzinfo=None)
+        pairs.append(("since", ts.strftime("%Y-%m-%dT%H:%M:%SZ")))
+    if opts.decision is not None:
+        pairs.append(("decision", opts.decision))
+    if opts.policy_id is not None:
+        pairs.append(("policy_id", opts.policy_id))
+    if opts.tool_signature is not None:
+        pairs.append(("tool_signature", opts.tool_signature))
+    if opts.limit is not None:
+        pairs.append(("limit", str(opts.limit)))
+    return urlencode(pairs)
 
 
 def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
@@ -2736,6 +2771,96 @@ class AxonFlow:
         if not isinstance(response, dict):
             response = {}
         return DecisionExplanation.model_validate(response)
+
+    async def list_decisions(
+        self,
+        opts: ListDecisionsOptions | None = None,
+    ) -> list[DecisionSummary]:
+        """List recent policy decisions for the caller's tenant.
+
+        Implements ``GET /api/v1/decisions``. Returns the slim 5-field
+        :class:`DecisionSummary` page; the platform applies a tier-gated
+        cap (5/24h Free + Community, 100/30d Pro + Evaluation, 1000/full
+        retention Enterprise). Over-cap requests yield a 429 with the V1
+        upgrade envelope, surfaced as
+        :class:`axonflow.exceptions.RateLimitError` carrying the parsed
+        ``upgrade.{tier,compare_url,buy_url}`` so the caller can branch on
+        them without re-parsing the body.
+
+        Args:
+            opts: Filter + page-size options. ``None`` returns the
+                tier-default page from the caller's tenant.
+
+        Returns:
+            A list of DecisionSummary rows ordered newest-first.
+
+        Raises:
+            RateLimitError: 429 tier-cap; ``rle.upgrade`` exposes
+                tier/compare_url/buy_url.
+            AxonFlowError: Other HTTP errors (401, 5xx, etc.).
+
+        Example:
+            >>> from axonflow.decisions import ListDecisionsOptions
+            >>> opts = ListDecisionsOptions(decision="deny", limit=10)
+            >>> for d in await client.list_decisions(opts):
+            ...     print(d.decision_id, d.decision, d.timestamp)
+        """
+        path = "/api/v1/decisions"
+        qs = _build_list_decisions_query(opts)
+        if qs:
+            path = f"{path}?{qs}"
+
+        # Hand-roll the request so we can branch on 429 BEFORE
+        # raise_for_status promotes it to a generic AxonFlowError.
+        # Other failure modes fall through to the same shape
+        # _orchestrator_request would have produced.
+        self._pre_request_hook()
+        url = f"{self._config.endpoint}{path}"
+        try:
+            response = await self._http_client.get(url)
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to Orchestrator: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+
+        if response.status_code == 429:  # noqa: PLR2004
+            # Try to parse the V1 envelope. Malformed body falls back to
+            # a plain RateLimitError without upgrade context — never
+            # silently succeed.
+            try:
+                envelope = response.json()
+            except (ValueError, json.JSONDecodeError):
+                envelope = {}
+            limit_type = envelope.get("limit_type")
+            upgrade_dict = envelope.get("upgrade") or {}
+            upgrade = None
+            if upgrade_dict and isinstance(upgrade_dict, dict):
+                upgrade = UpgradeInfo(
+                    tier=upgrade_dict.get("tier", ""),
+                    wording=upgrade_dict.get("wording", ""),
+                    compare_url=upgrade_dict.get("compare_url", ""),
+                    buy_url=upgrade_dict.get("buy_url", ""),
+                )
+            raise RateLimitError(
+                envelope.get("error") or "rate limit exceeded",
+                limit=int(envelope.get("limit") or 0),
+                remaining=int(envelope.get("remaining") or 0),
+                limit_type=limit_type,
+                tier=envelope.get("tier"),
+                upgrade=upgrade,
+            )
+
+        if response.status_code >= 400:  # noqa: PLR2004
+            msg = f"HTTP {response.status_code}: {response.text}"
+            raise AxonFlowError(msg)
+
+        body = response.json()
+        if not isinstance(body, dict):
+            return []
+        rows = body.get("decisions") or []
+        return [DecisionSummary.model_validate(r) for r in rows]
 
     async def get_audit_logs_by_tenant(
         self,
