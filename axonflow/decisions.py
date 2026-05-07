@@ -4,7 +4,7 @@ Implements ADR-043 (Explainability Data Contract). The DecisionExplanation
 shape is frozen; additive-only changes are allowed; renames/removals require
 a major version bump.
 
-list_decisions companion (Session γ / #1982) reuses the same conventions:
+list_decisions companion (list_decisions / #1982) reuses the same conventions:
 DecisionSummary is the slim 5-field row; ListDecisionsOptions carries the
 5 optional filters.
 """
@@ -79,7 +79,7 @@ class DecisionSummary(BaseModel):
     """Slim 5-field row returned by ``client.list_decisions``.
 
     ``policy_id`` and ``tool_signature`` are optional because dynamic-only
-    blocks + pre-α1 audit rows may not populate them. Additive new fields
+    blocks + pre-V1.1 audit rows may not populate them. Additive new fields
     are non-breaking per ADR-043 §"Versioning"; arbitrary unknown fields
     on the wire are accepted via ``extra='ignore'``.
 

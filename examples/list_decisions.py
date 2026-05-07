@@ -41,8 +41,8 @@ async def main() -> int:
         opts_kwargs["decision"] = d
     if p := os.environ.get("AXONFLOW_LIST_POLICY_ID"):
         opts_kwargs["policy_id"] = p
-    if l := os.environ.get("AXONFLOW_LIST_LIMIT"):
-        opts_kwargs["limit"] = int(l)
+    if lim := os.environ.get("AXONFLOW_LIST_LIMIT"):
+        opts_kwargs["limit"] = int(lim)
     opts = ListDecisionsOptions(**opts_kwargs) if opts_kwargs else None
 
     client = AxonFlow(
@@ -72,7 +72,10 @@ async def main() -> int:
     for d in decisions:
         policy = d.policy_id or "-"
         tool = d.tool_signature or "-"
-        print(f"  {d.timestamp.isoformat()} {d.decision:18s} {d.decision_id} policy={policy} tool={tool}")
+        print(
+            f"  {d.timestamp.isoformat()} {d.decision:18s} "
+            f"{d.decision_id} policy={policy} tool={tool}"
+        )
     return 0
 
 

@@ -208,7 +208,7 @@ class TestAuditSearchRequestNewFilters:
 
 
 # ============================================================================
-# list_decisions — Session γ contract tests (#1982)
+# list_decisions — list_decisions contract tests (#1982)
 # ============================================================================
 
 import pytest_httpx  # noqa: F401, E402
@@ -218,7 +218,7 @@ from axonflow.exceptions import RateLimitError  # noqa: E402
 
 
 class TestDecisionSummaryShape:
-    """Slim 5-field type — pre-α1 + dynamic-only blocks may omit policy_id
+    """Slim 5-field type — pre-V1.1 + dynamic-only blocks may omit policy_id
     + tool_signature; SDK must accept and round-trip cleanly."""
 
     def test_minimum_fields_parse(self) -> None:
@@ -340,14 +340,20 @@ class TestListDecisions:
             url="http://localhost:8080/api/v1/decisions?limit=10",
             status_code=429,
             json={
-                "error": "Free tier shows the last 5 decisions in 24h. Pro raises this to 100 decisions in the last 30 days.",
+                "error": (
+                    "Free tier shows the last 5 decisions in 24h. "
+                    "Pro raises this to 100 decisions in the last 30 days."
+                ),
                 "limit_type": "decision_list_size",
                 "tier": "Community",
                 "limit": 5,
                 "remaining": 0,
                 "upgrade": {
                     "tier": "Pro",
-                    "wording": "Free tier shows the last 5 decisions in 24h. Pro raises this to 100 decisions in the last 30 days.",
+                    "wording": (
+                        "Free tier shows the last 5 decisions in 24h. "
+                        "Pro raises this to 100 decisions in the last 30 days."
+                    ),
                     "compare_url": "https://getaxonflow.com/pricing/",
                     "buy_url": "https://buy.stripe.com/bJe28qbztcdVchjdkw8k800",
                 },
