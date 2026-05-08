@@ -118,7 +118,6 @@ def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
     """Classify the configured AxonFlow endpoint for analytics (#1525).
 
     Returns one of:
-        ``"community-saas"``    — try.getaxonflow.com shared evaluation server
         ``"localhost"``         — localhost, 127.0.0.1, ::1, 0.0.0.0, ``*.localhost``
         ``"private_network"``   — RFC1918 ranges, link-local, ``*.local``,
                                   ``*.internal``, ``*.lan``, ``*.intranet``
@@ -126,9 +125,11 @@ def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
         ``"unknown"``           — on any parse failure
 
     The raw URL is never sent — only the classification. See issue #1525.
+
+    As of v8.0 the legacy ``"community-saas"`` return value is removed —
+    deployment topology lives on ``deployment_mode`` (see
+    ``_classify_deployment_mode``) per the v1 schema (axonflow-enterprise#2008).
     """
-    if os.environ.get("AXONFLOW_TRY") == "1":
-        return "community-saas"
     if not url:
         return "unknown"
     try:
@@ -158,6 +159,36 @@ def _classify_endpoint(url: str | None) -> str:  # noqa: PLR0911
     return "remote"
 
 
+def _classify_deployment_mode(url: str | None) -> str:
+    """Classify deployment topology for the v1 telemetry schema (#2008).
+
+    Returns one of:
+        ``"community_saas"``    — try.getaxonflow.com host or AXONFLOW_TRY=1
+        ``"self_hosted"``       — any other reachable endpoint
+        ``"unknown"``           — empty / unparseable endpoint
+
+    The classifier deliberately resolves empty/unparseable to ``"unknown"``
+    rather than ``"self_hosted"`` to keep the self-hosted bucket clean of
+    config gaps. ``AXONFLOW_TRY=1`` is the explicit override path for
+    tenants whose endpoint resolves to a custom hostname proxying
+    ``try.getaxonflow.com``.
+    """
+    if os.environ.get("AXONFLOW_TRY") == "1":
+        return "community_saas"
+    if not url:
+        return "unknown"
+    try:
+        host = urlparse(url).hostname
+    except (ValueError, AttributeError):
+        return "unknown"
+    if not host:
+        return "unknown"
+    host = host.lower()
+    if host == "try.getaxonflow.com" or host.endswith(".try.getaxonflow.com"):
+        return "community_saas"
+    return "self_hosted"
+
+
 def _normalize_arch(arch: str) -> str:
     """Normalize architecture names to match other SDKs."""
     if arch == "aarch64":
@@ -171,8 +202,20 @@ def _build_payload(
     mode: str,
     platform_version: str | None = None,
     endpoint_type: str = "unknown",
+    deployment_mode: str = "unknown",
 ) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping.
+
+    v1 telemetry-schema fields (axonflow-enterprise#2008):
+
+    * ``telemetry_type`` — always ``"sdk"`` (discriminator for the
+      receiver to route SDK pings vs plugin / platform / synthetic).
+    * ``deployment_mode`` — ``self_hosted | community_saas | unknown``,
+      derived from the endpoint host plus ``AXONFLOW_TRY=1`` override
+      (see ``_classify_deployment_mode``). The ``mode`` parameter is
+      kept for legacy callers but no longer drives this dimension.
+    * ``profile`` — sourced from ``AXONFLOW_PROFILE``; ``"unknown"``
+      when unset. Free-form deployment classifier; analytics only.
 
     The ``stream`` field classifies the heartbeat sub-stream. Sandbox-mode
     clients emit ``"sandbox"`` so analytics can distinguish dev/test pings
@@ -182,17 +225,20 @@ def _build_payload(
     wire-allowlist is enforced server-side — see checkpoint-service
     ``IsValidIncomingStream``.
     """
+    profile = (os.environ.get("AXONFLOW_PROFILE") or "").strip() or "unknown"
     payload: dict[str, object] = {
+        "telemetry_type": "sdk",
         "sdk": "python",
         "sdk_version": _SDK_VERSION,
         "platform_version": platform_version,
         "os": platform.system().lower(),
         "arch": _normalize_arch(platform.machine()),
         "runtime_version": platform.python_version(),
-        "deployment_mode": mode,
+        "deployment_mode": deployment_mode,
         "endpoint_type": endpoint_type,
         "features": [],
         "instance_id": str(uuid.uuid4()),
+        "profile": profile,
     }
     if mode == "sandbox":
         payload["stream"] = "sandbox"
@@ -228,7 +274,8 @@ def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) ->
         if endpoint and health_budget > _MIN_BUDGET_SECONDS:
             platform_version = _detect_platform_version(endpoint, timeout=health_budget)
         endpoint_type = _classify_endpoint(endpoint)
-        payload = _build_payload(mode, platform_version, endpoint_type)
+        deployment_mode = _classify_deployment_mode(endpoint)
+        payload = _build_payload(mode, platform_version, endpoint_type, deployment_mode)
 
         # POST uses all remaining budget.
         post_budget = max(0.0, deadline - time.monotonic())

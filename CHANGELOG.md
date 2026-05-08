@@ -61,6 +61,11 @@ telemetry contract — see `Removed` at the bottom of this entry for that.
   internals (they're underscore-prefixed), but the change is recorded
   here for completeness.
 
+### Telemetry payload (v1 schema, axonflow-enterprise#2008)
+
+- New heartbeat fields: `telemetry_type: "sdk"`, `profile` (from `AXONFLOW_PROFILE`, `unknown` when unset), `deployment_mode` aligned to `self_hosted | community_saas | unknown` via the new `_classify_deployment_mode` (host + `AXONFLOW_TRY=1` override).
+- `_classify_endpoint` no longer returns `community-saas` — that value moved off endpoint_type onto deployment_mode; analytics queries on the legacy value must update.
+
 ## [7.1.0] - 2026-05-06 — X-Axonflow-Client header + scope-aware license validation
 
 **Companion release to platform v7.7.0.** The Python SDK now sends an

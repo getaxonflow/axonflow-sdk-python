@@ -93,24 +93,35 @@ class TestBuildPayload:
 
     def test_payload_format(self) -> None:
         """Verify all expected fields are present and correctly typed."""
-        payload = _build_payload("production")
+        payload = _build_payload("production", deployment_mode="self_hosted")
 
+        assert payload["telemetry_type"] == "sdk"
         assert payload["sdk"] == "python"
         assert isinstance(payload["sdk_version"], str)
         assert payload["platform_version"] is None
         assert isinstance(payload["os"], str)
         assert isinstance(payload["arch"], str)
         assert isinstance(payload["runtime_version"], str)
-        assert payload["deployment_mode"] == "production"
+        assert payload["deployment_mode"] == "self_hosted"
         assert payload["features"] == []
         assert isinstance(payload["instance_id"], str)
         # Should be a valid UUID
         assert len(payload["instance_id"]) == 36  # UUID v4 string length
+        # v1 telemetry-schema profile field
+        assert payload["profile"] == "unknown"
 
-    def test_payload_mode_propagated(self) -> None:
-        """deployment_mode reflects the supplied mode."""
-        assert _build_payload("sandbox")["deployment_mode"] == "sandbox"
-        assert _build_payload("production")["deployment_mode"] == "production"
+    def test_payload_deployment_mode_propagated(self) -> None:
+        """deployment_mode reflects the supplied v1 schema value."""
+        assert _build_payload("sandbox", deployment_mode="self_hosted")["deployment_mode"] == "self_hosted"
+        assert _build_payload("production", deployment_mode="community_saas")["deployment_mode"] == "community_saas"
+        assert _build_payload("production", deployment_mode="unknown")["deployment_mode"] == "unknown"
+
+    def test_payload_profile_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """profile sourced from AXONFLOW_PROFILE; unknown when unset."""
+        monkeypatch.setenv("AXONFLOW_PROFILE", "production")
+        assert _build_payload("production")["profile"] == "production"
+        monkeypatch.delenv("AXONFLOW_PROFILE", raising=False)
+        assert _build_payload("production")["profile"] == "unknown"
 
     def test_payload_instance_id_unique(self) -> None:
         """Each call generates a new instance_id."""
@@ -173,8 +184,11 @@ class TestSendTelemetryPing:
         assert url == _DEFAULT_CHECKPOINT_URL
 
         payload = call_args[1].get("json") or call_args[0][1]
+        assert payload["telemetry_type"] == "sdk"
         assert payload["sdk"] == "python"
-        assert payload["deployment_mode"] == "production"
+        # v1 schema: deployment_mode classifies from endpoint host.
+        assert payload["deployment_mode"] == "self_hosted"
+        assert payload["profile"] == "unknown"
         assert "instance_id" in payload
         # Production-mode payload omits stream (server defaults to heartbeat).
         assert "stream" not in payload
@@ -214,7 +228,9 @@ class TestSendTelemetryPing:
 
         mock_httpx.post.assert_called_once()
         payload = mock_httpx.post.call_args[1].get("json") or mock_httpx.post.call_args[0][1]
-        assert payload["deployment_mode"] == "sandbox"
+        # v1 schema: deployment_mode classifies from endpoint host (self_hosted),
+        # NOT from config.Mode. The sandbox marker lives on `stream`.
+        assert payload["deployment_mode"] == "self_hosted"
         assert payload.get("stream") == "sandbox"
 
     @patch("axonflow.telemetry.httpx")
