@@ -441,10 +441,33 @@ If you are evaluating AxonFlow in a company setting and cannot open a public iss
 
 No email required. Optional contact if you want a response.
 
+## Sandbox Mode
+
+```python
+# Quick sandbox client for local testing — defaults to http://localhost:8080.
+from axonflow import AxonFlow
+
+client = AxonFlow.sandbox()
+```
+
+> Sandbox-mode clients fire telemetry like every other client — anonymous SDK
+> heartbeat, classification-only payload, opt-out via `AXONFLOW_TELEMETRY=off`.
+> Pings are tagged `stream="sandbox"` server-side so dev/test usage is
+> distinguishable from production heartbeat. (Pre-v8.0 sandbox-mode pings
+> were silently suppressed; the suppression was removed in v8.0 to give a
+> single ops-controlled opt-out lever.)
+
 ## Telemetry
 
 This SDK sends anonymous usage telemetry (SDK version, OS, enabled features) to help improve AxonFlow.
 No prompts, payloads, or PII are ever collected. Opt out: `AXONFLOW_TELEMETRY=off`.
+
+`AXONFLOW_TELEMETRY=off` is the **sole opt-out lever** as of v8.0. The
+v7.x `telemetry` keyword argument on `AxonFlow(...)` and the
+corresponding `AxonFlowConfig.telemetry` field have been removed; the
+previous silent suppression of sandbox-mode pings has also been removed
+(sandbox-mode pings now fire and are tagged `stream="sandbox"` so
+they're distinguishable from production heartbeat).
 
 ### Scope of `AXONFLOW_TELEMETRY=off`
 

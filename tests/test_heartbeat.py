@@ -89,7 +89,7 @@ def telemetry_enabled_env(monkeypatch):
 
 def test_cold_start_no_stamp_fires_once(isolated_state, mock_ping_success, telemetry_enabled_env):
     """Case 1: cold start, no stamp → 1 ping, stamp written."""
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
 
     assert mock_ping_success.call_count == 1
@@ -103,7 +103,7 @@ def test_fresh_stamp_does_not_fire(isolated_state, mock_ping_success, telemetry_
     one_day_ago = __import__("time").time() - 24 * 3600
     os.utime(isolated_state.stamp_path, (one_day_ago, one_day_ago))
 
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
 
     assert mock_ping_success.call_count == 0
@@ -118,7 +118,7 @@ def test_stale_stamp_fires_and_updates(isolated_state, mock_ping_success, teleme
     eight_days_ago = _time.time() - 8 * 24 * 3600
     os.utime(isolated_state.stamp_path, (eight_days_ago, eight_days_ago))
 
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
 
     assert mock_ping_success.call_count == 1
@@ -129,7 +129,7 @@ def test_stale_stamp_fires_and_updates(isolated_state, mock_ping_success, teleme
 def test_rate_limit_within_1h_fires_once(isolated_state, mock_ping_success, telemetry_enabled_env):
     """Case 4: 5 calls within the 1h in-memory cache → exactly 1 ping."""
     for _ in range(5):
-        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
 
     assert mock_ping_success.call_count == 1
@@ -142,7 +142,7 @@ def test_after_rate_limit_expiry_fires_again(
     import time as _time
 
     # First call: ping fires, stamp written.
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
     assert mock_ping_success.call_count == 1
 
@@ -152,7 +152,7 @@ def test_after_rate_limit_expiry_fires_again(
     eight_days_ago = _time.time() - 8 * 24 * 3600
     os.utime(isolated_state.stamp_path, (eight_days_ago, eight_days_ago))
 
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
 
     assert mock_ping_success.call_count == 2
@@ -164,7 +164,7 @@ def test_opt_out_mid_process_stops_pings(
     """Case 6: AXONFLOW_TELEMETRY=off after first ping → 0 further pings, stamp unchanged."""
     import time as _time
 
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
     assert mock_ping_success.call_count == 1
 
@@ -177,7 +177,7 @@ def test_opt_out_mid_process_stops_pings(
     os.utime(isolated_state.stamp_path, (eight_days_ago, eight_days_ago))
     mtime_before = isolated_state.stamp_path.stat().st_mtime
 
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
 
     assert mock_ping_success.call_count == 1, "opt-out should suppress 2nd ping"
@@ -193,7 +193,7 @@ def test_concurrent_callers_coalesce_to_one_ping(
 
     def runner():
         barrier.wait()
-        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost")
 
     threads = [threading.Thread(target=runner) for _ in range(100)]
     for t in threads:
@@ -214,12 +214,12 @@ def test_no_cache_dir_pings_but_no_stamp(mock_ping_success, telemetry_enabled_en
     previous = replace_heartbeat_state_for_test(None)
     try:
         state = hb_module._state  # noqa: SLF001 — the freshly-installed singleton
-        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost")
         _wait_for_threads()
         assert mock_ping_success.call_count == 1, "1st ping must fire even without cache dir"
 
         # 1h cache holds within the same process even without a stamp file.
-        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost")
         _wait_for_threads()
         assert mock_ping_success.call_count == 1, "in-memory cache must still suppress 2nd call"
 
@@ -228,7 +228,7 @@ def test_no_cache_dir_pings_but_no_stamp(mock_ping_success, telemetry_enabled_en
 
         with state._lock:  # noqa: SLF001
             state._last_checked_monotonic = _time.monotonic() - 2 * 3600  # noqa: SLF001
-        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost")
         _wait_for_threads()
         assert mock_ping_success.call_count == 2, (
             "ping fires again when cache expires and no stamp exists"
@@ -239,7 +239,7 @@ def test_no_cache_dir_pings_but_no_stamp(mock_ping_success, telemetry_enabled_en
 
 def test_ping_failure_stamp_not_written(isolated_state, mock_ping_failure, telemetry_enabled_env):
     """Case 9: ping returns False → stamp NOT written; retry on success works."""
-    maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+    maybe_send_heartbeat(mode="production", endpoint="http://localhost")
     _wait_for_threads()
     assert mock_ping_failure.call_count == 1
     assert not isolated_state.stamp_path.exists(), "failed POST must not write stamp"
@@ -252,7 +252,7 @@ def test_ping_failure_stamp_not_written(isolated_state, mock_ping_failure, telem
 
     success_mock = MagicMock(return_value=True)
     with patch("axonflow.telemetry._send_telemetry_ping_now", success_mock):
-        maybe_send_heartbeat(mode="production", endpoint="http://localhost", telemetry_enabled=True)
+        maybe_send_heartbeat(mode="production", endpoint="http://localhost")
         _wait_for_threads()
 
     assert success_mock.call_count == 1

@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
+## [8.0.0] - 2026-05-08 — Decision history API + telemetry simplification
+
+**Major release.** The headline feature is the new decision-history client API:
+`list_decisions` for paging through recorded decisions, alongside the
+`get_decision_explain` method shipped in v7.4.0 — callers can now both list
+and drill in. Bundled into a major because the v8 line also tightens the
+telemetry contract — see `Removed` at the bottom of this entry for that.
+
+### Added
+
+- **`client.list_decisions(opts)` method.** Pages over recorded decision
+  history from the orchestrator, mirroring `GET /api/v1/decisions`.
+  Companion to the v7.4.0 `get_decision_explain` method — callers can
+  now both list and drill in. Already shipped on `main` via PR #186 and
+  graduated into the v8.0 line with this release. See type
+  `ListDecisionsOptions` and `DecisionListItem` in `axonflow.decisions`.
+
+### Migration guide (v7 → v8)
+
+- **`AxonFlow(...)` no longer accepts the `telemetry` keyword argument.**
+  Code passing `AxonFlow(..., telemetry=True)` or
+  `AxonFlow(..., telemetry=False)` will raise `TypeError` at construction
+  time. Migration:
+  - If you were using it to disable telemetry, set
+    `AXONFLOW_TELEMETRY=off` in the environment instead — that's the
+    sole opt-out lever as of v8.0.
+  - If you were using it to force-enable, the default is now ON for
+    every mode so the argument is no longer needed.
+- **`AxonFlowConfig.telemetry` field removed.** Code that constructed
+  the dataclass directly with `AxonFlowConfig(..., telemetry=...)` will
+  fail to instantiate. Drop the field; rely on the env var.
+
+### Removed
+
+- **`AxonFlow(..., telemetry=...)` keyword argument** and the
+  corresponding `AxonFlowConfig.telemetry: bool | None` field.
+  `AXONFLOW_TELEMETRY=off` is now the sole opt-out path. Tests that
+  need to defend against contaminated dev environments should clear
+  the env var explicitly via `monkeypatch.setenv("AXONFLOW_TELEMETRY", "")`.
+- **Sandbox-mode silent telemetry suppression.** Sandbox-mode clients
+  (constructed via `AxonFlow.sandbox()` or `mode=Mode.SANDBOX`) now fire
+  telemetry on the same heartbeat schedule as production-mode clients.
+  Pings are tagged `stream="sandbox"` so analytics can distinguish dev
+  pings from production heartbeat — see the checkpoint-service
+  `IsValidIncomingStream` allowlist for the wire-side gate.
+- **`send_telemetry_ping` signature change.** The internal helper
+  `axonflow.telemetry.send_telemetry_ping` no longer accepts
+  `telemetry_enabled` or `has_credentials` parameters; `_is_telemetry_enabled`
+  takes no arguments. Callers should not have been depending on these
+  internals (they're underscore-prefixed), but the change is recorded
+  here for completeness.
+
 ## [7.1.0] - 2026-05-06 — X-Axonflow-Client header + scope-aware license validation
 
 **Companion release to platform v7.7.0.** The Python SDK now sends an

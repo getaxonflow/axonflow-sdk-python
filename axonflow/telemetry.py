@@ -64,34 +64,27 @@ def _flush_pending_telemetry() -> None:
             t.join(timeout=_TIMEOUT_SECONDS)
 
 
-def _is_telemetry_enabled(
-    mode: str,
-    telemetry_enabled: bool | None,
-    has_credentials: bool,  # noqa: ARG001  kept for API compat
-) -> bool:
+def _is_telemetry_enabled() -> bool:
     """Determine whether telemetry should fire.
 
-    Priority (highest to lowest):
-    1. ``AXONFLOW_TELEMETRY=off`` environment variable -> disabled
-       (canonical AxonFlow-specific opt-out)
-    2. Explicit config value (``telemetry_enabled``) -> use that
-    3. Default: ON for all modes except sandbox
+    ``AXONFLOW_TELEMETRY=off`` in the environment is the SOLE opt-out path.
+    Telemetry is otherwise ON by default, regardless of mode (sandbox /
+    production / anything else). Sandbox-mode pings are tagged
+    ``stream="sandbox"`` in the payload so analytics can still distinguish
+    them — see ``_build_payload``.
+
+    Historical context: v7.x supported a ``telemetry_enabled: bool | None``
+    config field and a ``mode != "sandbox"`` default-suppression rule.
+    Both were removed in v8.0 to leave a single, ops-controlled opt-out
+    lever and avoid silent suppression that masks real adoption signal.
+    See CHANGELOG v8.0.0.
 
     ``DO_NOT_TRACK`` is intentionally NOT honored. It is commonly inherited
     from host tools and developer environments (CLIs like Codex and Claude
     Code inject it unconditionally), which makes it an unreliable expression
     of user intent for AxonFlow telemetry.
     """
-    # Environment-level opt-out always wins.
-    if os.environ.get("AXONFLOW_TELEMETRY", "").strip().lower() == "off":
-        return False
-
-    # Explicit config override.
-    if telemetry_enabled is not None:
-        return telemetry_enabled
-
-    # Default: ON everywhere except sandbox mode.
-    return mode != "sandbox"
+    return os.environ.get("AXONFLOW_TELEMETRY", "").strip().lower() != "off"
 
 
 def _detect_platform_version(endpoint: str, timeout: float = 2.0) -> str | None:
@@ -179,8 +172,17 @@ def _build_payload(
     platform_version: str | None = None,
     endpoint_type: str = "unknown",
 ) -> dict[str, object]:
-    """Build the JSON payload for the checkpoint ping."""
-    return {
+    """Build the JSON payload for the checkpoint ping.
+
+    The ``stream`` field classifies the heartbeat sub-stream. Sandbox-mode
+    clients emit ``"sandbox"`` so analytics can distinguish dev/test pings
+    from production heartbeat without conflating them; production-mode and
+    other modes omit the field entirely (we drop None-valued entries before
+    JSON-encoding) and the server defaults to ``"heartbeat"``. The
+    wire-allowlist is enforced server-side — see checkpoint-service
+    ``IsValidIncomingStream``.
+    """
+    payload: dict[str, object] = {
         "sdk": "python",
         "sdk_version": _SDK_VERSION,
         "platform_version": platform_version,
@@ -192,6 +194,9 @@ def _build_payload(
         "features": [],
         "instance_id": str(uuid.uuid4()),
     }
+    if mode == "sandbox":
+        payload["stream"] = "sandbox"
+    return payload
 
 
 def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) -> bool:
@@ -271,24 +276,25 @@ def _do_ping(url: str, mode: str, endpoint: str, debug: bool) -> None:
 def send_telemetry_ping(
     mode: str,
     endpoint: str,
-    telemetry_enabled: bool | None,
-    has_credentials: bool = False,
     debug: bool = False,
 ) -> None:
     """Fire-and-forget telemetry ping. Runs in a daemon thread.
 
     Args:
         mode: SDK operation mode (``"production"`` or ``"sandbox"``).
+            Sandbox-mode pings fire on the same schedule as production-mode
+            pings as of v8.0; the payload is tagged ``stream="sandbox"`` so
+            analytics can distinguish them server-side.
         endpoint: The AxonFlow agent endpoint, used to detect the platform
             version via ``/health``.
-        telemetry_enabled: Explicit config override.  ``None`` means use the
-            mode-based default.
-        has_credentials: Whether the client was initialized with credentials
-            (clientId + clientSecret). Used to distinguish managed cloud from
-            self-hosted/community deployments for the default behavior.
         debug: When ``True``, log debug-level messages about the ping.
+
+    Note:
+        ``AXONFLOW_TELEMETRY=off`` is the SOLE opt-out path. The v7.x
+        ``telemetry_enabled`` parameter and ``has_credentials`` parameter
+        were removed in v8.0 — see CHANGELOG.
     """
-    if not _is_telemetry_enabled(mode, telemetry_enabled, has_credentials):
+    if not _is_telemetry_enabled():
         return
 
     logger.info(

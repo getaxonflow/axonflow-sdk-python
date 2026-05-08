@@ -477,7 +477,6 @@ class AxonFlow:
         *,
         mode: Mode | str = Mode.PRODUCTION,
         debug: bool = False,
-        telemetry: bool | None = None,
         timeout: float = 60.0,
         map_timeout: float = 120.0,
         insecure_skip_verify: bool = False,
@@ -492,11 +491,10 @@ class AxonFlow:
             endpoint: AxonFlow endpoint URL. Can also be set via AXONFLOW_AGENT_URL env var.
             client_id: Client ID (optional for community/self-hosted mode)
             client_secret: Client secret (optional for community/self-hosted mode)
-            mode: Operation mode (production or sandbox)
+            mode: Operation mode (production or sandbox). Sandbox-mode no longer
+                suppresses telemetry as of v8.0 — pings fire and are tagged
+                ``stream="sandbox"`` server-side.
             debug: Enable debug logging
-            telemetry: Enable/disable anonymous telemetry. ``None`` uses mode default
-                (ON for production, OFF for sandbox). Set ``AXONFLOW_TELEMETRY=off``
-                to opt out via environment.
             timeout: Request timeout in seconds
             map_timeout: Timeout for MAP operations in seconds (default: 120s)
                         MAP operations involve multiple LLM calls and need longer timeouts
@@ -614,11 +612,12 @@ class AxonFlow:
         # (CLI, serverless cold-starts) still deliver the ping. Subsequent
         # gate runs happen async via ``_pre_request_hook`` on every
         # public HTTP request. See axonflow/heartbeat.py for the contract
-        # and stamp-on-DELIVERY semantics.
+        # and stamp-on-DELIVERY semantics. The v7.x ``telemetry_enabled``
+        # programmatic override was removed in v8.0; AXONFLOW_TELEMETRY=off
+        # is now the sole opt-out lever.
         maybe_send_heartbeat(
             mode=self._config.mode.value,
             endpoint=self._config.endpoint,
-            telemetry_enabled=telemetry,
             debug=debug,
         )
 
@@ -774,7 +773,6 @@ class AxonFlow:
         maybe_send_heartbeat(
             mode=self._config.mode.value,
             endpoint=self._config.endpoint,
-            telemetry_enabled=self._config.telemetry,
             debug=self._config.debug,
         )
 
