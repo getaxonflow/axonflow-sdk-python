@@ -112,9 +112,12 @@ class TestBuildPayload:
 
     def test_payload_deployment_mode_propagated(self) -> None:
         """deployment_mode reflects the supplied v1 schema value."""
-        assert _build_payload("sandbox", deployment_mode="self_hosted")["deployment_mode"] == "self_hosted"
-        assert _build_payload("production", deployment_mode="community_saas")["deployment_mode"] == "community_saas"
-        assert _build_payload("production", deployment_mode="unknown")["deployment_mode"] == "unknown"
+        sh = _build_payload("sandbox", deployment_mode="self_hosted")
+        cs = _build_payload("production", deployment_mode="community_saas")
+        un = _build_payload("production", deployment_mode="unknown")
+        assert sh["deployment_mode"] == "self_hosted"
+        assert cs["deployment_mode"] == "community_saas"
+        assert un["deployment_mode"] == "unknown"
 
     def test_payload_profile_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """profile sourced from AXONFLOW_PROFILE; unknown when unset."""
