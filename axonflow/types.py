@@ -65,6 +65,10 @@ class AxonFlowConfig(BaseModel):
         The SDK will work without authentication headers in this mode.
 
         As of v1.0.0, all routes go through a single endpoint (ADR-026).
+
+        As of v8.0, the legacy ``telemetry`` field has been removed. To
+        opt out of the anonymous heartbeat, set ``AXONFLOW_TELEMETRY=off``
+        in the environment — it is now the sole opt-out lever.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -74,10 +78,11 @@ class AxonFlowConfig(BaseModel):
     client_secret: str | None = Field(default=None, description="Client secret (optional)")
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
-    telemetry: bool | None = Field(
-        default=None,
-        description="Enable/disable anonymous telemetry (None = mode default)",
-    )
+    # `telemetry` field removed in v8.0. AXONFLOW_TELEMETRY=off is now the
+    # SOLE opt-out path for the SDK heartbeat. Sandbox-mode pings are no
+    # longer suppressed; they fire and carry stream="sandbox" in the
+    # payload so analytics can distinguish dev/test pings server-side.
+    # See CHANGELOG v8.0.0 and axonflow.telemetry._is_telemetry_enabled.
     timeout: float = Field(default=60.0, gt=0, description="Request timeout (seconds)")
     map_timeout: float = Field(default=120.0, gt=0, description="MAP operations timeout (seconds)")
     insecure_skip_verify: bool = Field(default=False, description="Skip TLS verify")

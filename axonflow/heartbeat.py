@@ -8,8 +8,11 @@ Implements the cross-SDK contract:
 The gate is consulted both at client construction and at every public
 HTTP request site (via ``_pre_request_hook``). Each gate run:
 
-1. Re-evaluates ``AXONFLOW_TELEMETRY=off`` / mode-disabled cheaply
-   (lock-free) so a mid-process opt-out toggle takes effect immediately.
+1. Re-evaluates ``AXONFLOW_TELEMETRY=off`` cheaply (lock-free) so a
+   mid-process opt-out toggle takes effect immediately. As of v8.0 the
+   env var is the sole opt-out path — sandbox-mode is no longer
+   silently suppressed; sandbox pings fire and carry stream="sandbox"
+   in the payload.
 2. Checks an in-memory 1-hour cache to bound stat() syscall frequency on
    hot request paths.
 3. Reads the stamp file mtime as the source of truth for last successful
@@ -237,7 +240,6 @@ def _register_thread(t: threading.Thread) -> None:
 def maybe_send_heartbeat(
     mode: str,
     endpoint: str,
-    telemetry_enabled: bool | None,
     debug: bool = False,
 ) -> None:
     """Central gate for telemetry pings.
@@ -245,12 +247,16 @@ def maybe_send_heartbeat(
     Called from ``AxonFlow.__init__`` and ``AxonFlow._pre_request_hook``.
     Implements the contract documented at the top of this module. Never
     raises — heartbeat failures must not surface to the caller.
+
+    The v7.x ``telemetry_enabled`` parameter was removed in v8.0 along
+    with the corresponding config field. ``AXONFLOW_TELEMETRY=off`` in
+    the environment is now the SOLE opt-out lever — see CHANGELOG.
     """
     # Lazy imports break the heartbeat → telemetry → heartbeat cycle that
     # would otherwise occur if these were top-level imports.
     from axonflow.telemetry import _is_telemetry_enabled, _send_telemetry_ping_now  # noqa: PLC0415
 
-    if not _is_telemetry_enabled(mode, telemetry_enabled, has_credentials=False):
+    if not _is_telemetry_enabled():
         return
 
     h = _state
