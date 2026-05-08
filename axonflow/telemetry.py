@@ -214,8 +214,6 @@ def _build_payload(
       derived from the endpoint host plus ``AXONFLOW_TRY=1`` override
       (see ``_classify_deployment_mode``). The ``mode`` parameter is
       kept for legacy callers but no longer drives this dimension.
-    * ``profile`` — sourced from ``AXONFLOW_PROFILE``; ``"unknown"``
-      when unset. Free-form deployment classifier; analytics only.
 
     The ``stream`` field classifies the heartbeat sub-stream. Sandbox-mode
     clients emit ``"sandbox"`` so analytics can distinguish dev/test pings
@@ -225,9 +223,6 @@ def _build_payload(
     wire-allowlist is enforced server-side — see checkpoint-service
     ``IsValidIncomingStream``.
     """
-    profile_env = os.environ.get("AXONFLOW_PROFILE")
-    profile_stripped = profile_env.strip() if profile_env is not None else ""
-    profile = profile_stripped if profile_stripped else "unknown"
     payload: dict[str, object] = {
         "telemetry_type": "sdk",
         "sdk": "python",
@@ -240,7 +235,6 @@ def _build_payload(
         "endpoint_type": endpoint_type,
         "features": [],
         "instance_id": str(uuid.uuid4()),
-        "profile": profile,
     }
     if mode == "sandbox":
         payload["stream"] = "sandbox"

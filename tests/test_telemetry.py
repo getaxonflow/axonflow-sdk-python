@@ -107,8 +107,8 @@ class TestBuildPayload:
         assert isinstance(payload["instance_id"], str)
         # Should be a valid UUID
         assert len(payload["instance_id"]) == 36  # UUID v4 string length
-        # v1 telemetry-schema profile field
-        assert payload["profile"] == "unknown"
+        # v1 telemetry-schema field removed in 8.0.1: profile is no longer in payload
+        assert "profile" not in payload
 
     def test_payload_deployment_mode_propagated(self) -> None:
         """deployment_mode reflects the supplied v1 schema value."""
@@ -118,13 +118,6 @@ class TestBuildPayload:
         assert sh["deployment_mode"] == "self_hosted"
         assert cs["deployment_mode"] == "community_saas"
         assert un["deployment_mode"] == "unknown"
-
-    def test_payload_profile_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """profile sourced from AXONFLOW_PROFILE; unknown when unset."""
-        monkeypatch.setenv("AXONFLOW_PROFILE", "production")
-        assert _build_payload("production")["profile"] == "production"
-        monkeypatch.delenv("AXONFLOW_PROFILE", raising=False)
-        assert _build_payload("production")["profile"] == "unknown"
 
     def test_payload_instance_id_unique(self) -> None:
         """Each call generates a new instance_id."""
@@ -191,7 +184,8 @@ class TestSendTelemetryPing:
         assert payload["sdk"] == "python"
         # v1 schema: deployment_mode classifies from endpoint host.
         assert payload["deployment_mode"] == "self_hosted"
-        assert payload["profile"] == "unknown"
+        # 8.0.1: profile field removed (collided with governance env var).
+        assert "profile" not in payload
         assert "instance_id" in payload
         # Production-mode payload omits stream (server defaults to heartbeat).
         assert "stream" not in payload
