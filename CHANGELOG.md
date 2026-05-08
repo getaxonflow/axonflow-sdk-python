@@ -9,28 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      and tag v{X.Y.Z}. The release workflow's preflight checks the section
      header matches the tag. -->
 
-## [8.0.1] - 2026-05-08 — Drop telemetry `profile` field
-
-**Patch release.** Mechanical revert of the `profile` field added in 8.0.0
-to the heartbeat payload. The field was sourced from `AXONFLOW_PROFILE`,
-which collides with the existing governance-engine env var of the same
-name (`platform/agent/profile.go`, ADR-036) — a customer setting
-`AXONFLOW_PROFILE=strict` for governance would have telemetry POSTs
-rejected by the server validator. The field also had no analytics
-consumer; `deployment_mode` (`self_hosted | community_saas | unknown`)
-already carries the topology dimension. Removing it eliminates the
-collision class entirely.
-
-No public API changes; `pip install --upgrade axonflow` is sufficient.
-
-### Removed
-
-- **Telemetry `profile` field.** `_build_payload` no longer reads
-  `AXONFLOW_PROFILE` and no longer emits `profile` in the heartbeat
-  payload. The env var reverts to its sole governance-engine meaning.
-  Any internal analytics queries that referenced the column should
-  switch to `deployment_mode` (already populated, same wire shape).
-
 ## [8.0.0] - 2026-05-08 — Decision history API + telemetry simplification
 
 **Major release.** The headline feature is the new decision-history client API:
@@ -85,7 +63,7 @@ telemetry contract — see `Removed` at the bottom of this entry for that.
 
 ### Telemetry payload (v1 schema, axonflow-enterprise#2008)
 
-- New heartbeat fields: `telemetry_type: "sdk"`, `profile` (from `AXONFLOW_PROFILE`, `unknown` when unset), `deployment_mode` aligned to `self_hosted | community_saas | unknown` via the new `_classify_deployment_mode` (host + `AXONFLOW_TRY=1` override).
+- New heartbeat fields: `telemetry_type: "sdk"`, `deployment_mode` aligned to `self_hosted | community_saas | unknown` via the new `_classify_deployment_mode` (host + `AXONFLOW_TRY=1` override).
 - `_classify_endpoint` no longer returns `community-saas` — that value moved off endpoint_type onto deployment_mode; analytics queries on the legacy value must update.
 
 ## [7.1.0] - 2026-05-06 — X-Axonflow-Client header + scope-aware license validation
