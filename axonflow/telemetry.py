@@ -225,7 +225,9 @@ def _build_payload(
     wire-allowlist is enforced server-side — see checkpoint-service
     ``IsValidIncomingStream``.
     """
-    profile = (os.environ.get("AXONFLOW_PROFILE") or "").strip() or "unknown"
+    profile_env = os.environ.get("AXONFLOW_PROFILE")
+    profile_stripped = profile_env.strip() if profile_env is not None else ""
+    profile = profile_stripped if profile_stripped else "unknown"
     payload: dict[str, object] = {
         "telemetry_type": "sdk",
         "sdk": "python",
