@@ -28,9 +28,9 @@ telemetry contract — see `Removed` at the bottom of this entry for that.
 
 ### Migration guide (v7 → v8)
 
-- **`AxonFlow(.)` no longer accepts the `telemetry` keyword argument.**
- Code passing `AxonFlow(., telemetry=True)` or
- `AxonFlow(., telemetry=False)` will raise `TypeError` at construction
+- **`AxonFlow(...)` no longer accepts the `telemetry` keyword argument.**
+ Code passing `AxonFlow(..., telemetry=True)` or
+ `AxonFlow(..., telemetry=False)` will raise `TypeError` at construction
  time. Migration:
  - If you were using it to disable telemetry, set
  `AXONFLOW_TELEMETRY=off` in the environment instead — that's the
@@ -38,7 +38,7 @@ telemetry contract — see `Removed` at the bottom of this entry for that.
  - If you were using it to force-enable, the default is now ON for
  every mode so the argument is no longer needed.
 - **`AxonFlowConfig.telemetry` field removed.** Code that constructed
- the dataclass directly with `AxonFlowConfig(., telemetry=.)` will
+ the dataclass directly with `AxonFlowConfig(..., telemetry=...)` will
  fail to instantiate. Drop the field; rely on the env var.
 
 ### Telemetry
@@ -109,7 +109,7 @@ Major release across the AxonFlow SDK family. Companion releases ship the same d
 ### Changed
 
 - **Telemetry switched to a 7-day delivered-heartbeat.** At most one anonymous ping per environment every 7 days, with the stamp advanced only after the POST returns 2xx — a transient network failure doesn't silence telemetry until the next window. Concurrent threads are de-duplicated by an in-flight gate. Restricted environments where no cache dir is available (e.g. AWS Lambda) fall back transparently to the previous "one ping per process" behavior.
-- `StaticPolicy` and `PolicyVersion` now serialize wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases remain accepted on input via `validation_alias=AliasChoices(.)`. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts — code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change.
+- `StaticPolicy` and `PolicyVersion` now serialize wire fields in snake_case to match the OpenAPI spec (`created_at`, `updated_at`, `organization_id`, `tenant_id`, `has_override`, `changed_at`, `changed_by`, `change_type`). camelCase aliases remain accepted on input via `validation_alias=AliasChoices(...)`. **Round-trip identity is no longer preserved** for callers that built these models from camelCase dicts — code that signs, hashes, or byte-compares serialized model bodies will see a one-time shape change.
 
 ### Added
 
@@ -308,7 +308,7 @@ Two platform-side spec corrections filed alongside this work, for issues the aud
  `prior_output`, `prior_completion_at`, `first_attempt_at`, `last_attempt_at`,
  `last_decision`, and `idempotency_key`. Prefer these fields to the legacy
  `cached` / `decision_source` fields.
-- **`client.step_gate(., include_prior_output=False)`** — new keyword-only argument.
+- **`client.step_gate(..., include_prior_output=False)`** — new keyword-only argument.
  When `True`, the SDK sends `?include_prior_output=true` on the gate call and
  `retry_context.prior_output` is populated when a prior `/complete` has landed.
  Existing callers that omit the kwarg behave unchanged.
@@ -465,7 +465,7 @@ behavior.
 - `simulate_policies()` — dry-run all active policies against an input query. Returns allowed/blocked status, applied policies, risk score, and daily usage. Requires Evaluation tier or above.
 - `get_policy_impact_report()` — test a single policy against multiple inputs and get aggregate match/block statistics.
 - `detect_policy_conflicts()` — analyze active policies for contradictions, shadows, and redundancies. Optionally filter to conflicts involving a specific policy.
-- `AxonFlowLangGraphAdapter.tool_output_wrapper()` — returns an async wrapper for LangGraph `ToolNode(awrap_tool_call=.)` that enforces input and output policy checks on local `@tool` functions. Fixes a gap where locally defined tools bypassed `mcp_tool_interceptor` policy enforcement.
+- `AxonFlowLangGraphAdapter.tool_output_wrapper()` — returns an async wrapper for LangGraph `ToolNode(awrap_tool_call=...)` that enforces input and output policy checks on local `@tool` functions. Fixes a gap where locally defined tools bypassed `mcp_tool_interceptor` policy enforcement.
 - Types: `SimulatePoliciesRequest`, `SimulatePoliciesResponse`, `SimulationDailyUsage`, `ImpactReportInput`, `ImpactReportRequest`, `ImpactReportResult`, `ImpactReportResponse`, `PolicyConflictRef`, `PolicyConflict`, `PolicyConflictResponse`
 - `wrap_langgraph()` — 1-line wrapper for compiled LangGraph StateGraphs. Transparently enforces AxonFlow governance at every node transition without modifying the graph definition. Uses langchain-core's `AsyncCallbackHandler` to intercept node execution via `metadata["langgraph_node"]`.
 - `GovernedGraph` class — returned by `wrap_langgraph()`, exposes `ainvoke()`, `invoke()`, `astream()`. Each invocation creates a new AxonFlow workflow. Reusable across multiple invocations.
