@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
-## [8.0.0] - 2026-05-09 — Decision history API + telemetry simplification
+## [8.0.0] - 2026-05-09 — Decision History API + policy_version recorded on every decision + telemetry simplification
 
 **Major release.** The headline feature is the new decision-history client API:
 `list_decisions` for paging through recorded decisions, alongside the
