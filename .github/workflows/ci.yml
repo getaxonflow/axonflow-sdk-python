@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   AXONFLOW_TELEMETRY: 'off'
 
@@ -43,8 +47,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # PR runs only Python 3.11 (current release toolchain). Push to main and
+      # workflow_dispatch run the full matrix to catch version-specific drift.
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.11"]' || '["3.10", "3.11", "3.12"]') }}
     steps:
       - uses: actions/checkout@v4
 
