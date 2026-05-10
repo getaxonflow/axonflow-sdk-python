@@ -75,6 +75,26 @@ jobs:
           flags: python-sdk
           fail_ci_if_error: false
 
+  # Aggregator that always reports a single check name regardless of the
+  # matrix shape (PR-time matrix is `['3.11']`; push/dispatch is full).
+  # Branch protection requires `Test Summary`, not the per-version names,
+  # so matrix changes don't strand required checks.
+  test-summary:
+    name: Test Summary
+    needs: [test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate test matrix result
+        run: |
+          result="${{ needs.test.result }}"
+          echo "test matrix result: $result"
+          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+            echo "::error::test matrix did not all pass (result: $result)"
+            exit 1
+          fi
+          echo "Test matrix OK"
+
   # QF-15: wire-shape contract CI. Blocks drift between Python SDK pydantic
   # models and the OpenAPI specs that are the authoritative wire contract.
   # Runs on every PR. Drift the baseline does not cover fails the check.
