@@ -15,10 +15,11 @@ permissions:
   contents: read
 
 # Avoid spawning parallel docker-compose stacks for back-to-back pushes;
-# also cancels stale PR runs when a new commit lands.
+# also cancels stale PR runs when a new commit lands. Push to main keys on SHA
+# so main runs never queue or cancel each other.
 concurrency:
-  group: integration-${{ github.ref }}
-  cancel-in-progress: true
+  group: integration-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   AXONFLOW_TELEMETRY: 'off'
@@ -33,8 +34,10 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
+      # PR runs only Python 3.11. Push, dispatch, and weekly Tuesday cron run
+      # the full matrix to catch version-specific drift before tagging.
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ${{ fromJson(github.event_name == 'pull_request' && '["3.11"]' || '["3.10", "3.11", "3.12"]') }}
     steps:
       - uses: actions/checkout@v4
 
