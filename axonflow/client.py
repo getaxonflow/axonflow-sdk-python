@@ -567,6 +567,11 @@ class AxonFlow:
         credentials = f"{effective_client_id}:{client_secret or ''}"
         encoded = base64.b64encode(credentials.encode()).decode()
         headers["Authorization"] = f"Basic {encoded}"
+        # X-Client-ID (v9): server-side identity decisions don't have to
+        # re-decode Basic auth. The agent's apiAuthMiddleware overwrites
+        # the header with its auth-derived value, so caller-supplied
+        # values are harmless (no spoofing surface).
+        headers["X-Client-ID"] = effective_client_id
 
         # Initialize HTTP client
         self._http_client = httpx.AsyncClient(
