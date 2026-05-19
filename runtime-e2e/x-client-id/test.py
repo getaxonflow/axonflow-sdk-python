@@ -22,9 +22,7 @@ TENANT = os.environ.get("AXONFLOW_TENANT_ID")
 SECRET = os.environ.get("AXONFLOW_TENANT_SECRET")
 
 if not TENANT or not SECRET:
-    sys.stderr.write(
-        "AXONFLOW_TENANT_ID + AXONFLOW_TENANT_SECRET must be set; see ../README.md\n"
-    )
+    sys.stderr.write("AXONFLOW_TENANT_ID + AXONFLOW_TENANT_SECRET must be set; see ../README.md\n")
     sys.exit(2)
 
 _orig = httpx.AsyncClient.request
