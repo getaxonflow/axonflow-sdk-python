@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [8.1.0] - 2026-05-19 — `X-Client-ID` header on every outbound request (v9 identity)
+
+**Companion release to the v9 identity cleanup on the platform (Epic #2230).**
+Every governed request now carries an `X-Client-ID: <effective_client_id>`
+header alongside the existing Basic Auth + `X-Axonflow-Client` headers.
+Value matches the SDK's Basic Auth username — smart default `community`
+when no `client_id` is configured.
+
+### Added
+
+- **`X-Client-ID` header on outbound HTTP requests.** Server-side identity
+ decisions no longer need to re-decode Basic Auth. The agent's
+ `apiAuthMiddleware` overwrites the header with its own auth-derived
+ value, so caller-supplied values are harmless (no spoofing surface).
+ Set on the shared `httpx.AsyncClient.headers` dict in
+ `axonflow/client.py`, so every endpoint picks it up.
+
+### Compatibility
+
+- Backward-compatible against v8 and v9 platforms: v8 agents ignore the
+ unknown header; v9 agents derive identity from Basic Auth regardless.
+- No SDK config changes. No removed fields. No changed defaults.
+
 ## [8.0.0] - 2026-05-09 — Decision History API + policy_version recorded on every decision + telemetry simplification
 
 **Major release.** The headline feature is the new decision-history client API:
