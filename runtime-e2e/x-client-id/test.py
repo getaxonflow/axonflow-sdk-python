@@ -9,6 +9,7 @@ read what the SDK wrote.
 """
 
 import asyncio
+import contextlib
 import os
 import sys
 
@@ -44,11 +45,9 @@ httpx.AsyncClient.request = patched
 async def main():
     print(f"Asserting wire X-Client-ID = {TENANT}")
     client = AxonFlow(endpoint=ENDPOINT, client_id=TENANT, client_secret=SECRET)
-    async with client:
-        try:
-            await client.proxy_llm_call(user_token="", query="ping", request_type="chat")
-        except Exception:  # noqa: BLE001 — outcome of the call doesn't matter; only the header
-            pass
+    async with client, contextlib.suppress(Exception):
+        # outcome of the call doesn't matter; only the captured header
+        await client.proxy_llm_call(user_token="", query="ping", request_type="chat")
     got = _captured.get("x-client-id", "")
     if got != TENANT:
         sys.stderr.write(f"FAIL: wire X-Client-ID = {got!r}, want {TENANT!r}\n")
