@@ -6,7 +6,7 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from axonflow import AxonFlow
-from axonflow.exceptions import AxonFlowError
+from axonflow.exceptions import AuthenticationError, AxonFlowError
 from axonflow.types import AuditToolCallRequest, AuditToolCallResponse
 
 
@@ -128,6 +128,36 @@ class TestAuditToolCall:
 
         with pytest.raises(AxonFlowError):
             await client.audit_tool_call(request)
+
+    @pytest.mark.asyncio
+    async def test_401_not_retried_issue_2275(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        # Regression test for getaxonflow/axonflow-enterprise#2275: 401 on
+        # /api/v1/audit/tool-call must be terminal — the SDK must NOT retry
+        # an auth failure, because retrying with the same invalid token just
+        # compounds the storm on the agent.
+        #
+        # Python SDK is already safe: `_request_with_retry` only retries on
+        # `httpx.ConnectError` / `httpx.TimeoutException`, never on HTTP
+        # status codes. This test locks in the contract.
+        httpx_mock.add_response(
+            status_code=401,
+            json={"error": "unauthorized"},
+        )
+
+        request = AuditToolCallRequest(tool_name="getUserInfo")
+
+        with pytest.raises(AuthenticationError):
+            await client.audit_tool_call(request)
+
+        # Exactly one outbound request — no retry. If `_request_with_retry`
+        # ever gains a status-code-based retry that includes 401, pytest-httpx
+        # will see additional requests against the single registered response
+        # and fail.
+        assert len(httpx_mock.get_requests()) == 1
 
     @pytest.mark.asyncio
     async def test_excludes_none_fields_from_request(
