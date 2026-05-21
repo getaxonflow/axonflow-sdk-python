@@ -11,10 +11,20 @@ import pytest
 
 from axonflow.telemetry import (
     _DEFAULT_CHECKPOINT_URL,
+    ORG_ID_LOCAL_DEV_SENTINEL,
     _build_payload,
     _is_telemetry_enabled,
+    _telemetry_org_id,
     send_telemetry_ping,
 )
+
+# Snapshot the real httpx.get / httpx.post before the conftest autouse
+# fixture replaces them with the egress-blocked stub. The functional
+# E2E test in this file (TestSendTelemetryPingOrgIDOnWire) is the one
+# legitimate exception that needs to drive real bytes through a local
+# socket — it reinstalls these via monkeypatch within the test only.
+_REAL_HTTPX_GET = httpx.get
+_REAL_HTTPX_POST = httpx.post
 
 # ---------------------------------------------------------------------------
 # _is_telemetry_enabled tests
@@ -368,3 +378,155 @@ def _wait_for_threads(timeout: float = 5.0) -> None:
             remaining = deadline - time.monotonic()
             if remaining > 0:
                 t.join(timeout=remaining)
+
+
+# ---------------------------------------------------------------------------
+# org_id tests — v9.1 preflight, issue #2277
+# ---------------------------------------------------------------------------
+
+
+class TestTelemetryOrgIDHelperUnit:
+    """``_telemetry_org_id`` env → sentinel fallback. Issue #2277."""
+
+    def test_org_id_set_wins(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ORG_ID", "acme-corp")
+        assert _telemetry_org_id() == "acme-corp"
+
+    def test_org_id_unset_returns_local_dev_org_sentinel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("ORG_ID", raising=False)
+        assert _telemetry_org_id() == ORG_ID_LOCAL_DEV_SENTINEL
+        assert ORG_ID_LOCAL_DEV_SENTINEL == "local-dev-org"  # wire-value lock
+
+    def test_org_id_empty_string_falls_through_to_sentinel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty string is treated as unset — same as the Go SDK."""
+        monkeypatch.setenv("ORG_ID", "")
+        assert _telemetry_org_id() == ORG_ID_LOCAL_DEV_SENTINEL
+
+    def test_org_id_cs_prefixed_passes_through(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """cs_<uuid> Community SaaS tenant identifier passes through verbatim."""
+        cs_id = "cs_abc12345-6789-4def-9012-345678901234"
+        monkeypatch.setenv("ORG_ID", cs_id)
+        assert _telemetry_org_id() == cs_id
+
+
+class TestBuildPayloadIncludesOrgID:
+    """``_build_payload`` always includes ``org_id``. Issue #2277."""
+
+    def test_payload_includes_org_id_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ORG_ID", "acme-corp")
+        payload = _build_payload("production", deployment_mode="self_hosted")
+        assert payload["org_id"] == "acme-corp"
+
+    def test_payload_includes_sentinel_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("ORG_ID", raising=False)
+        payload = _build_payload("production")
+        assert payload["org_id"] == ORG_ID_LOCAL_DEV_SENTINEL
+
+    def test_payload_includes_cs_uuid_when_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cs_id = "cs_e3a4b5c6-d7e8-4f90-a1b2-c3d4e5f6a7b8"
+        monkeypatch.setenv("ORG_ID", cs_id)
+        payload = _build_payload("production")
+        assert payload["org_id"] == cs_id
+
+
+class TestSendTelemetryPingOrgIDOnWire:
+    """Functional E2E: org_id arrives on the wire at the receiver.
+
+    Uses a real ``http.server.HTTPServer`` in a daemon thread (no mocks
+    of httpx) so this proof exercises the full net stack between the
+    SDK and the receiver. Captures the raw request body and asserts the
+    literal JSON contains ``"org_id":"<value>"`` — defends against tag-
+    removal mutations and unintended omitempty behavior.
+    """
+
+    def _run_with_capture(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        org_id_env: str | None,
+    ) -> bytes:
+        import http.server
+        import json
+        import socketserver
+
+        # The autouse _disable_telemetry conftest fixture replaces
+        # httpx.get / httpx.post with a RuntimeError-raising stub to
+        # block real egress. This test is the legitimate exception:
+        # it stands up a localhost listener and wants real bytes on
+        # the wire. Restore the real callables for this test only;
+        # pytest monkeypatch undoes the override at function teardown.
+        monkeypatch.setattr(httpx, "get", _REAL_HTTPX_GET)
+        monkeypatch.setattr(httpx, "post", _REAL_HTTPX_POST)
+
+        captured: dict[str, bytes] = {}
+
+        class _Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length", "0"))
+                captured["body"] = self.rfile.read(length)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"latest_version": None, "alerts": []}).encode())
+
+            def do_GET(self) -> None:  # noqa: N802
+                # SDK probes /health before posting telemetry; return a
+                # synthetic platform-version so the path doesn't fall
+                # back to None.
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"version": "8.0.0-test"}).encode())
+
+            def log_message(self, *_args: object) -> None:  # silence stderr
+                return
+
+        with socketserver.TCPServer(("127.0.0.1", 0), _Handler) as srv:
+            port = srv.server_address[1]
+            # Handle health probe + telemetry POST in sequence — two requests.
+            srv_thread = threading.Thread(
+                target=lambda: [srv.handle_request(), srv.handle_request()],
+                daemon=True,
+            )
+            srv_thread.start()
+
+            monkeypatch.setenv("AXONFLOW_CHECKPOINT_URL", f"http://127.0.0.1:{port}/v1/ping")
+            monkeypatch.setenv("AXONFLOW_TELEMETRY", "")
+            if org_id_env is None:
+                monkeypatch.delenv("ORG_ID", raising=False)
+            else:
+                monkeypatch.setenv("ORG_ID", org_id_env)
+
+            send_telemetry_ping(
+                mode="production",
+                endpoint=f"http://127.0.0.1:{port}",
+            )
+            _wait_for_threads()
+            srv_thread.join(timeout=2.0)
+
+        assert "body" in captured, "telemetry ping never reached the local server"
+        return captured["body"]
+
+    def test_org_id_acme_corp_on_wire(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = self._run_with_capture(monkeypatch, "acme-corp")
+        assert b'"org_id": "acme-corp"' in body or b'"org_id":"acme-corp"' in body, (
+            f"wire body missing org_id=acme-corp: {body!r}"
+        )
+
+    def test_org_id_sentinel_on_wire(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        body = self._run_with_capture(monkeypatch, None)
+        assert b'"org_id": "local-dev-org"' in body or b'"org_id":"local-dev-org"' in body, (
+            f"wire body missing sentinel org_id: {body!r}"
+        )
+
+    def test_org_id_cs_prefixed_on_wire(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        cs_id = "cs_f29e9c5c-5c5b-4e0d-8e0d-aabbccddeeff"
+        body = self._run_with_capture(monkeypatch, cs_id)
+        expected_a = f'"org_id": "{cs_id}"'.encode()
+        expected_b = f'"org_id":"{cs_id}"'.encode()
+        assert expected_a in body or expected_b in body, (
+            f"wire body missing cs_-prefixed org_id: {body!r}"
+        )

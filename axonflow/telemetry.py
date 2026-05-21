@@ -198,6 +198,26 @@ def _normalize_arch(arch: str) -> str:
     return arch
 
 
+#: Sentinel emitted on the telemetry wire when ``ORG_ID`` is unset (the
+#: default-config Community-mode developer case). See #2277.
+ORG_ID_LOCAL_DEV_SENTINEL = "local-dev-org"
+
+
+def _telemetry_org_id() -> str:
+    """Return the ``org_id`` value to emit on the next telemetry ping.
+
+    Reads ``ORG_ID`` from the environment (the operator's explicit
+    configuration for self-hosted deployments, or the ``cs_<uuid>``
+    tenant identifier on Community SaaS) and falls back to
+    :data:`ORG_ID_LOCAL_DEV_SENTINEL` when unset. Always returns a
+    non-empty string. See #2277.
+    """
+    value = os.environ.get("ORG_ID", "")
+    if value:
+        return value
+    return ORG_ID_LOCAL_DEV_SENTINEL
+
+
 def _build_payload(
     mode: str,
     platform_version: str | None = None,
@@ -235,6 +255,7 @@ def _build_payload(
         "endpoint_type": endpoint_type,
         "features": [],
         "instance_id": str(uuid.uuid4()),
+        "org_id": _telemetry_org_id(),
     }
     if mode == "sandbox":
         payload["stream"] = "sandbox"
@@ -341,7 +362,7 @@ def send_telemetry_ping(
         return
 
     logger.info(
-        "AxonFlow: anonymous telemetry enabled. "
+        "AxonFlow: telemetry enabled. "
         "Opt out: AXONFLOW_TELEMETRY=off | https://docs.getaxonflow.com/docs/telemetry"
     )
 

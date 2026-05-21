@@ -25,11 +25,36 @@ when no `client_id` is configured.
  value, so caller-supplied values are harmless (no spoofing surface).
  Set on the shared `httpx.AsyncClient.headers` dict in
  `axonflow/client.py`, so every endpoint picks it up.
+- **`org_id` field in the telemetry heartbeat body (v9.1 preflight, #2277).**
+ Brings Python SDK telemetry up to parity with the platform's
+ `startup_telemetry.go` emitter — every heartbeat now identifies which
+ deployment-organization emitted it. Two sources in precedence order:
+ 1. The `ORG_ID` env var when set (the operator's explicit configuration on
+    self-hosted deployments, or the `cs_<uuid>` tenant identifier on
+    Community SaaS).
+ 2. Otherwise the `local-dev-org` sentinel (default-config Community-mode
+    developers).
+ The receiver (`ee/platform/checkpoint-service/pkg/telemetry/telemetry.go`)
+ already accepts the field with `omitempty` for backward compat with
+ pre-v8.1 SDKs that don't send it. New SDKs always send it. Honors
+ `AXONFLOW_TELEMETRY=off` like every other heartbeat field. See
+ `axonflow-landing/content/privacy.html` for the customer-facing
+ commitment that covers this field.
+
+### Changed
+
+- **Telemetry-enabled log line** softened from "anonymous telemetry
+ enabled" to "telemetry enabled" to stay coherent with the v9.1
+ `org_id` addition (the operator-supplied `ORG_ID` on self-hosted is
+ not anonymized; only the `instance_id` and `cs_<uuid>` Community
+ SaaS identifier remain anonymous-by-design).
 
 ### Compatibility
 
 - Backward-compatible against v8 and v9 platforms: v8 agents ignore the
  unknown header; v9 agents derive identity from Basic Auth regardless.
+- `org_id` is an additive field — the receiver's `omitempty` allows
+ legacy SDK builds to keep working unchanged.
 - No SDK config changes. No removed fields. No changed defaults.
 
 ## [8.0.0] - 2026-05-09 — Decision History API + policy_version recorded on every decision + telemetry simplification
