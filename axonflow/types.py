@@ -67,8 +67,8 @@ class AxonFlowConfig(BaseModel):
         As of v1.0.0, all routes go through a single endpoint (ADR-026).
 
         As of v8.0, the legacy ``telemetry`` field has been removed. To
-        opt out of the anonymous heartbeat, set ``AXONFLOW_TELEMETRY=off``
-        in the environment — it is now the sole opt-out lever.
+        opt out of the heartbeat, set ``AXONFLOW_TELEMETRY=off`` in the
+        environment — it is now the sole opt-out lever.
     """
 
     model_config = ConfigDict(frozen=True)

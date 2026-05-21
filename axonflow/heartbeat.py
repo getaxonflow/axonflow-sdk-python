@@ -2,7 +2,7 @@
 
 Implements the cross-SDK contract:
 
-    AxonFlow emits at most one anonymous heartbeat per environment every
+    AxonFlow emits at most one heartbeat per environment every
     7 days during SDK activity.
 
 The gate is consulted both at client construction and at every public
