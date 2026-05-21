@@ -54,11 +54,6 @@ when no `client_id` is configured.
  legacy SDK builds keep working unchanged.
 - No SDK config changes. No removed fields. No changed defaults.
 
-### Tracking
-
-- [#2230](https://github.com/getaxonflow/axonflow-enterprise/issues/2230)
-- [#2277](https://github.com/getaxonflow/axonflow-enterprise/issues/2277)
-
 ## [8.0.0] - 2026-05-09 — Decision History API + policy_version recorded on every decision + telemetry simplification
 
 **Major release.** The headline feature is the new decision-history client API:
@@ -168,7 +163,6 @@ Major release across the AxonFlow SDK family. Companion releases ship the same d
 ### Fixed
 
 - The `DO_NOT_TRACK=1 is deprecated.` `logger.warning` is no longer emitted on every client construction when `DO_NOT_TRACK=1` is set.
-
 
 ## [6.9.0] - 2026-04-28 — list_providers() + LLMProvider full shape
 
