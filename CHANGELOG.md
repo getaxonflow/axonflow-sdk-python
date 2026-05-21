@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
-## [8.1.0] - 2026-05-19 — `X-Client-ID` header on every outbound request (v9 identity)
+## [8.1.0] - 2026-05-19 — `X-Client-ID` header on every outbound request + `org_id` in telemetry heartbeat
 
-**Companion release to the v9 identity cleanup on the platform (Epic #2230).**
-Every governed request now carries an `X-Client-ID: <effective_client_id>`
+Companion release to the v9 identity cleanup on the platform. Every
+governed request now carries an `X-Client-ID: <effective_client_id>`
 header alongside the existing Basic Auth + `X-Axonflow-Client` headers.
 Value matches the SDK's Basic Auth username — smart default `community`
 when no `client_id` is configured.
@@ -20,42 +20,44 @@ when no `client_id` is configured.
 ### Added
 
 - **`X-Client-ID` header on outbound HTTP requests.** Server-side identity
- decisions no longer need to re-decode Basic Auth. The agent's
- `apiAuthMiddleware` overwrites the header with its own auth-derived
- value, so caller-supplied values are harmless (no spoofing surface).
- Set on the shared `httpx.AsyncClient.headers` dict in
- `axonflow/client.py`, so every endpoint picks it up.
-- **`org_id` field in the telemetry heartbeat body (v9.1 preflight, #2277).**
- Brings Python SDK telemetry up to parity with the platform's
- `startup_telemetry.go` emitter — every heartbeat now identifies which
- deployment-organization emitted it. Two sources in precedence order:
- 1. The `ORG_ID` env var when set (the operator's explicit configuration on
-    self-hosted deployments, or the `cs_<uuid>` tenant identifier on
+ decisions no longer need to re-decode Basic Auth. The platform's auth
+ middleware overwrites the header with its own auth-derived value, so
+ caller-supplied values are harmless (no spoofing surface).
+- **`org_id` field in the telemetry heartbeat body.** Brings the Python
+ SDK telemetry up to parity with the platform — every heartbeat now
+ identifies which deployment-organization emitted it. Two sources in
+ precedence order:
+ 1. The `ORG_ID` env var when set (the operator's explicit configuration
+    on self-hosted deployments, or the `cs_<uuid>` tenant identifier on
     Community SaaS).
  2. Otherwise the `local-dev-org` sentinel (default-config Community-mode
     developers).
- The receiver (`ee/platform/checkpoint-service/pkg/telemetry/telemetry.go`)
- already accepts the field with `omitempty` for backward compat with
- pre-v8.1 SDKs that don't send it. New SDKs always send it. Honors
- `AXONFLOW_TELEMETRY=off` like every other heartbeat field. See
- `axonflow-landing/content/privacy.html` for the customer-facing
- commitment that covers this field.
+ Always emitted by v8.1+ SDKs; older receivers ignore the field cleanly
+ for backward compat. Honors `AXONFLOW_TELEMETRY=off` like every other
+ heartbeat field. See
+ [getaxonflow.com/privacy/](https://getaxonflow.com/privacy/) for the
+ customer-facing commitment that covers this field.
 
 ### Changed
 
 - **Telemetry-enabled log line** softened from "anonymous telemetry
- enabled" to "telemetry enabled" to stay coherent with the v9.1
- `org_id` addition (the operator-supplied `ORG_ID` on self-hosted is
- not anonymized; only the `instance_id` and `cs_<uuid>` Community
- SaaS identifier remain anonymous-by-design).
+ enabled" to "telemetry enabled" to stay coherent with the `org_id`
+ addition — the operator-supplied `ORG_ID` on self-hosted is not
+ anonymized; only the `instance_id` and `cs_<uuid>` Community SaaS
+ identifier remain anonymous-by-design.
 
 ### Compatibility
 
 - Backward-compatible against v8 and v9 platforms: v8 agents ignore the
  unknown header; v9 agents derive identity from Basic Auth regardless.
-- `org_id` is an additive field — the receiver's `omitempty` allows
- legacy SDK builds to keep working unchanged.
+- `org_id` is an additive field — older receivers ignore it cleanly,
+ legacy SDK builds keep working unchanged.
 - No SDK config changes. No removed fields. No changed defaults.
+
+### Tracking
+
+- [#2230](https://github.com/getaxonflow/axonflow-enterprise/issues/2230)
+- [#2277](https://github.com/getaxonflow/axonflow-enterprise/issues/2277)
 
 ## [8.0.0] - 2026-05-09 — Decision History API + policy_version recorded on every decision + telemetry simplification
 
