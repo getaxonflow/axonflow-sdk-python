@@ -20,9 +20,11 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
@@ -94,24 +96,39 @@ def test_telemetry_flushes_on_immediate_exit(mock_checkpoint: Any) -> None:
     # Subprocess runs a one-liner that instantiates the client and exits.
     # No sleep, no explicit flush — only the SDK's atexit handler should
     # keep the ping alive until delivery.
-    env = os.environ.copy()
-    env.pop("DO_NOT_TRACK", None)  # autouse conftest fixture doesn't apply to subprocesses
-    env.pop("AXONFLOW_TELEMETRY", None)
-    env["AXONFLOW_CHECKPOINT_URL"] = f"{base_url}/v1/ping"
+    #
+    # Isolate the subprocess from the developer's real stamp file
+    # (~/Library/Caches/axonflow/python-telemetry-last-sent on macOS,
+    # ~/.cache/axonflow/... on Linux, %LOCALAPPDATA%/axonflow/... on
+    # Windows). Without isolation the heartbeat gate's 7-day delivered
+    # cadence (axonflow/heartbeat.py) silently short-circuits the ping
+    # whenever the stamp file already exists from a prior run on this
+    # machine — the test then asserts on a ping that never fires and
+    # we get a spurious failure that masks real atexit-flush
+    # regressions. Override the per-platform cache root with a fresh
+    # tempdir so the resolver finds no stamp.
+    with tempfile.TemporaryDirectory(prefix="axonflow-telemetry-home-") as fake_home:
+        env = os.environ.copy()
+        env.pop("DO_NOT_TRACK", None)  # autouse conftest fixture doesn't apply to subprocesses
+        env.pop("AXONFLOW_TELEMETRY", None)
+        env["AXONFLOW_CHECKPOINT_URL"] = f"{base_url}/v1/ping"
+        env["HOME"] = fake_home  # macOS + Linux stamp roots
+        env["XDG_CACHE_HOME"] = str(Path(fake_home) / ".cache")  # Linux explicit
+        env["LOCALAPPDATA"] = fake_home  # Windows stamp root
 
-    result = subprocess.run(  # noqa: S603  sys.executable is trusted; args are literal
-        [
-            sys.executable,
-            "-c",
-            "from axonflow import AxonFlow; AxonFlow(endpoint='"  # no trailing sleep
-            + base_url
-            + "')",
-        ],
-        env=env,
-        capture_output=True,
-        timeout=15,
-        check=False,
-    )
+        result = subprocess.run(  # noqa: S603  sys.executable is trusted; args are literal
+            [
+                sys.executable,
+                "-c",
+                "from axonflow import AxonFlow; AxonFlow(endpoint='"  # no trailing sleep
+                + base_url
+                + "')",
+            ],
+            env=env,
+            capture_output=True,
+            timeout=15,
+            check=False,
+        )
     assert result.returncode == 0, (
         f"subprocess failed: stdout={result.stdout!r} stderr={result.stderr!r}"
     )

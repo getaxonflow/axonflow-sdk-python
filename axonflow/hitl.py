@@ -61,12 +61,14 @@ class HITLApprovalRequest(BaseModel):
     notify_url: str | None = Field(
         default=None,
         description=(
-            "Optional outbound webhook URL. When set on creation, the platform "
-            "fires a signed HTTP POST to this URL after the request reaches a "
-            "terminal state (approved/rejected/expired/overridden). Used by "
-            "integrations that pause on a webhook (n8n Wait-node, ADK plugin "
-            "polling-free resume). https:// required; http:// allowed only for "
-            "self-hosted local-dev."
+            "Optional outbound webhook URL associated with the request. "
+            "Mirrors the value supplied on creation. Platforms that "
+            "implement the outbound-webhook dispatcher (introduced in "
+            "getaxonflow/axonflow-enterprise#2419) fire a signed POST to "
+            "this URL after the request reaches a terminal state "
+            "(approved/rejected/expired/overridden). Platforms that "
+            "don't, simply round-trip the field. Enables webhook-driven "
+            "resume (n8n Wait-node, ADK plugin polling-free mode)."
         ),
     )
     expires_at: str = Field(..., description="ISO timestamp of when the request expires")
@@ -146,13 +148,12 @@ class HITLCreateInput(BaseModel):
     notify_url: str | None = Field(
         default=None,
         description=(
-            "Optional outbound webhook URL fired async after terminal "
-            "state transition (approved/rejected/expired/overridden). "
-            "Must be https:// (or http:// for self-hosted local-dev). "
-            "Server-side validation rejects bad schemes with HTTP 400. "
-            "Pair with the HMAC-SHA256 X-AxonFlow-Signature header on "
-            "the receiver side; signing key is the deployment-configured "
-            "AXONFLOW_HITL_WEBHOOK_SIGNING_KEY."
+            "Optional outbound webhook URL recorded on the request. "
+            "Platform-side dispatch (signed POST on terminal state "
+            "transitions) is on the roadmap but NOT live in v9.0 — the "
+            "field is accepted on the wire but not yet acted on. "
+            "Reserve for webhook-driven resume (n8n Wait-node, ADK "
+            "polling-free mode) once the platform feature lands."
         ),
     )
     eu_ai_act_article: str | None = Field(

@@ -12,6 +12,8 @@ from axonflow import AxonFlow, SyncAxonFlow
 from axonflow.exceptions import (
     AuthenticationError,
     AxonFlowError,
+)
+from axonflow.exceptions import (
     ConnectionError as AxonFlowConnectionError,
 )
 from axonflow.hitl import (
@@ -367,42 +369,6 @@ class TestCreateHITLRequest:
         )
         assert result.request_id == "hitl-req-minimal"
         assert result.notify_url is None
-
-    @pytest.mark.asyncio
-    async def test_create_hitl_request_bad_notify_url_scheme_rejected(
-        self,
-        client: AxonFlow,
-        httpx_mock: HTTPXMock,
-    ) -> None:
-        """Platform rejects non-http(s) notify_url schemes with 400; SDK surfaces AxonFlowError.
-
-        Mirrors `platform/agent/hitl/webhook.go:105 ValidateNotifyURL` —
-        the SDK is intentionally a pass-through here so client-side
-        scheme allowlists never lag behind the server-of-truth.
-        """
-        httpx_mock.add_response(
-            method="POST",
-            url="https://test.axonflow.com/api/v1/hitl/queue",
-            status_code=400,
-            json={
-                "success": False,
-                "error": (
-                    "notify_url scheme \"javascript\" is not allowed "
-                    "(use https:// or http://)"
-                ),
-            },
-        )
-
-        with pytest.raises(AxonFlowError) as excinfo:
-            await client.create_hitl_request(
-                HITLCreateInput(
-                    client_id="loan-desk",
-                    original_query="disburse $50000",
-                    request_type="adk-tool",
-                    notify_url="javascript:alert(1)",
-                )
-            )
-        assert "400" in str(excinfo.value)
 
     @pytest.mark.asyncio
     async def test_create_hitl_request_auth_failure_propagates(

@@ -16,19 +16,14 @@ implement the full 4-step HITL approval flow against AxonFlow:
 
   1. Gate evaluates `require_approval` (via `pre_check` / `check_tool_input`)
   2. Plugin calls `client.create_hitl_request(...)` to enqueue the row
-  3. Plugin polls `client.get_hitl_request(approval_id)` until terminal
-     state — OR sets `notify_url` so the platform fires a signed webhook
-     on the transition (n8n Wait-node "On Webhook Call" pattern)
+  3. Plugin polls `client.get_hitl_request(approval_id)` until terminal state
   4. Plugin resumes the agent or denies the call based on the decision
 
 Prior to this release the SDK exposed `get_hitl_request` /
 `approve_hitl_request` / `reject_hitl_request` (the read + review
 surface) but had no method to **create** a row. The platform's
 `POST /api/v1/hitl/queue` endpoint has existed since v6.x; only the SDK
-surface was missing. Ships as part of the cross-SDK parity sweep
-(getaxonflow/axonflow-enterprise#2421) paired with the platform's
-new `notify_url` outbound-webhook field
-(getaxonflow/axonflow-enterprise#2419).
+surface was missing.
 
 ### Added
 
@@ -37,31 +32,26 @@ new `notify_url` outbound-webhook field
 - **`HITLCreateInput` model** in `axonflow.hitl` mirroring
   `platform/agent/hitl/handler.go:86 CreateRequestInput`. Required
   fields: `client_id`, `original_query`, `request_type`. Optional fields
-  cover policy attribution, severity, compliance framework, an expiry
-  override, and the new `notify_url` callback. `X-Org-ID` /
-  `X-Tenant-ID` are derived from the SDK client's configured credentials
-  by the platform's auth middleware — callers do not pass them through
-  this method.
-- **`notify_url` field on `HITLCreateInput` and `HITLApprovalRequest`.**
-  Opt-in webhook URL fired after the request reaches a terminal state
-  (approved / rejected / expired / overridden). Pairs with the
-  HMAC-SHA256 `X-AxonFlow-Signature` header on the receiver side.
-  Scheme allowlist (`https://`, plus `http://` for self-hosted
-  local-dev) is enforced server-side; bad schemes surface as
-  `AxonFlowError` carrying the platform's `HTTP 400`.
-- Five pytest cases covering: full-fields create, minimal-required-fields
-  create, bad-`notify_url`-scheme rejection (400), 401 mapping to
-  `AuthenticationError`, and connection-failure mapping to the SDK's
-  `ConnectionError`. These are the cross-SDK parity tests called out in
-  the umbrella issue's DoD.
+  cover policy attribution, severity, compliance framework, and an
+  expiry override. `X-Org-ID` / `X-Tenant-ID` are derived from the SDK
+  client's configured credentials by the platform's auth middleware —
+  callers do not pass them through this method.
+- **`notify_url` field on `HITLCreateInput` and `HITLApprovalRequest`
+  (forward-look).** Accepted on the wire today but platform-side
+  webhook dispatch on terminal state is on the roadmap (NOT live in
+  v9.0). Carrying the field through the SDK now means callers can
+  populate it once and pick up webhook-driven resume automatically
+  when the platform feature lands. Intended consumers: n8n Wait-node
+  "On Webhook Call" + ADK polling-free mode.
+- Four pytest cases covering: full-fields create, minimal-required-fields
+  create, 401 mapping to `AuthenticationError`, and connection-failure
+  mapping to the SDK's `ConnectionError`.
 
 ### Compatibility
 
 No breaking changes. New imports are additive in `axonflow.hitl`. The
 existing `get_hitl_request` / `approve_hitl_request` /
-`reject_hitl_request` methods are unchanged. `notify_url` on the
-response model is optional and absent in payloads from pre-v8.1
-platforms; older receivers parse the new payload field cleanly.
+`reject_hitl_request` methods are unchanged.
 
 ## [8.1.0] - 2026-05-22 — `X-Client-ID` header on every outbound request + `org_id` in telemetry heartbeat
 
