@@ -6,9 +6,9 @@ SDK runtime-e2e tests landing in the same cross-SDK parity sweep.
 The proof stands up a local HTTP listener that mimics the platform's
 ``POST /api/v1/hitl/queue`` handler (``platform/agent/hitl/handler.go:177``)
 and drives the SDK's :py:meth:`AxonFlow.create_hitl_request` against it
-via the real :mod:`httpx` transport — no mocks, no MagicMock, no
-``httpx_mock`` injection. Captures the raw POST body + the parsed
-response, then asserts:
+via the real :mod:`httpx` transport — production code path, production
+HTTP stack, no library-level test doubles. Captures the raw POST body
++ the parsed response, then asserts:
 
   * Wire body literally contains every required field from
     :class:`axonflow.hitl.HITLCreateInput` (the umbrella issue's coherence

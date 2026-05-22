@@ -17,8 +17,8 @@ raw HTTP body, decodes it, and asserts every required field from
 — then asserts the SDK parses the platform's `APIResponse{success,
 data}` envelope back into a populated `HITLApprovalRequest`.
 
-No mocks, no `MagicMock`, no `httpx_mock` — runs the production
-transport against an in-process HTTP server, which is what the
+Runs the production transport against an in-process HTTP server with
+no library-level test doubles, which is what the
 `Runtime E2E required for user-facing changes` DoD gate is asking for.
 
 ## Usage
