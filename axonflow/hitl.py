@@ -58,6 +58,17 @@ class HITLApprovalRequest(BaseModel):
     reviewed_at: str | None = Field(
         default=None, description="ISO timestamp of when the review occurred"
     )
+    notify_url: str | None = Field(
+        default=None,
+        description=(
+            "Optional outbound webhook URL. When set on creation, the platform "
+            "fires a signed HTTP POST to this URL after the request reaches a "
+            "terminal state (approved/rejected/expired/overridden). Used by "
+            "integrations that pause on a webhook (n8n Wait-node, ADK plugin "
+            "polling-free resume). https:// required; http:// allowed only for "
+            "self-hosted local-dev."
+        ),
+    )
     expires_at: str = Field(..., description="ISO timestamp of when the request expires")
     created_at: str = Field(..., description="ISO timestamp of when the request was created")
     updated_at: str = Field(..., description="ISO timestamp of when the request was last updated")
@@ -99,17 +110,17 @@ class HITLReviewInput(BaseModel):
     )
 
 
-class HITLCreateRequestInput(BaseModel):
+class HITLCreateInput(BaseModel):
     """Input for creating a HITL approval request.
 
-    Mirrors `platform/agent/hitl/handler.go:86 CreateRequestInput`. The
-    platform's `POST /api/v1/hitl/queue` handler reads `X-Org-ID` +
-    `X-Tenant-ID` from request headers (set by the auth middleware
+    Mirrors ``platform/agent/hitl/handler.go:86 CreateRequestInput``. The
+    platform's ``POST /api/v1/hitl/queue`` handler reads ``X-Org-ID`` +
+    ``X-Tenant-ID`` from request headers (set by the auth middleware
     from the SDK client's credentials), and the JSON body must carry
     the fields below.
 
-    Used by callers that detect `require_approval` from
-    `pre_check` / `check_tool_input` and want to enqueue the
+    Used by callers that detect ``require_approval`` from
+    ``pre_check`` / ``check_tool_input`` and want to enqueue the
     corresponding HITL row before polling for the reviewer's decision.
     """
 
@@ -131,6 +142,18 @@ class HITLCreateRequestInput(BaseModel):
     )
     severity: str | None = Field(
         default=None, description="Severity (critical | high | medium | low)"
+    )
+    notify_url: str | None = Field(
+        default=None,
+        description=(
+            "Optional outbound webhook URL fired async after terminal "
+            "state transition (approved/rejected/expired/overridden). "
+            "Must be https:// (or http:// for self-hosted local-dev). "
+            "Server-side validation rejects bad schemes with HTTP 400. "
+            "Pair with the HMAC-SHA256 X-AxonFlow-Signature header on "
+            "the receiver side; signing key is the deployment-configured "
+            "AXONFLOW_HITL_WEBHOOK_SIGNING_KEY."
+        ),
     )
     eu_ai_act_article: str | None = Field(
         default=None, description="EU AI Act article reference (e.g. 'Article 14')"

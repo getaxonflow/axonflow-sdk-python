@@ -9,9 +9,14 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 from axonflow import AxonFlow, SyncAxonFlow
+from axonflow.exceptions import (
+    AuthenticationError,
+    AxonFlowError,
+    ConnectionError as AxonFlowConnectionError,
+)
 from axonflow.hitl import (
     HITLApprovalRequest,
-    HITLCreateRequestInput,
+    HITLCreateInput,
     HITLQueueListOptions,
     HITLQueueListResponse,
     HITLReviewInput,
@@ -292,6 +297,7 @@ class TestCreateHITLRequest:
                     "triggered_policy_name": "Loan amount cap",
                     "trigger_reason": "Disbursement above $10k requires manager approval",
                     "severity": "high",
+                    "notify_url": "https://workflows.example.com/hooks/loan-approve",
                     "status": "pending",
                     "expires_at": "2026-05-23T11:00:00Z",
                     "created_at": "2026-05-23T10:00:00Z",
@@ -301,7 +307,7 @@ class TestCreateHITLRequest:
         )
 
         result = await client.create_hitl_request(
-            HITLCreateRequestInput(
+            HITLCreateInput(
                 client_id="loan-desk",
                 user_id="cust-001",
                 original_query="disburse $50000 to cust-001",
@@ -311,12 +317,14 @@ class TestCreateHITLRequest:
                 triggered_policy_name="Loan amount cap",
                 trigger_reason="Disbursement above $10k requires manager approval",
                 severity="high",
+                notify_url="https://workflows.example.com/hooks/loan-approve",
             )
         )
         assert isinstance(result, HITLApprovalRequest)
         assert result.request_id == "hitl-req-new-001"
         assert result.status == "pending"
         assert result.triggered_policy_name == "Loan amount cap"
+        assert result.notify_url == "https://workflows.example.com/hooks/loan-approve"
 
     @pytest.mark.asyncio
     async def test_create_hitl_request_minimal(
@@ -351,13 +359,111 @@ class TestCreateHITLRequest:
         )
 
         result = await client.create_hitl_request(
-            HITLCreateRequestInput(
+            HITLCreateInput(
                 client_id="c1",
                 original_query="q",
                 request_type="chat",
             )
         )
         assert result.request_id == "hitl-req-minimal"
+        assert result.notify_url is None
+
+    @pytest.mark.asyncio
+    async def test_create_hitl_request_bad_notify_url_scheme_rejected(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Platform rejects non-http(s) notify_url schemes with 400; SDK surfaces AxonFlowError.
+
+        Mirrors `platform/agent/hitl/webhook.go:105 ValidateNotifyURL` —
+        the SDK is intentionally a pass-through here so client-side
+        scheme allowlists never lag behind the server-of-truth.
+        """
+        httpx_mock.add_response(
+            method="POST",
+            url="https://test.axonflow.com/api/v1/hitl/queue",
+            status_code=400,
+            json={
+                "success": False,
+                "error": (
+                    "notify_url scheme \"javascript\" is not allowed "
+                    "(use https:// or http://)"
+                ),
+            },
+        )
+
+        with pytest.raises(AxonFlowError) as excinfo:
+            await client.create_hitl_request(
+                HITLCreateInput(
+                    client_id="loan-desk",
+                    original_query="disburse $50000",
+                    request_type="adk-tool",
+                    notify_url="javascript:alert(1)",
+                )
+            )
+        assert "400" in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    async def test_create_hitl_request_auth_failure_propagates(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """401 from the platform surfaces as AuthenticationError, not a bare AxonFlowError.
+
+        Exercises the same error-mapping path as every other SDK method.
+        Important here because ADK / n8n callers configure credentials
+        once at agent start and a rotated key shouldn't look like a
+        validation problem when create_hitl_request is the first
+        request after the rotation.
+        """
+        httpx_mock.add_response(
+            method="POST",
+            url="https://test.axonflow.com/api/v1/hitl/queue",
+            status_code=401,
+            json={"success": False, "error": "Invalid API key"},
+        )
+
+        with pytest.raises(AuthenticationError):
+            await client.create_hitl_request(
+                HITLCreateInput(
+                    client_id="loan-desk",
+                    original_query="disburse $50000",
+                    request_type="adk-tool",
+                )
+            )
+
+    @pytest.mark.asyncio
+    async def test_create_hitl_request_network_failure_propagates(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Connect failure propagates as AxonFlow ConnectionError after retries are exhausted.
+
+        ``_request`` wraps :class:`httpx.ConnectError` in
+        :class:`axonflow.exceptions.ConnectionError`; this test guards
+        the mapping so ADK callers can rely on it when implementing
+        their own retry/backoff above us. The default ``RetryConfig``
+        attempts the request three times before giving up — register
+        one exception per attempt so the test deterministically reaches
+        the wrapped-error path instead of getting a "no response
+        registered" :class:`TimeoutError` on the retry.
+        """
+        import httpx
+
+        for _ in range(3):
+            httpx_mock.add_exception(httpx.ConnectError("connection refused"))
+
+        with pytest.raises(AxonFlowConnectionError):
+            await client.create_hitl_request(
+                HITLCreateInput(
+                    client_id="loan-desk",
+                    original_query="disburse $50000",
+                    request_type="adk-tool",
+                )
+            )
 
 
 # =========================================================================

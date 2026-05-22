@@ -112,7 +112,7 @@ from axonflow.execution import (
 from axonflow.heartbeat import maybe_send_heartbeat
 from axonflow.hitl import (
     HITLApprovalRequest,
-    HITLCreateRequestInput,
+    HITLCreateInput,
     HITLQueueListOptions,
     HITLQueueListResponse,
     HITLReviewInput,
@@ -5144,37 +5144,50 @@ class AxonFlow:
 
     async def create_hitl_request(
         self,
-        request: HITLCreateRequestInput,
+        request: HITLCreateInput,
     ) -> HITLApprovalRequest:
         """Create a HITL approval request in the queue.
 
         Enterprise Feature: Requires AxonFlow Enterprise license. The
-        platform's `POST /api/v1/hitl/queue` handler returns 403 with
-        `ErrHITLApprovalDisabledByTier` when called against a community
-        tier that hasn't enabled HITL.
+        platform's ``POST /api/v1/hitl/queue`` handler returns 403 with
+        ``ErrHITLApprovalDisabledByTier`` when called against a community
+        tier that hasn't enabled HITL, and 401 when credentials are
+        invalid.
 
         This is the explicit row-creation step for callers that detect
-        `require_approval` from a separate gate (`pre_check`,
-        `check_tool_input`, MAP plan approvals) and want the row enqueued
+        ``require_approval`` from a separate gate (``pre_check``,
+        ``check_tool_input``, MAP plan approvals) and want the row enqueued
         so a reviewer can act on it. After creating, poll
-        `get_hitl_request(<returned approval_id>)` until terminal state.
+        ``get_hitl_request(<returned approval_id>)`` until terminal state,
+        or pass ``notify_url`` so the platform fires a signed webhook on
+        terminal-state transition (see
+        ``axonflow-docs/docs/governance/hitl.md`` for the envelope shape).
 
         Args:
-            request: Pre-populated `HITLCreateRequestInput`. `client_id`,
-                `original_query`, and `request_type` are required; all
-                other fields are optional and default to empty strings or
-                None on the wire (the platform stores them as such).
+            request: Pre-populated :class:`HITLCreateInput`. ``client_id``,
+                ``original_query``, and ``request_type`` are required; all
+                other fields are optional. Bad ``notify_url`` schemes are
+                rejected by the platform with HTTP 400 (surfaced here as
+                :class:`AxonFlowError`); only ``https://`` (and
+                ``http://`` for self-hosted local-dev) are accepted.
 
         Returns:
-            The created `HITLApprovalRequest` with `request_id` populated.
+            The created :class:`HITLApprovalRequest` with ``request_id``
+            populated.
 
         Raises:
-            AxonFlowError: If the platform rejects the request (tier gate,
-                missing org/tenant headers, pending-approval cap exceeded).
+            AuthenticationError: 401 from the platform (invalid creds).
+            PolicyViolationError: 403 from the platform (tier gate or
+                missing/forbidden org/tenant context).
+            AxonFlowError: 400 (validation: bad ``notify_url`` scheme,
+                missing required fields), 429 (pending-approval cap), or
+                any other non-2xx response.
+            ConnectionError: TCP/TLS-level connection failure.
+            TimeoutError: Request timed out.
 
         Example:
             >>> req = await client.create_hitl_request(
-            ...     HITLCreateRequestInput(
+            ...     HITLCreateInput(
             ...         client_id="loan-desk",
             ...         original_query="disburse $50000 to cust-001",
             ...         request_type="adk-tool",
@@ -5182,6 +5195,7 @@ class AxonFlow:
             ...         triggered_policy_name="Loan amount cap",
             ...         trigger_reason="Disbursement above $10k requires manager approval",
             ...         severity="high",
+            ...         notify_url="https://workflows.example.com/hooks/loan-approve",
             ...     )
             ... )
             >>> print(req.request_id)
@@ -5193,6 +5207,7 @@ class AxonFlow:
                 "Creating HITL request",
                 client_id=request.client_id,
                 request_type=request.request_type,
+                notify_url=request.notify_url,
             )
 
         response = await self._request("POST", "/api/v1/hitl/queue", json_data=body)
@@ -7992,9 +8007,12 @@ class SyncAxonFlow:
 
     def create_hitl_request(
         self,
-        request: HITLCreateRequestInput,
+        request: HITLCreateInput,
     ) -> HITLApprovalRequest:
-        """Create a HITL approval request in the queue (sync)."""
+        """Create a HITL approval request in the queue (sync).
+
+        See :py:meth:`AxonFlow.create_hitl_request` for full semantics.
+        """
         return self._run_sync(self._async_client.create_hitl_request(request))
 
     def get_hitl_request(self, request_id: str) -> HITLApprovalRequest:
