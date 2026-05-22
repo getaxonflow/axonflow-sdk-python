@@ -162,9 +162,7 @@ class HITLCreateInput(BaseModel):
     compliance_framework: str | None = Field(
         default=None, description="Compliance framework label (GDPR / HIPAA / RBI / ...)"
     )
-    risk_classification: str | None = Field(
-        default=None, description="Risk classification level"
-    )
+    risk_classification: str | None = Field(default=None, description="Risk classification level")
     expires_in_seconds: int | None = Field(
         default=None, ge=1, description="Optional override for the approval expiry window"
     )

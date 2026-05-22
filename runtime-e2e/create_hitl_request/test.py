@@ -160,9 +160,7 @@ def main() -> int:
         sys.stderr.write(f"FAIL: parsed request_id = {result.request_id!r}\n")
         return 1
     if result.notify_url != notify_url:
-        sys.stderr.write(
-            f"FAIL: parsed notify_url = {result.notify_url!r}, want {notify_url!r}\n"
-        )
+        sys.stderr.write(f"FAIL: parsed notify_url = {result.notify_url!r}, want {notify_url!r}\n")
         return 1
 
     print(f"PASS: create_hitl_request wire payload + response parsing round-trip OK")
