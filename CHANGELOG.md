@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [8.2.0] - 2026-05-23 — `create_hitl_request` for explicit HITL row creation
+
+Enables agent-framework plugins (Google ADK, n8n, OpenAI Agents SDK) to
+implement the full 4-step HITL approval flow against AxonFlow:
+
+  1. Gate evaluates `require_approval` (via `pre_check` / `check_tool_input`)
+  2. Plugin calls `client.create_hitl_request(...)` to enqueue the row
+  3. Plugin polls `client.get_hitl_request(approval_id)` until terminal state
+  4. Plugin resumes the agent or denies the call based on the decision
+
+Prior to this release the SDK exposed `get_hitl_request` / `approve_hitl_request` /
+`reject_hitl_request` (the read + review surface) but had no method to
+**create** a row. The platform's `POST /api/v1/hitl/queue` endpoint
+has existed since v6.x; only the SDK surface was missing.
+
+### Added
+
+- **`client.create_hitl_request(request: HITLCreateRequestInput) -> HITLApprovalRequest`**
+  (async). Sync wrapper on `SyncAxonFlow` mirrors the async shape.
+- **`HITLCreateRequestInput` model** in `axonflow.hitl` mirroring
+  `platform/agent/hitl/handler.go:86 CreateRequestInput`. Required fields:
+  `client_id`, `original_query`, `request_type`. Optional fields cover
+  policy attribution, severity, compliance framework, and an expiry
+  override. `X-Org-ID` / `X-Tenant-ID` are derived from the SDK client's
+  configured credentials by the platform's auth middleware — callers do
+  not pass them through this method.
+- Two pytest cases covering full-fields + minimal-required-fields
+  create requests.
+
+### Compatibility
+
+No breaking changes. New imports are additive in `axonflow.hitl`. The
+existing `get_hitl_request` / `approve_hitl_request` / `reject_hitl_request`
+methods are unchanged.
+
 ## [8.1.0] - 2026-05-22 — `X-Client-ID` header on every outbound request + `org_id` in telemetry heartbeat
 
 Companion release to the v9 identity cleanup on the platform. Every

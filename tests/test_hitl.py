@@ -11,6 +11,7 @@ from pytest_httpx import HTTPXMock
 from axonflow import AxonFlow, SyncAxonFlow
 from axonflow.hitl import (
     HITLApprovalRequest,
+    HITLCreateRequestInput,
     HITLQueueListOptions,
     HITLQueueListResponse,
     HITLReviewInput,
@@ -255,6 +256,108 @@ class TestGetHITLRequest:
         assert result.reviewer_email == "admin@hospital.com"
         assert result.review_comment == "Authorized physician request"
         assert result.reviewed_at == "2026-02-12T12:00:00Z"
+
+
+# =========================================================================
+# HITL Create Request Tests
+# =========================================================================
+
+
+class TestCreateHITLRequest:
+    """Test create_hitl_request method (POST /api/v1/hitl/queue)."""
+
+    @pytest.mark.asyncio
+    async def test_create_hitl_request(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Posting a valid create-input enqueues a HITL row and returns the created record."""
+        httpx_mock.add_response(
+            method="POST",
+            url="https://test.axonflow.com/api/v1/hitl/queue",
+            status_code=201,
+            json={
+                "success": True,
+                "data": {
+                    "request_id": "hitl-req-new-001",
+                    "org_id": "org-1",
+                    "tenant_id": "tenant-1",
+                    "client_id": "loan-desk",
+                    "user_id": "cust-001",
+                    "original_query": "disburse $50000 to cust-001",
+                    "request_type": "adk-tool",
+                    "request_context": {"tool_name": "disburse_payment"},
+                    "triggered_policy_id": "loan-amount-cap",
+                    "triggered_policy_name": "Loan amount cap",
+                    "trigger_reason": "Disbursement above $10k requires manager approval",
+                    "severity": "high",
+                    "status": "pending",
+                    "expires_at": "2026-05-23T11:00:00Z",
+                    "created_at": "2026-05-23T10:00:00Z",
+                    "updated_at": "2026-05-23T10:00:00Z",
+                },
+            },
+        )
+
+        result = await client.create_hitl_request(
+            HITLCreateRequestInput(
+                client_id="loan-desk",
+                user_id="cust-001",
+                original_query="disburse $50000 to cust-001",
+                request_type="adk-tool",
+                request_context={"tool_name": "disburse_payment"},
+                triggered_policy_id="loan-amount-cap",
+                triggered_policy_name="Loan amount cap",
+                trigger_reason="Disbursement above $10k requires manager approval",
+                severity="high",
+            )
+        )
+        assert isinstance(result, HITLApprovalRequest)
+        assert result.request_id == "hitl-req-new-001"
+        assert result.status == "pending"
+        assert result.triggered_policy_name == "Loan amount cap"
+
+    @pytest.mark.asyncio
+    async def test_create_hitl_request_minimal(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """The required-field minimum is client_id + original_query + request_type."""
+        httpx_mock.add_response(
+            method="POST",
+            url="https://test.axonflow.com/api/v1/hitl/queue",
+            status_code=201,
+            json={
+                "success": True,
+                "data": {
+                    "request_id": "hitl-req-minimal",
+                    "org_id": "org-1",
+                    "tenant_id": "tenant-1",
+                    "client_id": "c1",
+                    "original_query": "q",
+                    "request_type": "chat",
+                    "triggered_policy_id": "",
+                    "triggered_policy_name": "",
+                    "trigger_reason": "",
+                    "severity": "medium",
+                    "status": "pending",
+                    "expires_at": "2026-05-23T11:00:00Z",
+                    "created_at": "2026-05-23T10:00:00Z",
+                    "updated_at": "2026-05-23T10:00:00Z",
+                },
+            },
+        )
+
+        result = await client.create_hitl_request(
+            HITLCreateRequestInput(
+                client_id="c1",
+                original_query="q",
+                request_type="chat",
+            )
+        )
+        assert result.request_id == "hitl-req-minimal"
 
 
 # =========================================================================

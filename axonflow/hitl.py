@@ -99,6 +99,53 @@ class HITLReviewInput(BaseModel):
     )
 
 
+class HITLCreateRequestInput(BaseModel):
+    """Input for creating a HITL approval request.
+
+    Mirrors `platform/agent/hitl/handler.go:86 CreateRequestInput`. The
+    platform's `POST /api/v1/hitl/queue` handler reads `X-Org-ID` +
+    `X-Tenant-ID` from request headers (set by the auth middleware
+    from the SDK client's credentials), and the JSON body must carry
+    the fields below.
+
+    Used by callers that detect `require_approval` from
+    `pre_check` / `check_tool_input` and want to enqueue the
+    corresponding HITL row before polling for the reviewer's decision.
+    """
+
+    client_id: str = Field(..., description="Client identifier that triggered the request")
+    user_id: str | None = Field(default=None, description="End-user identifier (optional)")
+    original_query: str = Field(..., description="Original query that triggered the gate")
+    request_type: str = Field(..., description="Request type (e.g. chat, tool, mcp)")
+    request_context: dict[str, Any] | None = Field(
+        default=None, description="Additional context propagated from the gated call"
+    )
+    triggered_policy_id: str = Field(
+        default="", description="ID of the policy that fired require_approval"
+    )
+    triggered_policy_name: str = Field(
+        default="", description="Display name of the policy that fired require_approval"
+    )
+    trigger_reason: str = Field(
+        default="", description="Human-readable explanation of why approval is needed"
+    )
+    severity: str | None = Field(
+        default=None, description="Severity (critical | high | medium | low)"
+    )
+    eu_ai_act_article: str | None = Field(
+        default=None, description="EU AI Act article reference (e.g. 'Article 14')"
+    )
+    compliance_framework: str | None = Field(
+        default=None, description="Compliance framework label (GDPR / HIPAA / RBI / ...)"
+    )
+    risk_classification: str | None = Field(
+        default=None, description="Risk classification level"
+    )
+    expires_in_seconds: int | None = Field(
+        default=None, ge=1, description="Optional override for the approval expiry window"
+    )
+
+
 class HITLStats(BaseModel):
     """Dashboard statistics for the HITL approval queue."""
 
