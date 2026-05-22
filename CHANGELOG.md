@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
-## [8.1.0] - 2026-05-19 — `X-Client-ID` header on every outbound request + `org_id` in telemetry heartbeat
+## [8.1.0] - 2026-05-22 — `X-Client-ID` header on every outbound request + `org_id` in telemetry heartbeat
 
 Companion release to the v9 identity cleanup on the platform. Every
 governed request now carries an `X-Client-ID: <effective_client_id>`
