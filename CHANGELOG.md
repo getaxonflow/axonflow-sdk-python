@@ -23,7 +23,10 @@ Prior to this release the SDK exposed `get_hitl_request` /
 `approve_hitl_request` / `reject_hitl_request` (the read + review
 surface) but had no method to **create** a row. The platform's
 `POST /api/v1/hitl/queue` endpoint has existed since v6.x; only the SDK
-surface was missing.
+surface was missing. Ships as the Python half of the cross-SDK parity
+sweep (getaxonflow/axonflow-enterprise#2421) paired with the platform's
+new `notify_url` outbound-webhook field
+(getaxonflow/axonflow-enterprise#2419).
 
 ### Added
 
@@ -43,9 +46,11 @@ surface was missing.
   populate it once and pick up webhook-driven resume automatically
   when the platform feature lands. Intended consumers: n8n Wait-node
   "On Webhook Call" + ADK polling-free mode.
-- Four pytest cases covering: full-fields create, minimal-required-fields
-  create, 401 mapping to `AuthenticationError`, and connection-failure
-  mapping to the SDK's `ConnectionError`.
+- Five pytest cases covering: full-fields create, minimal-required-fields
+  create, bad-`notify_url`-scheme 400 propagation, 401 mapping to
+  `AuthenticationError`, and connection-failure mapping to the SDK's
+  `ConnectionError`. Parity with the TS/Go/Java/Rust sister sweep
+  (getaxonflow/axonflow-enterprise#2421).
 
 ### Compatibility
 

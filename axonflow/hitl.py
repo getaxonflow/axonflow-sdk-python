@@ -133,14 +133,14 @@ class HITLCreateInput(BaseModel):
     request_context: dict[str, Any] | None = Field(
         default=None, description="Additional context propagated from the gated call"
     )
-    triggered_policy_id: str = Field(
-        default="", description="ID of the policy that fired require_approval"
+    triggered_policy_id: str | None = Field(
+        default=None, description="ID of the policy that fired require_approval"
     )
-    triggered_policy_name: str = Field(
-        default="", description="Display name of the policy that fired require_approval"
+    triggered_policy_name: str | None = Field(
+        default=None, description="Display name of the policy that fired require_approval"
     )
-    trigger_reason: str = Field(
-        default="", description="Human-readable explanation of why approval is needed"
+    trigger_reason: str | None = Field(
+        default=None, description="Human-readable explanation of why approval is needed"
     )
     severity: str | None = Field(
         default=None, description="Severity (critical | high | medium | low)"
