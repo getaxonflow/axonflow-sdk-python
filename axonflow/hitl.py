@@ -58,6 +58,19 @@ class HITLApprovalRequest(BaseModel):
     reviewed_at: str | None = Field(
         default=None, description="ISO timestamp of when the review occurred"
     )
+    notify_url: str | None = Field(
+        default=None,
+        description=(
+            "Optional outbound webhook URL associated with the request. "
+            "Mirrors the value supplied on creation. Platforms that "
+            "implement the outbound-webhook dispatcher (introduced in "
+            "getaxonflow/axonflow-enterprise#2419) fire a signed POST to "
+            "this URL after the request reaches a terminal state "
+            "(approved/rejected/expired/overridden). Platforms that "
+            "don't, simply round-trip the field. Enables webhook-driven "
+            "resume (n8n Wait-node, ADK plugin polling-free mode)."
+        ),
+    )
     expires_at: str = Field(..., description="ISO timestamp of when the request expires")
     created_at: str = Field(..., description="ISO timestamp of when the request was created")
     updated_at: str = Field(..., description="ISO timestamp of when the request was last updated")
@@ -96,6 +109,62 @@ class HITLReviewInput(BaseModel):
     )
     comment: str | None = Field(
         default=None, description="Optional comment explaining the decision"
+    )
+
+
+class HITLCreateInput(BaseModel):
+    """Input for creating a HITL approval request.
+
+    Mirrors ``platform/agent/hitl/handler.go:86 CreateRequestInput``. The
+    platform's ``POST /api/v1/hitl/queue`` handler reads ``X-Org-ID`` +
+    ``X-Tenant-ID`` from request headers (set by the auth middleware
+    from the SDK client's credentials), and the JSON body must carry
+    the fields below.
+
+    Used by callers that detect ``require_approval`` from
+    ``pre_check`` / ``check_tool_input`` and want to enqueue the
+    corresponding HITL row before polling for the reviewer's decision.
+    """
+
+    client_id: str = Field(..., description="Client identifier that triggered the request")
+    user_id: str | None = Field(default=None, description="End-user identifier (optional)")
+    original_query: str = Field(..., description="Original query that triggered the gate")
+    request_type: str = Field(..., description="Request type (e.g. chat, tool, mcp)")
+    request_context: dict[str, Any] | None = Field(
+        default=None, description="Additional context propagated from the gated call"
+    )
+    triggered_policy_id: str = Field(
+        default="", description="ID of the policy that fired require_approval"
+    )
+    triggered_policy_name: str = Field(
+        default="", description="Display name of the policy that fired require_approval"
+    )
+    trigger_reason: str = Field(
+        default="", description="Human-readable explanation of why approval is needed"
+    )
+    severity: str | None = Field(
+        default=None, description="Severity (critical | high | medium | low)"
+    )
+    notify_url: str | None = Field(
+        default=None,
+        description=(
+            "Optional outbound webhook URL recorded on the request. "
+            "Platform-side dispatch (signed POST on terminal state "
+            "transitions) is on the roadmap but NOT live in v9.0 — the "
+            "field is accepted on the wire but not yet acted on. "
+            "Reserve for webhook-driven resume (n8n Wait-node, ADK "
+            "polling-free mode) once the platform feature lands."
+        ),
+    )
+    eu_ai_act_article: str | None = Field(
+        default=None, description="EU AI Act article reference (e.g. 'Article 14')"
+    )
+    compliance_framework: str | None = Field(
+        default=None, description="Compliance framework label (GDPR / HIPAA / RBI / ...)"
+    )
+    risk_classification: str | None = Field(default=None, description="Risk classification level")
+    expires_in_seconds: int | None = Field(
+        default=None, ge=1, description="Optional override for the approval expiry window"
     )
 
 
