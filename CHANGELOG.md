@@ -58,6 +58,9 @@ No breaking changes. New imports are additive in `axonflow.hitl`. The
 existing `get_hitl_request` / `approve_hitl_request` /
 `reject_hitl_request` methods are unchanged.
 
+Requires AxonFlow platform >= 8.1.0 for `notify_url` webhook delivery
+and `Idempotency-Key` request deduplication.
+
 ## [8.1.0] - 2026-05-22 — `X-Client-ID` header on every outbound request + `org_id` in telemetry heartbeat
 
 Companion release to the v9 identity cleanup on the platform. Every
@@ -76,7 +79,7 @@ when no `client_id` is configured.
  SDK telemetry up to parity with the platform — every heartbeat now
  identifies which deployment-organization emitted it. Two sources in
  precedence order:
- 1. The `ORG_ID` env var when set (the operator's explicit configuration
+ 1. The `ORG_ID` env var when set (the explicit configuration
     on self-hosted deployments, or the `cs_<uuid>` tenant identifier on
     Community SaaS).
  2. Otherwise the `local-dev-org` sentinel (default-config Community-mode
@@ -91,7 +94,7 @@ when no `client_id` is configured.
 
 - **Telemetry-enabled log line** softened from "anonymous telemetry
  enabled" to "telemetry enabled" to stay coherent with the `org_id`
- addition — the operator-supplied `ORG_ID` on self-hosted is not
+ addition — the configured `ORG_ID` on self-hosted deployments is not
  anonymized; only the `instance_id` and `cs_<uuid>` Community SaaS
  identifier remain anonymous-by-design.
 
