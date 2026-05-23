@@ -376,7 +376,7 @@ class TestCreateHITLRequest:
         client: AxonFlow,
         httpx_mock: HTTPXMock,
     ) -> None:
-        """Platform-side notify_url scheme rejection surfaces as AxonFlowError.
+        """Platform-side notify_url scheme rejection surfaces as AxonFlowError carrying HTTP 400.
 
         Mirrors ``platform/agent/hitl/webhook.go:105 ValidateNotifyURL``
         in the companion sister-session work for
@@ -384,6 +384,14 @@ class TestCreateHITLRequest:
         pass-through here so a tightened scheme allowlist on the
         platform does not require an SDK upgrade. Parity with TS/Go/
         Java/Rust sister tests in the same v8.2.0 release train.
+
+        Narrows on ``match="HTTP 400"`` so the assertion specifically
+        catches the 400-mapping path (``client.py`` raises bare
+        ``AxonFlowError`` for unmapped 4xx with message
+        ``f"HTTP {status}: {body}"``) and would FAIL if the SDK
+        accidentally throws ``AuthenticationError`` (401) or
+        ``PolicyViolationError`` (403) on a 400 response. See
+        [[feedback_narrow_error_assertions_not_bare_throws]].
         """
         httpx_mock.add_response(
             method="POST",
@@ -395,7 +403,7 @@ class TestCreateHITLRequest:
             },
         )
 
-        with pytest.raises(AxonFlowError):
+        with pytest.raises(AxonFlowError, match="HTTP 400") as excinfo:
             await client.create_hitl_request(
                 HITLCreateInput(
                     client_id="loan-desk",
@@ -404,6 +412,10 @@ class TestCreateHITLRequest:
                     notify_url="javascript:alert(1)",
                 )
             )
+        # The 400 path raises the BASE AxonFlowError, never a more
+        # specific subclass — pin that contract so a future refactor
+        # that maps 400 → some new subclass updates this test too.
+        assert type(excinfo.value) is AxonFlowError
 
     @pytest.mark.asyncio
     async def test_create_hitl_request_auth_failure_propagates(
