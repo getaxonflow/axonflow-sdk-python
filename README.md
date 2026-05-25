@@ -13,7 +13,7 @@ Enterprise AI Governance in 3 Lines of Code.
 >
 > Choose the path that fits:
 > - **Self-serve:** free 90-day [Evaluation License](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval)
-> - **Hands-on:** [Design Partner Program](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python) with either **6 months of self-hosted / in-VPC Enterprise** at no cost or **3 months of AxonFlow-managed Enterprise SaaS** with SLO-backed support, up to **50,000 write requests / 1,000,000 total requests per month**
+> - **Hands-on:** [Design Partner Program](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python) — Enterprise access for the scoped engagement, founder-led architecture and rollout support, and preferential pricing after successful rollout
 >
 > Priority support, architecture review, incident-readiness review, and roadmap input are included for selected partners. We reply within 48 hours.
 
