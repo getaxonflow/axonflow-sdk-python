@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [Unreleased]
+
+### Added
+
+- **`PolicyCategory.PII_INDONESIA` constant** (`"pii-indonesia"`).
+  Enables filtering and creating policies for Indonesian PII detection
+  (NIK, KK, NPWP, BPJS) alongside the existing per-jurisdiction categories.
+- **`data_residency` and `transfer_basis` fields on `AuditLogEntry`.**
+  Optional string fields supporting cross-border data transfer logging.
+  `data_residency` is an ISO 3166-1 alpha-2 country code;
+  `transfer_basis` is one of `adequacy`, `safeguards`, or `consent`.
+  Both default to `None` for backward compatibility with older platform versions.
+- **Indonesia compliance example** (`examples/indonesia_compliance.py`):
+  demonstrates NIK detection, audit log querying with cross-border fields,
+  and policy filtering by the new `pii-indonesia` category.
+
 ## [8.2.0] - 2026-05-23 — `create_hitl_request` for explicit HITL row creation
 
 Enables agent-framework plugins (Google ADK, n8n, OpenAI Agents SDK) to

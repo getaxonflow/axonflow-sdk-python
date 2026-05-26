@@ -827,6 +827,8 @@ class AuditLogEntry(BaseModel):
     latency_ms: int = Field(default=0, ge=0, description="Latency in ms")
     policy_violations: list[str] = Field(default_factory=list, description="Violated policies")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    data_residency: str | None = Field(default=None, description="ISO 3166-1 alpha-2 country code for data storage location")
+    transfer_basis: str | None = Field(default=None, description="Legal basis for cross-border transfer: adequacy, safeguards, or consent")
 
 
 class AuditSearchResponse(BaseModel):
