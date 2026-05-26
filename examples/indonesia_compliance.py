@@ -17,6 +17,7 @@ import asyncio
 import os
 
 from axonflow import AxonFlow
+from axonflow.exceptions import AxonFlowError
 from axonflow.policies import PolicyCategory
 
 
@@ -25,8 +26,9 @@ async def main() -> None:
     client_id = os.environ.get("AXONFLOW_CLIENT_ID", "")
     client_secret = os.environ.get("AXONFLOW_CLIENT_SECRET", "")
 
+    msg = "AXONFLOW_CLIENT_ID and AXONFLOW_CLIENT_SECRET must be set"
     if not client_id or not client_secret:
-        raise SystemExit("AXONFLOW_CLIENT_ID and AXONFLOW_CLIENT_SECRET must be set")
+        raise SystemExit(msg)
 
     client = AxonFlow(
         agent_url=agent_url,
@@ -51,7 +53,7 @@ async def main() -> None:
         print(f"Response blocked: {resp.blocked}")
         if resp.policy_info:
             print(f"Policies evaluated: {resp.policy_info.policies_evaluated}")
-    except Exception as e:
+    except AxonFlowError as e:
         print(f"Request error (expected if no LLM configured): {e}")
 
     # 3. Query audit logs to demonstrate cross-border fields
@@ -66,7 +68,7 @@ async def main() -> None:
             if entry.transfer_basis:
                 line += f" basis={entry.transfer_basis}"
             print(line)
-    except Exception as e:
+    except AxonFlowError as e:
         print(f"Audit search error: {e}")
 
     # 4. List policies filtered by Indonesia PII category
@@ -78,7 +80,7 @@ async def main() -> None:
         print(f"Found {len(policies)} Indonesia PII policies")
         for p in policies:
             print(f"  {p.name}: {p.description} (severity={p.severity}, action={p.action})")
-    except Exception as e:
+    except AxonFlowError as e:
         print(f"Policy list error: {e}")
 
     print("\n=== Done ===")
