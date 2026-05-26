@@ -22,7 +22,7 @@ from axonflow.policies import PolicyCategory
 
 
 async def main() -> None:
-    agent_url = os.environ.get("AXONFLOW_AGENT_URL", "http://localhost:8080")
+    endpoint = os.environ.get("AXONFLOW_AGENT_URL", "http://localhost:8080")
     client_id = os.environ.get("AXONFLOW_CLIENT_ID", "")
     client_secret = os.environ.get("AXONFLOW_CLIENT_SECRET", "")
 
@@ -31,7 +31,7 @@ async def main() -> None:
         raise SystemExit(msg)
 
     client = AxonFlow(
-        agent_url=agent_url,
+        endpoint=endpoint,
         client_id=client_id,
         client_secret=client_secret,
     )
@@ -59,13 +59,17 @@ async def main() -> None:
     # 3. Query audit logs to demonstrate cross-border fields
     print("\nQuerying audit logs...")
     try:
-        audit_resp = await client.search_audit_logs(limit=5)
+        from axonflow.types import AuditSearchRequest
+
+        audit_resp = await client.search_audit_logs(
+            AuditSearchRequest(limit=5),
+        )
         print(f"Found {len(audit_resp.entries)} audit entries")
         for entry in audit_resp.entries:
             line = f"  [{entry.timestamp}] type={entry.request_type} blocked={entry.blocked}"
-            if entry.data_residency:
+            if getattr(entry, "data_residency", None):
                 line += f" residency={entry.data_residency}"
-            if entry.transfer_basis:
+            if getattr(entry, "transfer_basis", None):
                 line += f" basis={entry.transfer_basis}"
             print(line)
     except AxonFlowError as e:
@@ -74,12 +78,14 @@ async def main() -> None:
     # 4. List policies filtered by Indonesia PII category
     print("\nListing Indonesia PII policies...")
     try:
+        from axonflow.policies import ListStaticPoliciesOptions
+
         policies = await client.list_static_policies(
-            category=PolicyCategory.PII_INDONESIA,
+            ListStaticPoliciesOptions(category=PolicyCategory.PII_INDONESIA),
         )
         print(f"Found {len(policies)} Indonesia PII policies")
         for p in policies:
-            print(f"  {p.name}: {p.description} (severity={p.severity}, action={p.action})")
+            print(f"  {p.name}: {p.description}")
     except AxonFlowError as e:
         print(f"Policy list error: {e}")
 
