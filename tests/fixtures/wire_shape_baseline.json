@@ -182,9 +182,11 @@
     "AuditLogEntry": {
       "note": "spec-bug-pending: #1745 \u2014 agent-api.yaml AuditLogEntry omits metadata/model/policy_violations the agent emits on every audit-log read.",
       "sdk_only": [
+        "data_residency",
         "metadata",
         "model",
-        "policy_violations"
+        "policy_violations",
+        "transfer_basis"
       ],
       "spec_only": []
     },
