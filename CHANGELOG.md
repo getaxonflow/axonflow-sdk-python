@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
-## [8.3.0] - 2026-05-26 — Indonesia PII category + cross-border audit fields
+## [8.3.0] - 2026-05-27 — Indonesia PII category + cross-border audit fields
 
 ### Added
 
