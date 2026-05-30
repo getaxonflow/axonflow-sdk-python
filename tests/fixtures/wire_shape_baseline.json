@@ -244,6 +244,14 @@
       ],
       "spec_only": []
     },
+    "DecisionExplanation": {
+      "note": "acknowledged-sdk-superset: context + context_truncated are surfaced by the SDK ahead of the OpenAPI spec (platform #2509 / epic #2508); the spec will declare them in the v8.5.0 sync.",
+      "sdk_only": [
+        "context",
+        "context_truncated"
+      ],
+      "spec_only": []
+    },
     "DynamicPolicy": {
       "note": "spec-bug-pending: #1745 \u2014 policy-api.yaml DynamicPolicy omits 7 fields (category, created_at, organization_id, priority, tier, type, updated_at) every policy-CRUD caller needs.",
       "sdk_only": [

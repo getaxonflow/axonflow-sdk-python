@@ -785,6 +785,28 @@ class AuditQueryOptions(BaseModel):
     offset: int = Field(default=0, ge=0, description="Pagination offset")
 
 
+# Cross-border transfer-basis values recognized under Indonesia UU PDP Pasal 56.
+# These name the legal bases the platform records for ``AuditLogEntry.transfer_basis``:
+#
+#   - "adequacy"      → Pasal 56(a): destination with adequate protection
+#   - "safeguards"    → Pasal 56(b): binding legal instrument (generic label)
+#   - "pasal_56b_dpa" → Pasal 56(b): binding legal instrument, explicit DPA tag
+#   - "consent"       → Pasal 56(c): explicit data-subject consent
+#
+# "safeguards" and "pasal_56b_dpa" are semantic equivalents; the platform
+# surfaces whichever was recorded at decision time, verbatim, never translated.
+TRANSFER_BASIS_ADEQUACY = "adequacy"
+TRANSFER_BASIS_SAFEGUARDS = "safeguards"
+TRANSFER_BASIS_PASAL_56B_DPA = "pasal_56b_dpa"
+TRANSFER_BASIS_CONSENT = "consent"
+
+# Type alias for the recognized transfer-basis set, for callers that want a
+# typed hint on their own variables. The ``AuditLogEntry.transfer_basis`` field
+# itself stays ``str | None`` (not a closed Literal) so the SDK never rejects an
+# audit row carrying a value a newer platform may add.
+TransferBasis = Literal["adequacy", "safeguards", "pasal_56b_dpa", "consent"]
+
+
 class AuditLogEntry(BaseModel):
     """A single audit log entry.
 
@@ -831,7 +853,12 @@ class AuditLogEntry(BaseModel):
         default=None, description="ISO 3166-1 alpha-2 data residency code"
     )
     transfer_basis: str | None = Field(
-        default=None, description="Cross-border transfer legal basis"
+        default=None,
+        description=(
+            "Cross-border transfer legal basis under Indonesia UU PDP Pasal 56: "
+            "adequacy, safeguards, pasal_56b_dpa, or consent. Surfaced verbatim. "
+            "See the TRANSFER_BASIS_* constants / TransferBasis alias."
+        ),
     )
 
 

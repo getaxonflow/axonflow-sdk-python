@@ -59,6 +59,15 @@ class DecisionExplanation(BaseModel):
     * ``policy_source_link`` — URL to the policy definition (optional).
     * ``tool_signature`` — the tool signature the decision was scoped to,
       if any.
+    * ``context`` — the FULL sanitized request context the PEP attached to the
+      decision (canonical ``lower_snake_case`` keys, string values), e.g.
+      ``x_ai_agent`` / ``x_session_id`` / ``x_leader_identity`` /
+      ``x-bukuwarung-*``. Unlike :class:`DecisionSummary` (truncated to 5 keys),
+      explain returns every persisted key up to the platform's 10-key cap.
+      ``None`` for pre-v8.4.0 audit rows or decisions with no context.
+      (platform #2509 / epic #2508)
+    * ``context_truncated`` — True when the agent dropped surplus context keys
+      at write time; ``None`` when the platform did not report the flag.
     """
 
     decision_id: str
@@ -73,6 +82,8 @@ class DecisionExplanation(BaseModel):
     historical_hit_count_session: int = 0
     policy_source_link: str | None = None
     tool_signature: str | None = None
+    context: dict[str, str] | None = None
+    context_truncated: bool | None = None
 
 
 class DecisionSummary(BaseModel):
@@ -82,6 +93,13 @@ class DecisionSummary(BaseModel):
     blocks + pre-V1.1 audit rows may not populate them. Additive new fields
     are non-breaking per ADR-043 §"Versioning"; arbitrary unknown fields
     on the wire are accepted via ``extra='ignore'``.
+
+    ``context`` (v8.4.0) is the sanitized request context the PEP attached to
+    the decision (canonical ``lower_snake_case`` keys, string values),
+    surfaced from the audit row's ``policy_details->'context'``. The list
+    summary is truncated by the platform to the 5 most-correlated keys; the
+    full map is available via :meth:`AxonFlow.explain_decision`. ``None`` for
+    pre-v8.4.0 audit rows or decisions with no context. (platform #2509)
 
     Cross-SDK parity:
 
@@ -98,6 +116,7 @@ class DecisionSummary(BaseModel):
     decision: str  # allow | deny | require_approval
     policy_id: str | None = None
     tool_signature: str | None = None
+    context: dict[str, str] | None = None
 
 
 class ListDecisionsOptions(BaseModel):

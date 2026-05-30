@@ -247,6 +247,60 @@ class TestDecisionSummaryShape:
         assert d2.decision_id == "dec-x"
 
 
+class TestDecisionContextV85:
+    """v8.4.0 (platform #2509): request context surfaced on decision reads."""
+
+    def test_summary_context_absent_is_none(self) -> None:
+        d = DecisionSummary(
+            decision_id="dec-noctx",
+            timestamp=datetime(2026, 5, 30, tzinfo=timezone.utc),
+            decision="allow",
+        )
+        assert d.context is None
+
+    def test_summary_context_round_trip(self) -> None:
+        raw = {
+            "decision_id": "dec-ctx",
+            "timestamp": "2026-05-30T12:00:00Z",
+            "decision": "deny",
+            "context": {
+                "x_ai_agent": "refund-bot",
+                "x_session_id": "sess-42",
+                "x_leader_identity": "ops-lead",
+            },
+        }
+        d = DecisionSummary.model_validate(raw)
+        assert d.context == {
+            "x_ai_agent": "refund-bot",
+            "x_session_id": "sess-42",
+            "x_leader_identity": "ops-lead",
+        }
+        # re-serialize → re-parse without loss
+        back = DecisionSummary.model_validate(d.model_dump())
+        assert back.context["x_leader_identity"] == "ops-lead"
+
+    def test_explanation_full_context_and_truncated_flag(self) -> None:
+        raw = {
+            "decision_id": "dec-x",
+            "timestamp": "2026-05-30T12:00:00Z",
+            "decision": "deny",
+            "context": {"x_ai_agent": "a", "x_session_id": "s"},
+            "context_truncated": True,
+        }
+        exp = DecisionExplanation.model_validate(raw)
+        assert exp.context == {"x_ai_agent": "a", "x_session_id": "s"}
+        assert exp.context_truncated is True
+
+    def test_explanation_context_defaults_none(self) -> None:
+        exp = DecisionExplanation(
+            decision_id="dec-1",
+            timestamp=datetime(2026, 5, 30, tzinfo=timezone.utc),
+            decision="allow",
+        )
+        assert exp.context is None
+        assert exp.context_truncated is None
+
+
 class TestListDecisions:
     """Tests for AxonFlowClient.list_decisions."""
 

@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [8.4.0] - 2026-05-30 — Decision request context + Pasal 56(b) transfer basis
+
+Targets AxonFlow platform **v8.5.0**.
+
+### Added
+
+- **`context` field on `DecisionSummary` and `DecisionExplanation`** —
+  `dict[str, str] | None`. Surfaces the sanitized request context a PEP attaches
+  to a Decision Mode call (canonical `lower_snake_case` keys such as `x_ai_agent`,
+  `x_session_id`, `x_leader_identity`, and `x-bukuwarung-*`), persisted by the
+  platform at the audit row's `policy_details->'context'`. `list_decisions()`
+  returns the platform-truncated summary (5 keys); `explain_decision()` returns
+  the full map. `None` for pre-v8.4.0 audit rows.
+- **`context_truncated` field on `DecisionExplanation`** — `bool | None`. True
+  when the agent dropped surplus context keys at write time.
+- **`TransferBasis` Literal alias and `TRANSFER_BASIS_*` constants**
+  (`TRANSFER_BASIS_ADEQUACY`, `TRANSFER_BASIS_SAFEGUARDS`,
+  `TRANSFER_BASIS_PASAL_56B_DPA` = `"pasal_56b_dpa"`, `TRANSFER_BASIS_CONSENT`),
+  exported from the package root. Type-safe access to the Indonesia UU PDP
+  Pasal 56 legal bases.
+
+### Changed
+
+- **`AuditLogEntry.transfer_basis` documentation** now records `pasal_56b_dpa`
+  (Pasal 56(b) explicit DPA tag) alongside `adequacy`, `safeguards`, and
+  `consent`. The field stays `str | None` (not a closed `Literal`) so existing
+  code passing `safeguards` is unaffected and the SDK never rejects a value a
+  newer platform may add on an audit read.
+
 ## [8.3.0] - 2026-05-27 — Indonesia PII category + cross-border audit fields
 
 ### Added
