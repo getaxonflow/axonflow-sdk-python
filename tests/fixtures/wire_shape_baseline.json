@@ -296,6 +296,29 @@
       ],
       "spec_only": []
     },
+    "MCPCheckInputRequest": {
+      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it.",
+      "sdk_only": [
+        "content_type"
+      ],
+      "spec_only": []
+    },
+    "MCPCheckInputResponse": {
+      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `redacted`/`redacted_statement`/`redaction_evaluated`; the agent emits them on every evaluated check-input allow path (engine-fulfillable redact_pii obligations, ADR-056). Verified live against an enterprise agent.",
+      "sdk_only": [
+        "redacted",
+        "redacted_statement",
+        "redaction_evaluated"
+      ],
+      "spec_only": []
+    },
+    "MCPCheckOutputResponse": {
+      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `redaction_evaluated` for response-phase obligation fail-closed parity with check-input (ADR-056); platform predates the field on check-output, so it defaults False.",
+      "sdk_only": [
+        "redaction_evaluated"
+      ],
+      "spec_only": []
+    },
     "MarkStepCompletedRequest": {
       "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `metadata` on step-completed; platform reads it but spec doesn't yet declare it.",
       "sdk_only": [
