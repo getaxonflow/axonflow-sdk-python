@@ -90,6 +90,7 @@ from axonflow.exceptions import (
     ConnectionError,
     ConnectorError,
     IdempotencyKeyMismatchError,
+    ObligationNotFulfillableError,
     PlanExecutionError,
     PolicyViolationError,
     RateLimitError,
@@ -118,6 +119,10 @@ from axonflow.hitl import (
     HITLReviewInput,
     HITLStats,
 )
+from axonflow.pep import CONTENT_TYPE_TEXT, OBLIGATION_REDACT_PII, PHASE_REQUEST, VERDICT_ALLOW
+from axonflow.pep import DECIDE_PATH as PEP_DECIDE_PATH
+from axonflow.pep import REQUEST_REDACTION_PATH as PEP_REQUEST_REDACTION_PATH
+from axonflow.pep import _endpoint_path_matches as pep_endpoint_path_matches
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
     CreatePolicyOverrideRequest,
@@ -165,6 +170,8 @@ from axonflow.types import (
     ConnectorPolicyInfo,
     ConnectorResponse,
     CreateBudgetRequest,
+    DecideRequest,
+    DecideResponse,
     ExecutionDetail,
     ExecutionExportOptions,
     ExecutionMode,
@@ -1436,6 +1443,7 @@ class AxonFlow:
         user_id: str | None = None,
         user_role: str | None = None,
         user_token: str | None = None,
+        content_type: str | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it.
 
@@ -1452,9 +1460,15 @@ class AxonFlow:
             user_id: End-user identifier for per-user policies.
             user_role: User role for role-based policies.
             user_token: User auth token for downstream propagation.
+            content_type: Selects the request-redaction detector (ADR-056 /
+                #2563). ``None`` defaults to "text/plain" server-side. Used by
+                a PEP fulfilling a ``redact_pii`` obligation.
 
         Returns:
             MCPCheckInputResponse with allowed status, block reason, and policy info.
+            When the statement carries PII under a redact policy, the engine
+            returns ``redacted_statement`` so a PEP forwards engine-redacted
+            content without hand-rolling its own patterns.
 
         Raises:
             ConnectorError: If the request fails (non-403 errors only).
@@ -1478,6 +1492,8 @@ class AxonFlow:
             body["user_role"] = user_role
         if user_token is not None:
             body["user_token"] = user_token
+        if content_type is not None:
+            body["content_type"] = content_type
 
         if self._config.debug:
             self._logger.debug(
@@ -2872,6 +2888,162 @@ class AxonFlow:
         if not isinstance(rows, list):
             return []
         return [DecisionSummary.model_validate(r) for r in rows]
+
+    # ------------------------------------------------------------------ #
+    # Decision Mode PEP: decide -> fulfill -> forward (ADR-056, #2563)    #
+    # ------------------------------------------------------------------ #
+
+    async def decide(self, request: DecideRequest) -> DecideResponse:
+        """Ask the PDP for a verdict on a request (``POST /api/v1/decide``).
+
+        This is the PDP step of a PEP. ``/decide`` is a pure decision point: it
+        NEVER mutates content. When an allow verdict carries a ``redact_pii``
+        obligation, discharge it with :meth:`fulfill_request` (or use the
+        one-call :meth:`decide_and_fulfill`) — never by redacting locally.
+
+        Decision Mode auth is HTTP Basic (org:license), which this client
+        already sends; demo / wrong credentials are refused with 401 →
+        :class:`~axonflow.exceptions.AuthenticationError`. A deny verdict is
+        returned in the body with HTTP 200, not as an error.
+
+        Args:
+            request: The :class:`DecideRequest` (``stage`` ∈ {"llm","tool",
+                "agent"} and ``query`` are required).
+
+        Returns:
+            The :class:`DecideResponse` verdict, with ``obligations`` always a
+            (possibly empty) list.
+
+        Raises:
+            AuthenticationError: 401 (bad / demo credentials).
+            AxonFlowError: Other non-200 responses.
+        """
+        self._pre_request_hook()
+        url = f"{self._config.endpoint}{PEP_DECIDE_PATH}"
+        body = request.model_dump(exclude_none=True)
+        try:
+            response = await self._http_client.post(url, json=body)
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to AxonFlow Agent: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+
+        if response.status_code == 401:  # noqa: PLR2004
+            msg = "Invalid credentials"
+            raise AuthenticationError(msg)
+        if response.status_code >= 400:  # noqa: PLR2004
+            msg = f"HTTP {response.status_code}: {response.text}"
+            raise AxonFlowError(msg)
+
+        data = response.json()
+        if not isinstance(data, dict):
+            data = {}
+        return DecideResponse.model_validate(data)
+
+    async def fulfill_request(
+        self,
+        decision: DecideResponse,
+        statement: str,
+    ) -> tuple[str, bool]:
+        """Discharge every request-phase ``redact_pii`` obligation on ``decision``.
+
+        For each request-phase ``redact_pii`` obligation, POSTs ``statement`` to
+        the engine endpoint the obligation names (``check-input``) and returns
+        the engine-redacted statement to forward.
+
+        There is NO code path in which this method redacts locally — fulfillment
+        is always the engine round-trip (ADR-056 / #2563).
+
+        Returns:
+            ``(content, did_redact)``. ``content`` is the engine-redacted
+            statement (or the original when no obligation mutates the request).
+            ``did_redact`` reflects whether the ENGINE actually changed the
+            content, not merely that an obligation was present.
+
+        Raises:
+            ObligationNotFulfillableError: A ``redact_pii`` obligation could not
+                be discharged through the engine — it named no request-phase
+                fulfillment, advertised a content-type the PEP is not holding,
+                named an endpoint this client will not call, the engine call
+                failed, or the engine reported the redactor did not run
+                (``redaction_evaluated=false``). The caller MUST fail closed
+                (block) — never forward the original ``statement``.
+        """
+        redacted = statement
+        did_redact = False
+        for ob in decision.obligations:
+            if ob.type != OBLIGATION_REDACT_PII:
+                # redact_pii is the only content-mutating obligation today;
+                # other types are pass-through by contract.
+                continue
+            if ob.fulfillment is None or ob.fulfillment.phase != PHASE_REQUEST:
+                msg = "redact_pii obligation missing request-phase fulfillment"
+                raise ObligationNotFulfillableError(msg)
+            content_types = ob.fulfillment.content_types
+            if content_types and CONTENT_TYPE_TEXT not in content_types:
+                msg = f"fulfillment endpoint does not advertise a {CONTENT_TYPE_TEXT} detector"
+                raise ObligationNotFulfillableError(msg)
+            if not pep_endpoint_path_matches(ob.fulfillment.endpoint, PEP_REQUEST_REDACTION_PATH):
+                msg = (
+                    f"fulfillment endpoint {ob.fulfillment.endpoint!r} is not "
+                    "the request-redaction endpoint"
+                )
+                raise ObligationNotFulfillableError(msg)
+            redacted = await self._fulfill_via_check_input(redacted)
+            if redacted != statement:
+                did_redact = True
+        return redacted, did_redact
+
+    async def _fulfill_via_check_input(self, statement: str) -> str:
+        """POST ``statement`` to the request-redaction engine endpoint.
+
+        Returns the engine-masked statement. Fails closed (raises
+        :class:`ObligationNotFulfillableError`) when the engine call errors, the
+        engine returns non-200, or ``redaction_evaluated`` is false — never
+        returns unredacted content under an unfulfillable condition.
+        """
+        try:
+            result = await self.mcp_check_input(
+                connector_type="gateway",
+                statement=statement,
+                operation="execute",
+                content_type=CONTENT_TYPE_TEXT,
+            )
+        except AxonFlowError as e:
+            msg = f"request-redaction engine call failed: {e}"
+            raise ObligationNotFulfillableError(msg) from e
+        # FAIL CLOSED if the redactor did not actually run (#2563 B1). Without
+        # this the PEP cannot distinguish "engine looked, found nothing" (safe
+        # to forward) from "engine wasn't looking" (would leak PII).
+        if not result.redaction_evaluated:
+            msg = "engine reported the redactor did not run (redaction disabled)"
+            raise ObligationNotFulfillableError(msg)
+        if result.redacted and result.redacted_statement:
+            return result.redacted_statement
+        # Redactor ran and found nothing to mask — forward unchanged.
+        return statement
+
+    async def decide_and_fulfill(
+        self,
+        request: DecideRequest,
+    ) -> tuple[str, str, DecideResponse]:
+        """One-call PEP path: decide, then fulfill any request-phase obligation.
+
+        Returns ``(verdict, content, decision)``. Branch on ``verdict``: forward
+        ``content`` on ``"allow"``; block on ``"deny"`` / ``"needs_approval"``.
+
+        On the not-fulfillable path this raises
+        :class:`ObligationNotFulfillableError` AFTER having computed an empty
+        ``content`` internally, so a caller that catches the error cannot
+        accidentally forward the unredacted query — fail-closed by construction.
+        """
+        decision = await self.decide(request)
+        if decision.verdict != VERDICT_ALLOW:
+            return decision.verdict, request.query, decision
+        redacted, _ = await self.fulfill_request(decision, request.query)
+        return decision.verdict, redacted, decision
 
     async def get_audit_logs_by_tenant(
         self,
@@ -7375,6 +7547,7 @@ class SyncAxonFlow:
         user_id: str | None = None,
         user_role: str | None = None,
         user_token: str | None = None,
+        content_type: str | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it."""
         return self._run_sync(
@@ -7388,8 +7561,41 @@ class SyncAxonFlow:
                 user_id=user_id,
                 user_role=user_role,
                 user_token=user_token,
+                content_type=content_type,
             )
         )
+
+    def decide(self, request: DecideRequest) -> DecideResponse:
+        """Ask the PDP for a verdict on a request (``POST /api/v1/decide``).
+
+        Synchronous wrapper for :meth:`AxonFlow.decide`. See that method for the
+        decide → fulfill → forward PEP contract (ADR-056, #2563).
+        """
+        return self._run_sync(self._async_client.decide(request))
+
+    def fulfill_request(
+        self,
+        decision: DecideResponse,
+        statement: str,
+    ) -> tuple[str, bool]:
+        """Discharge every request-phase ``redact_pii`` obligation via the engine.
+
+        Synchronous wrapper for :meth:`AxonFlow.fulfill_request`. Raises
+        :class:`~axonflow.exceptions.ObligationNotFulfillableError` (fail-closed)
+        when an obligation cannot be discharged through the engine — never
+        redacts locally.
+        """
+        return self._run_sync(self._async_client.fulfill_request(decision, statement))
+
+    def decide_and_fulfill(
+        self,
+        request: DecideRequest,
+    ) -> tuple[str, str, DecideResponse]:
+        """One-call PEP path: decide, then fulfill any request-phase obligation.
+
+        Synchronous wrapper for :meth:`AxonFlow.decide_and_fulfill`.
+        """
+        return self._run_sync(self._async_client.decide_and_fulfill(request))
 
     def mcp_check_output(
         self,

@@ -417,6 +417,12 @@ class MCPCheckInputRequest(BaseModel):
     user_token: str | None = Field(
         default=None, description="User token for downstream auth propagation."
     )
+    # ContentType selects the request-redaction detector (ADR-056 / #2563
+    # addendum). None defaults to "text/plain" server-side. A content_type with
+    # no registered detector is rejected (415) so a PEP fulfilling a redact_pii
+    # obligation fails closed rather than forwarding content the engine cannot
+    # govern. Source of truth: platform/agent/mcp_handler.go MCPCheckInputRequest.
+    content_type: str | None = Field(default=None)
 
 
 class MCPCheckInputResponse(BaseModel):
@@ -436,6 +442,20 @@ class MCPCheckInputResponse(BaseModel):
     policy_matches: list[ExplainPolicy] | None = Field(default=None)
     override_available: bool | None = Field(default=None)
     override_existing_id: str | None = Field(default=None)
+    # Request-phase redaction (ADR-056 / #2563). When an allowed statement
+    # carries PII under a redact (not block) policy, the engine returns the
+    # masked statement here so a PEP can forward redacted content WITHOUT
+    # hand-rolling its own patterns — this is what makes a /decide redact_pii
+    # obligation engine-fulfillable. Source of truth:
+    # platform/agent/mcp_handler.go MCPCheckInputResponse.
+    redacted: bool = Field(default=False)
+    redacted_statement: str | None = Field(default=None)
+    # redaction_evaluated reports whether the redaction detector actually RAN
+    # (regardless of whether it masked anything). A PEP fulfilling a redact_pii
+    # obligation MUST fail closed when this is False — it means the redactor did
+    # not run (detection disabled), so "redacted:false" would otherwise be
+    # indistinguishable from "looked, found nothing" (#2563 B1).
+    redaction_evaluated: bool = Field(default=False)
 
 
 class MCPCheckOutputRequest(BaseModel):
@@ -475,6 +495,109 @@ class MCPCheckOutputResponse(BaseModel):
     # MCPCheckInputResponse fields on the same call site).
     decision_id: str | None = Field(default=None)
     policy_matches: list[ExplainPolicy] | None = Field(default=None)
+    # redaction_evaluated mirrors the check-input field for the response phase
+    # (ADR-056 / #2563). A PEP fulfilling a response-phase redact_pii obligation
+    # MUST fail closed when this is False — the redactor did not run, so absence
+    # of redacted output cannot be trusted as "nothing to mask". The agent does
+    # not populate this on every path today; default False keeps a PEP fail-closed
+    # when the platform predates the field. Source of truth: platform/agent/mcp_handler.go.
+    redaction_evaluated: bool = Field(default=False)
+
+
+class ObligationFulfillment(BaseModel):
+    """Names the engine call a PEP makes to discharge an obligation.
+
+    Fulfillment is a property of the contract, not of PEP-author discipline: a
+    conforming PEP POSTs the obligation's source content to ``endpoint`` and
+    forwards the engine-redacted content the endpoint returns.
+
+    ``content_types`` advertises the mime-types the endpoint's detectors can
+    handle today. The contract is content-type-agnostic: a PEP holding content
+    of a type NOT in this list must fail closed rather than forward it
+    unredacted. Mirrors platform ObligationFulfillment.
+    """
+
+    endpoint: str = Field(description='Engine path, e.g. "/api/v1/mcp/check-input".')
+    method: str = Field(default="POST", description='HTTP method, e.g. "POST".')
+    phase: str = Field(description='"request" | "response".')
+    content_types: list[str] | None = Field(
+        default=None, description="Mime-types the endpoint can redact today."
+    )
+
+
+class Obligation(BaseModel):
+    """A self-describing, engine-fulfillable PEP requirement on an allow verdict.
+
+    Obligations are SELF-DESCRIBING and ENGINE-FULFILLABLE (ADR-056, #2563):
+    ``/decide`` is a pure PDP and never mutates content, so a ``redact_pii``
+    obligation is not "go redact this yourself with your own patterns" — it is
+    "call the AxonFlow engine endpoint named in ``fulfillment`` to obtain
+    engine-redacted content." There is no other blessed way to satisfy it;
+    client-side redaction is forbidden. Mirrors platform DecisionObligation.
+    """
+
+    type: str = Field(description='Obligation type, e.g. "redact_pii".')
+    detail: str | None = Field(default=None, description="Human-readable detail for audit logs.")
+    fulfillment: ObligationFulfillment | None = Field(
+        default=None, description="How a PEP discharges this obligation via the engine."
+    )
+
+
+class DecisionCallerIdentity(BaseModel):
+    """Gateway-asserted identity for a /decide request.
+
+    org_id / tenant_id are optional in the body — the auth-derived identity is
+    authoritative; body-supplied values are accepted only when they match.
+    Mirrors platform DecisionCallerIdentity.
+    """
+
+    gateway_id: str | None = Field(default=None)
+    org_id: str | None = Field(default=None)
+    tenant_id: str | None = Field(default=None)
+
+
+class DecisionTarget(BaseModel):
+    """Describes what the gateway is about to call. Mirrors platform DecisionTarget."""
+
+    type: str | None = Field(default=None, description='"llm" | "tool" | "agent".')
+    model: str | None = Field(default=None, description="When type=llm.")
+    provider: str | None = Field(default=None, description="When type=llm.")
+    tool: str | None = Field(default=None, description="When type=tool.")
+
+
+class DecideRequest(BaseModel):
+    """Inbound contract for POST /api/v1/decide. Mirrors platform DecideRequest.
+
+    Required: ``stage`` (one of "llm" | "tool" | "agent") and ``query``.
+    ``user_token`` is optional — a PEP that supplies one gets the validated-user
+    record on the audit row; one that doesn't gets a synthesized service user.
+    """
+
+    stage: str
+    query: str
+    caller_identity: DecisionCallerIdentity = Field(default_factory=DecisionCallerIdentity)
+    target: DecisionTarget = Field(default_factory=DecisionTarget)
+    user_token: str | None = Field(default=None)
+    context: dict[str, Any] | None = Field(default=None)
+
+
+class DecideResponse(BaseModel):
+    """PDP verdict returned by POST /api/v1/decide. Mirrors platform DecideResponse.
+
+    ``obligations`` is always a list so PEP code can iterate without a None-check.
+    ``trace_id`` is W3C-format (32 lowercase hex chars). ``error`` is set on the
+    deny path when the request was malformed.
+    """
+
+    verdict: str
+    decision_id: str | None = Field(default=None)
+    trace_id: str | None = Field(default=None)
+    reasons: list[str] | None = Field(default=None)
+    obligations: list[Obligation] = Field(default_factory=list)
+    evaluated_policies: list[str] = Field(default_factory=list)
+    stage: str | None = Field(default=None)
+    expires_at: datetime | None = Field(default=None)
+    error: str | None = Field(default=None)
 
 
 class PlanStep(BaseModel):

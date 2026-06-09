@@ -42,6 +42,22 @@ class PolicyViolationError(AxonFlowError):
         self.block_reason = block_reason
 
 
+class ObligationNotFulfillableError(AxonFlowError):
+    """A Decision Mode obligation could not be discharged through the engine.
+
+    Raised by the PEP fulfillment path (``client.fulfill_request`` /
+    ``client.decide_and_fulfill``) when a ``redact_pii`` obligation named no
+    request-phase fulfillment endpoint, named an endpoint the client will not
+    call, advertised a content-type the PEP is not holding, the engine endpoint
+    failed, or the engine reported the redactor did not run
+    (``redaction_evaluated=false``).
+
+    This is a FAIL-CLOSED signal (ADR-056 / #2563): the caller MUST block the
+    request, never forward the unredacted content. The PEP contains no local
+    redaction path, so it cannot silently substitute its own masking.
+    """
+
+
 class UpgradeInfo:
     """Pricing-tier upgrade context emitted in a V1 429 envelope.
 

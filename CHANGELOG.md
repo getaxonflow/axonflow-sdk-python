@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [8.5.0] - 2026-06-09 — Decision Mode PEP: decide → fulfill → forward
+
+Adds the SDK analog of the platform PEP client (`platform/shared/pep`,
+ADR-056, epic #2563). A Policy Enforcement Point now follows one path —
+**decide → fulfill → forward** — and the SDK makes the engine-fulfillable
+obligation contract impossible to misuse: there is **no local redaction
+path**, so a `redact_pii` obligation can only be discharged by round-tripping
+content through the engine endpoint the obligation names.
+
+### Added
+
+- **`AxonFlow.decide(DecideRequest)` / `SyncAxonFlow.decide`** — the PDP step.
+  `POST /api/v1/decide` returns a `DecideResponse` whose `obligations` is a
+  list of self-describing `Obligation`s. Decision Mode auth is HTTP Basic
+  (org:license), which the client already sends; wrong/demo credentials are
+  refused with `AuthenticationError`.
+- **`AxonFlow.fulfill_request(decision, statement)`** — discharges every
+  request-phase `redact_pii` obligation by POSTing the statement to the
+  engine's `check-input` endpoint and returning the **engine-redacted**
+  statement. Fails closed with `ObligationNotFulfillableError` when an
+  obligation names no request-phase fulfillment, advertises a content-type the
+  PEP is not holding, names an endpoint the client will not call, the engine
+  call fails, or the engine reports `redaction_evaluated=false`. Never redacts
+  locally.
+- **`AxonFlow.decide_and_fulfill(DecideRequest)`** — the blessed one-call path
+  (decide, then fulfill any request-phase obligation); fail-closed by
+  construction.
+- **New types**: `DecideRequest`, `DecideResponse`, `Obligation`,
+  `ObligationFulfillment`, `DecisionCallerIdentity`, `DecisionTarget`.
+- **New exception**: `ObligationNotFulfillableError` (a fail-closed signal).
+- **PEP constants** + `has_request_redaction(obligations)` helper
+  (`OBLIGATION_REDACT_PII`, `PHASE_REQUEST`/`PHASE_RESPONSE`,
+  `CONTENT_TYPE_TEXT`, `VERDICT_ALLOW`/`VERDICT_DENY`/`VERDICT_NEEDS_APPROVAL`,
+  endpoint-path constants).
+- **`redacted` / `redacted_statement` / `redaction_evaluated` on
+  `MCPCheckInputResponse`** and **`redaction_evaluated` on
+  `MCPCheckOutputResponse`** — the request-redaction contract fields the agent
+  emits (ADR-056). A PEP fulfilling an obligation fails closed when
+  `redaction_evaluated` is false.
+- **`content_type` on `MCPCheckInputRequest` / `mcp_check_input(...)`** —
+  selects the request-redaction detector (defaults to `text/plain`).
+
+### Notes
+
+- SDK semver is decoupled from the platform: this is a **minor** bump from
+  8.4.0 (purely additive, optional fields backward-compatible with older
+  platforms). The wire-shape baseline records the new fields as an
+  acknowledged SDK superset pending the OpenAPI spec catching up.
+
 ## [8.4.0] - 2026-05-30 — Decision request context + Pasal 56(b) transfer basis
 
 Targets AxonFlow platform **v8.5.0**.
