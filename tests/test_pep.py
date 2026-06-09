@@ -211,6 +211,19 @@ class TestFulfillRequest:
         assert did_redact is False
 
     @pytest.mark.asyncio
+    async def test_redacted_true_without_statement_fails_closed(
+        self, client: AxonFlow, httpx_mock: HTTPXMock
+    ) -> None:
+        """Self-contradictory engine response (redacted=true, no statement) ⇒ fail closed."""
+        decision = DecideResponse.model_validate(_decide_allow([REDACT_OBLIGATION]))
+        httpx_mock.add_response(
+            url=CHECK_INPUT_URL,
+            json={"allowed": True, "redacted": True, "redaction_evaluated": True},
+        )
+        with pytest.raises(ObligationNotFulfillableError, match="no redacted_statement"):
+            await client.fulfill_request(decision, "Email john@x.com")
+
+    @pytest.mark.asyncio
     async def test_redaction_not_evaluated_fails_closed(
         self, client: AxonFlow, httpx_mock: HTTPXMock
     ) -> None:

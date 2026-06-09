@@ -3020,7 +3020,14 @@ class AxonFlow:
         if not result.redaction_evaluated:
             msg = "engine reported the redactor did not run (redaction disabled)"
             raise ObligationNotFulfillableError(msg)
-        if result.redacted and result.redacted_statement:
+        if result.redacted:
+            # FAIL CLOSED on a self-contradictory engine response: redacted=true
+            # with no redacted_statement means the engine claims it masked
+            # something but gave us nothing to forward — never fall back to the
+            # unredacted original.
+            if not result.redacted_statement:
+                msg = "engine reported redacted=true but returned no redacted_statement"
+                raise ObligationNotFulfillableError(msg)
             return result.redacted_statement
         # Redactor ran and found nothing to mask — forward unchanged.
         return statement
