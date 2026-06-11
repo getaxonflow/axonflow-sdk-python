@@ -2821,7 +2821,7 @@ class AxonFlow:
 
         Example:
             >>> from axonflow.decisions import ListDecisionsOptions
-            >>> opts = ListDecisionsOptions(decision="deny", limit=10)
+            >>> opts = ListDecisionsOptions(decision="blocked", limit=10)
             >>> for d in await client.list_decisions(opts):
             ...     print(d.decision_id, d.decision, d.timestamp)
         """

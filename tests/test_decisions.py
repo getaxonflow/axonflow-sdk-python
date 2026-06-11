@@ -17,10 +17,10 @@ class TestDecisionExplanationShape:
         exp = DecisionExplanation(
             decision_id="dec-1",
             timestamp=datetime(2026, 4, 17, tzinfo=timezone.utc),
-            decision="deny",
+            decision="blocked",
         )
         assert exp.decision_id == "dec-1"
-        assert exp.decision == "deny"
+        assert exp.decision == "blocked"
         assert exp.policy_matches == []
         assert exp.override_available is False
         assert exp.historical_hit_count_session == 0
@@ -29,7 +29,7 @@ class TestDecisionExplanationShape:
         raw = {
             "decision_id": "dec_wf1_step2",
             "timestamp": "2026-04-17T12:00:00Z",
-            "decision": "deny",
+            "decision": "blocked",
             "reason": "SQL injection detected",
             "risk_level": "high",
             "policy_matches": [
@@ -57,7 +57,7 @@ class TestDecisionExplanationShape:
             "tool_signature": "Bash",
         }
         exp = DecisionExplanation.model_validate(raw)
-        assert exp.decision == "deny"
+        assert exp.decision == "blocked"
         assert len(exp.policy_matches) == 1
         assert exp.policy_matches[0].policy_id == "pol-sqli"
         assert exp.policy_matches[0].allow_override is True
@@ -71,11 +71,11 @@ class TestDecisionExplanationShape:
         raw = {
             "decision_id": "dec-1",
             "timestamp": "2026-04-17T12:00:00Z",
-            "decision": "allow",
+            "decision": "allowed",
             "future_field_we_dont_know_yet": {"nested": True},
         }
         exp = DecisionExplanation.model_validate(raw)
-        assert exp.decision == "allow"
+        assert exp.decision == "allowed"
 
 
 class TestExplainPolicy:
@@ -119,7 +119,7 @@ class TestClientExplainDecision:
             return {
                 "decision_id": "dec-1",
                 "timestamp": "2026-04-17T12:00:00Z",
-                "decision": "deny",
+                "decision": "blocked",
                 "reason": "blocked",
                 "policy_matches": [
                     {"policy_id": "p-1", "policy_name": "Test", "allow_override": True}
@@ -150,7 +150,7 @@ class TestClientExplainDecision:
             return {
                 "decision_id": "a/b",
                 "timestamp": "2026-04-17T12:00:00Z",
-                "decision": "allow",
+                "decision": "allowed",
                 "reason": "",
                 "policy_matches": [],
                 "override_available": False,
@@ -225,7 +225,7 @@ class TestDecisionSummaryShape:
         d = DecisionSummary(
             decision_id="dec-1",
             timestamp=datetime(2026, 5, 7, 12, 0, 0, tzinfo=timezone.utc),
-            decision="deny",
+            decision="blocked",
         )
         assert d.policy_id is None
         assert d.tool_signature is None
@@ -234,12 +234,12 @@ class TestDecisionSummaryShape:
         raw = {
             "decision_id": "dec-x",
             "timestamp": "2026-05-07T12:00:00Z",
-            "decision": "allow",
+            "decision": "allowed",
             "policy_id": "pol-default",
             "tool_signature": "github.status",
         }
         d = DecisionSummary.model_validate(raw)
-        assert d.decision == "allow"
+        assert d.decision == "allowed"
         assert d.policy_id == "pol-default"
         # extra='ignore' accepts arbitrary unknown fields
         raw_extra = {**raw, "policy_version": 7, "future_field": "shrug"}
@@ -254,7 +254,7 @@ class TestDecisionContextV85:
         d = DecisionSummary(
             decision_id="dec-noctx",
             timestamp=datetime(2026, 5, 30, tzinfo=timezone.utc),
-            decision="allow",
+            decision="allowed",
         )
         assert d.context is None
 
@@ -262,7 +262,7 @@ class TestDecisionContextV85:
         raw = {
             "decision_id": "dec-ctx",
             "timestamp": "2026-05-30T12:00:00Z",
-            "decision": "deny",
+            "decision": "blocked",
             "context": {
                 "x_ai_agent": "refund-bot",
                 "x_session_id": "sess-42",
@@ -283,7 +283,7 @@ class TestDecisionContextV85:
         raw = {
             "decision_id": "dec-x",
             "timestamp": "2026-05-30T12:00:00Z",
-            "decision": "deny",
+            "decision": "blocked",
             "context": {"x_ai_agent": "a", "x_session_id": "s"},
             "context_truncated": True,
         }
@@ -295,7 +295,7 @@ class TestDecisionContextV85:
         exp = DecisionExplanation(
             decision_id="dec-1",
             timestamp=datetime(2026, 5, 30, tzinfo=timezone.utc),
-            decision="allow",
+            decision="allowed",
         )
         assert exp.context is None
         assert exp.context_truncated is None
@@ -316,21 +316,21 @@ class TestListDecisions:
                     {
                         "decision_id": "dec-1",
                         "timestamp": "2026-05-07T12:00:00Z",
-                        "decision": "deny",
+                        "decision": "blocked",
                         "policy_id": "pol-sqli",
                         "tool_signature": "postgres.query",
                     },
                     {
                         "decision_id": "dec-2",
                         "timestamp": "2026-05-07T11:00:00Z",
-                        "decision": "allow",
+                        "decision": "allowed",
                         "policy_id": "pol-default",
                         "tool_signature": "github.status",
                     },
                     {
                         "decision_id": "dec-3",
                         "timestamp": "2026-05-07T10:00:00Z",
-                        "decision": "require_approval",
+                        "decision": "needs_approval",
                         "policy_id": "pol-amount",
                         "tool_signature": "stripe.charge",
                     },
@@ -341,7 +341,7 @@ class TestListDecisions:
         got = await client.list_decisions()
         assert len(got) == 3
         assert got[0].decision_id == "dec-1"
-        assert got[2].decision == "require_approval"
+        assert got[2].decision == "needs_approval"
 
     @pytest.mark.asyncio
     async def test_filter_serialization(self, httpx_mock) -> None:
@@ -354,7 +354,7 @@ class TestListDecisions:
             url=(
                 "http://localhost:8080/api/v1/decisions?"
                 "since=2026-05-07T00%3A00%3A00Z&"
-                "decision=deny&"
+                "decision=blocked&"
                 "policy_id=pol-sqli&"
                 "tool_signature=postgres.query&"
                 "limit=25"
@@ -364,7 +364,7 @@ class TestListDecisions:
         client = AxonFlow(endpoint="http://localhost:8080")
         opts = ListDecisionsOptions(
             since=datetime(2026, 5, 7, 0, 0, 0, tzinfo=timezone.utc),
-            decision="deny",
+            decision="blocked",
             policy_id="pol-sqli",
             tool_signature="postgres.query",
             limit=25,
@@ -379,11 +379,11 @@ class TestListDecisions:
         # Only decision is set; URL must omit the others entirely.
         httpx_mock.add_response(
             method="GET",
-            url="http://localhost:8080/api/v1/decisions?decision=deny",
+            url="http://localhost:8080/api/v1/decisions?decision=blocked",
             json={"decisions": []},
         )
         client = AxonFlow(endpoint="http://localhost:8080")
-        await client.list_decisions(ListDecisionsOptions(decision="deny"))
+        await client.list_decisions(ListDecisionsOptions(decision="blocked"))
 
     @pytest.mark.asyncio
     async def test_429_upgrade_envelope(self, httpx_mock) -> None:
@@ -474,7 +474,7 @@ class TestListDecisions:
                     {
                         "decision_id": "dec-fwd",
                         "timestamp": "2026-05-07T12:00:00Z",
-                        "decision": "deny",
+                        "decision": "blocked",
                         "policy_id": "pol-x",
                         "tool_signature": "tool-x",
                         "policy_version": 7,
@@ -505,6 +505,6 @@ class TestBuildListDecisionsQuery:
     def test_partial_options_omit_none_fields(self) -> None:
         from axonflow.client import _build_list_decisions_query
 
-        opts = ListDecisionsOptions(decision="deny", limit=7)
+        opts = ListDecisionsOptions(decision="blocked", limit=7)
         qs = _build_list_decisions_query(opts)
-        assert qs == "decision=deny&limit=7"
+        assert qs == "decision=blocked&limit=7"

@@ -47,7 +47,11 @@ class DecisionExplanation(BaseModel):
       with risk level and overridability.
     * ``matched_rules`` — rule-level detail (optional, populated when the
       upstream engine supports it).
-    * ``decision`` — ``allow`` | ``deny`` | ``require_approval``.
+    * ``decision`` — the canonical audit verdict ``allowed`` | ``blocked`` |
+      ``redacted`` | ``needs_approval`` | ``error`` (platform 9.0.0+). Pre-9.0.0
+      this field used ``allow`` | ``deny`` | ``require_approval``; see the
+      v8 → v9 migration guide:
+      https://docs.getaxonflow.com/docs/deployment/v8-to-v9-migration/
     * ``reason`` — human-readable reason string.
     * ``risk_level`` — aggregate risk label for the decision.
     * ``override_available`` — True iff at least one non-critical policy
@@ -74,7 +78,7 @@ class DecisionExplanation(BaseModel):
     timestamp: datetime
     policy_matches: list[ExplainPolicy] = Field(default_factory=list)
     matched_rules: list[ExplainRule] | None = None
-    decision: str  # allow | deny | require_approval
+    decision: str  # allowed | blocked | redacted | needs_approval | error (9.0.0+)
     reason: str = ""
     risk_level: str | None = None
     override_available: bool = False
@@ -113,7 +117,7 @@ class DecisionSummary(BaseModel):
 
     decision_id: str
     timestamp: datetime
-    decision: str  # allow | deny | require_approval
+    decision: str  # allowed | blocked | redacted | needs_approval | error (9.0.0+)
     policy_id: str | None = None
     tool_signature: str | None = None
     context: dict[str, str] | None = None
@@ -123,8 +127,12 @@ class ListDecisionsOptions(BaseModel):
     """Optional filters for ``client.list_decisions``.
 
     Every field is optional; ``None`` values are omitted from the URL so
-    the platform applies its tier-default page. ``decision`` must be one
-    of ``"allow"``, ``"deny"``, or ``"require_approval"`` when set.
+    the platform applies its tier-default page. ``decision``, when set, must be
+    one of the canonical audit verdicts ``"allowed"``, ``"blocked"``,
+    ``"redacted"``, ``"needs_approval"``, or ``"error"`` (platform 9.0.0+). The
+    pre-9.0.0 values ``"allow"`` / ``"deny"`` / ``"require_approval"`` are
+    rejected with HTTP 400 by 9.0.0 — see the v8 → v9 migration guide:
+    https://docs.getaxonflow.com/docs/deployment/v8-to-v9-migration/
     ``limit`` is server-capped per tier; over-cap requests yield a 429
     with the V1 upgrade envelope (surfaced as
     :class:`axonflow.exceptions.RateLimitError`).
