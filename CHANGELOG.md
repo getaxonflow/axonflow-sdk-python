@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [8.5.1] - 2026-07-09 — Interceptor sync bridge + async-client detection + example fixes
+
+Hostile-testing sweep ahead of the BukuWarung integration
+(getaxonflow/axonflow-enterprise#2861).
+
+### Fixed
+
+- **Interceptor sync wrap paths no longer crash inside a running event
+  loop.** All five provider interceptors (openai, anthropic, bedrock,
+  gemini, ollama) ran the async governance check with
+  `loop.run_until_complete`, which raises `RuntimeError: This event loop is
+  already running` whenever the caller sits inside a running loop (FastAPI
+  handler, Jupyter, an async app driving a sync provider client) — the
+  async-adapter-bypass class: the governance check crashed instead of
+  completing. The shared `run_coroutine_sync` bridge now executes
+  governance on one persistent background loop (daemon thread) and blocks
+  the call site until the verdict is in; repeated calls reuse the same
+  loop, so the HTTP pool stays valid (a throwaway-loop bridge broke the
+  second call with "Event loop is closed").
+- **`AsyncOpenAI`/`AsyncAnthropic` clients are detected as async again.**
+  openai>=1 and anthropic decorate their async `create` methods with
+  plain-`def` wrappers (`@required_args`), so `asyncio.iscoroutinefunction`
+  returned False and async clients were silently given the SYNC wrap path.
+  `is_async_callable` follows `__wrapped__` (`inspect.unwrap`) to the real
+  `async def`.
+- **Examples pass `AXONFLOW_USER_TOKEN` and fail honestly.** Enterprise
+  stacks (`DEPLOYMENT_MODE=enterprise`) validate user tokens as JWTs;
+  `quickstart`, `gateway_mode` and `openai_integration` passed hardcoded
+  non-JWT literals and 401'd. All three now read `AXONFLOW_USER_TOKEN`.
+  `gateway_mode`'s blocked-request demo uses a stacked-SQLi query (blocked
+  on every stack posture — PII policies default to redact, not block) and
+  exits non-zero if unexpectedly approved; `openai_integration` prints the
+  outcome of its policy-block probe instead of ending silently.
+
+### Added
+
+- `runtime-e2e/interceptor_sync_bridge/` — live-agent assertion driving a
+  REAL `openai.OpenAI` client through `wrap_openai_client` from inside a
+  running loop and from plain sync code (blocked verdict enforced both
+  ways, no RuntimeError), plus async-detection assertions for
+  `AsyncOpenAI`.
+
 ## [8.5.0] - 2026-06-09 — Decision Mode PEP: decide → fulfill → forward
 
 Adds the SDK analog of the platform PEP client (`platform/shared/pep`,

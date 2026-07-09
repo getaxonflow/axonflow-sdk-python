@@ -13,6 +13,7 @@ Run with: python gateway_mode.py
 
 import asyncio
 import os
+import sys
 import time
 
 from axonflow import AxonFlow, TokenUsage
@@ -51,7 +52,7 @@ async def main() -> None:
         print("-" * 40)
 
         ctx = await axonflow.get_policy_approved_context(
-            user_token="user-jwt-token",  # Your user's JWT
+            user_token=os.environ.get("AXONFLOW_USER_TOKEN", "user-jwt-token"),  # Your user's JWT
             query="Find patients with recent lab results",
             data_sources=["postgres"],  # MCP connectors to fetch data from
             context={"department": "cardiology"},  # Additional context
@@ -151,17 +152,21 @@ async def blocked_example() -> None:
     ) as axonflow:
         print("\n=== Blocked Request Example ===\n")
 
+        # A stacked-DROP SQL injection is blocked by the sys_sqli_* static
+        # policies on every stack posture (PII policies default to redact,
+        # not block, so a "sensitive-sounding" English query would pass).
         ctx = await axonflow.get_policy_approved_context(
-            user_token="user-jwt-token",
-            query="Show me all social security numbers",  # Sensitive query
+            user_token=os.environ.get("AXONFLOW_USER_TOKEN", "user-jwt-token"),
+            query="SELECT * FROM users WHERE 1=1; DROP TABLE users;--",
         )
 
         if not ctx.approved:
-            print(f"❌ Request blocked!")
+            print("❌ Request blocked!")
             print(f"   Reason: {ctx.block_reason}")
             print(f"   Policies: {ctx.policies}")
         else:
-            print("✅ Request approved (unexpected)")
+            print("Request approved — expected a policy block for stacked SQLi")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

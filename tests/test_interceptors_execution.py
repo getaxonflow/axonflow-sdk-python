@@ -1062,3 +1062,164 @@ class TestOllamaAsyncEdgeCases:
 
         result = await wrapped.chat(model="llama2", messages=[{"content": "Hi"}])
         assert result is not None
+
+
+class TestSyncWrapInsideRunningLoop:
+    """Sync wrap paths must enforce from inside a running event loop.
+
+    Regression for the async-adapter-bypass class: the sync bridges used
+    ``loop.run_until_complete`` which raises ``RuntimeError: This event loop
+    is already running`` whenever the caller sits inside a running loop
+    (FastAPI handler, Jupyter, an async app driving a sync provider client).
+    The governance check crashed instead of completing — and a caller that
+    caught the RuntimeError could proceed ungoverned. The shared
+    ``run_coroutine_sync`` bridge must deliver the verdict either way.
+    """
+
+    @staticmethod
+    def _axonflow(blocked: bool) -> MagicMock:
+        mock_axonflow = MagicMock()
+        mock_axonflow.proxy_llm_call = AsyncMock(
+            return_value=MagicMock(blocked=blocked, block_reason="nope" if blocked else None)
+        )
+        return mock_axonflow
+
+    def test_openai_sync_create_allowed_inside_running_loop(self) -> None:
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create = MagicMock(return_value={"ok": True})
+        wrapped = wrap_openai_client(mock_openai, self._axonflow(blocked=False), user_token="u")
+
+        async def driver() -> Any:
+            # Sync provider client used from async code — the pre-fix bridge
+            # raised RuntimeError here.
+            return wrapped.chat.completions.create(
+                model="gpt-4", messages=[{"role": "user", "content": "Hello"}]
+            )
+
+        assert asyncio.run(driver()) == {"ok": True}
+
+    def test_openai_sync_create_blocked_inside_running_loop(self) -> None:
+        mock_openai = MagicMock()
+        original_create = MagicMock()
+        mock_openai.chat.completions.create = original_create
+        wrapped = wrap_openai_client(mock_openai, self._axonflow(blocked=True))
+
+        async def driver() -> None:
+            wrapped.chat.completions.create(
+                model="gpt-4", messages=[{"role": "user", "content": "Bad"}]
+            )
+
+        with pytest.raises(PolicyViolationError):
+            asyncio.run(driver())
+        original_create.assert_not_called()
+
+    def test_anthropic_sync_create_blocked_inside_running_loop(self) -> None:
+        from axonflow.interceptors.anthropic import wrap_anthropic_client
+
+        mock_anthropic = MagicMock()
+        original_create = MagicMock()
+        mock_anthropic.messages.create = original_create
+        wrapped = wrap_anthropic_client(mock_anthropic, self._axonflow(blocked=True))
+
+        async def driver() -> None:
+            wrapped.messages.create(model="claude-3", messages=[{"role": "user", "content": "Bad"}])
+
+        with pytest.raises(PolicyViolationError):
+            asyncio.run(driver())
+        original_create.assert_not_called()
+
+    def test_bedrock_sync_invoke_blocked_inside_running_loop(self) -> None:
+        mock_bedrock = MagicMock()
+        original_invoke = MagicMock()
+        mock_bedrock.invoke_model = original_invoke
+        wrapped = wrap_bedrock_client(mock_bedrock, self._axonflow(blocked=True))
+
+        async def driver() -> None:
+            wrapped.invoke_model(
+                modelId="anthropic.claude-3",
+                body=json.dumps({"messages": [{"role": "user", "content": "Bad"}]}),
+            )
+
+        with pytest.raises(PolicyViolationError):
+            asyncio.run(driver())
+        original_invoke.assert_not_called()
+
+    def test_gemini_sync_generate_blocked_inside_running_loop(self) -> None:
+        mock_model = MagicMock()
+        original_generate = MagicMock()
+        mock_model.generate_content = original_generate
+        wrapped = wrap_gemini_model(mock_model, self._axonflow(blocked=True))
+
+        async def driver() -> None:
+            wrapped.generate_content("Bad prompt")
+
+        with pytest.raises(PolicyViolationError):
+            asyncio.run(driver())
+        original_generate.assert_not_called()
+
+    def test_ollama_sync_chat_blocked_inside_running_loop(self) -> None:
+        mock_ollama = MagicMock()
+        original_chat = MagicMock()
+        mock_ollama.chat = original_chat
+        mock_ollama.generate = MagicMock()
+        wrapped = wrap_ollama_client(mock_ollama, self._axonflow(blocked=True))
+
+        async def driver() -> None:
+            wrapped.chat(model="llama2", messages=[{"role": "user", "content": "Bad"}])
+
+        with pytest.raises(PolicyViolationError):
+            asyncio.run(driver())
+        original_chat.assert_not_called()
+
+
+class TestAsyncDetectionThroughDecorators:
+    """AsyncOpenAI-style clients must get the ASYNC wrap path.
+
+    openai>=1 / anthropic decorate their async ``create`` methods with a
+    plain-``def`` wrapper (``@required_args``) that returns the coroutine —
+    ``asyncio.iscoroutinefunction`` on the bound method is False, so the
+    interceptor used to give an async client the sync wrap path.
+    ``is_async_callable`` follows ``__wrapped__``.
+    """
+
+    @staticmethod
+    def _decorated_async_create() -> Any:
+        """Mimic openai's @required_args: plain-def wrapper over async def."""
+        import functools
+
+        async def create(*args: Any, **kwargs: Any) -> Any:
+            return {"choices": [{"message": {"content": "hi"}}]}
+
+        @functools.wraps(create)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return create(*args, **kwargs)
+
+        return wrapper
+
+    def test_is_async_callable_sees_through_wraps(self) -> None:
+        from axonflow.interceptors._sync_bridge import is_async_callable
+
+        assert is_async_callable(self._decorated_async_create())
+
+        def plain(*args: Any, **kwargs: Any) -> Any:
+            return {}
+
+        assert not is_async_callable(plain)
+
+    @pytest.mark.asyncio
+    async def test_openai_wrap_picks_async_path_for_decorated_create(self) -> None:
+        mock_axonflow = MagicMock()
+        mock_axonflow.proxy_llm_call = AsyncMock(
+            return_value=MagicMock(blocked=False, block_reason=None)
+        )
+        mock_openai = MagicMock()
+        mock_openai.chat.completions.create = self._decorated_async_create()
+
+        wrapped = wrap_openai_client(mock_openai, mock_axonflow, user_token="u")
+        # The async path installs an `async def` wrapper; awaiting it must work
+        # end-to-end on the caller's loop.
+        result = await wrapped.chat.completions.create(
+            model="gpt-4", messages=[{"role": "user", "content": "Hello"}]
+        )
+        assert result == {"choices": [{"message": {"content": "hi"}}]}
+        mock_axonflow.proxy_llm_call.assert_awaited()

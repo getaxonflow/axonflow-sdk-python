@@ -26,12 +26,12 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from axonflow.exceptions import PolicyViolationError
+from axonflow.interceptors._sync_bridge import run_coroutine_sync
 from axonflow.interceptors.base import BaseInterceptor
 
 if TYPE_CHECKING:
@@ -86,15 +86,6 @@ def wrap_ollama_client(
         messages = kwargs.get("messages", [])
         return " ".join(m.get("content", "") for m in messages if isinstance(m, dict))
 
-    def _get_loop() -> asyncio.AbstractEventLoop:
-        """Get or create event loop."""
-        try:
-            return asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
-
     # Wrap chat method
     if hasattr(ollama_client, "chat"):
         original_chat = ollama_client.chat
@@ -104,8 +95,7 @@ def wrap_ollama_client(
             prompt = _extract_chat_prompt(kwargs)
             model = kwargs.get("model", "llama2")
 
-            loop = _get_loop()
-            response = loop.run_until_complete(
+            response = run_coroutine_sync(
                 axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
@@ -133,8 +123,7 @@ def wrap_ollama_client(
             prompt = kwargs.get("prompt", "")
             model = kwargs.get("model", "llama2")
 
-            loop = _get_loop()
-            response = loop.run_until_complete(
+            response = run_coroutine_sync(
                 axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,

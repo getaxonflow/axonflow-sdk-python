@@ -26,13 +26,13 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from axonflow.exceptions import PolicyViolationError
+from axonflow.interceptors._sync_bridge import run_coroutine_sync
 from axonflow.interceptors.base import BaseInterceptor
 
 if TYPE_CHECKING:
@@ -139,15 +139,6 @@ def wrap_bedrock_client(
                 pass
         return ""
 
-    def _get_loop() -> asyncio.AbstractEventLoop:
-        """Get or create event loop."""
-        try:
-            return asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
-
     # Wrap invoke_model
     if hasattr(bedrock_client, "invoke_model"):
         original_invoke = bedrock_client.invoke_model
@@ -158,8 +149,7 @@ def wrap_bedrock_client(
             body = kwargs.get("body", "")
             prompt = _extract_prompt(body, model_id)
 
-            loop = _get_loop()
-            response = loop.run_until_complete(
+            response = run_coroutine_sync(
                 axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
@@ -188,8 +178,7 @@ def wrap_bedrock_client(
             body = kwargs.get("body", "")
             prompt = _extract_prompt(body, model_id)
 
-            loop = _get_loop()
-            response = loop.run_until_complete(
+            response = run_coroutine_sync(
                 axonflow.proxy_llm_call(
                     user_token=user_token,
                     query=prompt,
