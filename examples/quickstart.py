@@ -30,7 +30,7 @@ async def main() -> None:
         # Execute a simple query with governance
         print("\n--- Executing governed query ---")
         response = await client.proxy_llm_call(
-            user_token="demo-user",
+            user_token=os.environ.get("AXONFLOW_USER_TOKEN", "demo-user"),
             query="What is the capital of France?",
             request_type="chat",
         )
@@ -55,7 +55,7 @@ def sync_example() -> None:
         client_secret=os.environ.get("AXONFLOW_CLIENT_SECRET", "demo-secret"),
     ) as client:
         result = client.proxy_llm_call(
-            user_token="demo-user",
+            user_token=os.environ.get("AXONFLOW_USER_TOKEN", "demo-user"),
             query="Hello, world!",
             request_type="chat",
         )

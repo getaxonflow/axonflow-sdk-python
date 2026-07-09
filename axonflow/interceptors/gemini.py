@@ -21,12 +21,12 @@ Example:
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from axonflow.exceptions import PolicyViolationError
+from axonflow.interceptors._sync_bridge import run_coroutine_sync
 from axonflow.interceptors.base import BaseInterceptor
 
 if TYPE_CHECKING:
@@ -110,22 +110,12 @@ def wrap_gemini_model(
             return contents
         return ""
 
-    def _get_loop() -> asyncio.AbstractEventLoop:
-        """Get or create event loop."""
-        try:
-            return asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
-
     @wraps(original_generate)
     def sync_wrapped_generate(*args: Any, **kwargs: Any) -> Any:
         prompt = _extract_prompt(args, kwargs)
 
         # Check with AxonFlow (sync)
-        loop = _get_loop()
-        response = loop.run_until_complete(
+        response = run_coroutine_sync(
             axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
@@ -138,7 +128,11 @@ def wrap_gemini_model(
         )
 
         if response.blocked:
-            raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+            raise PolicyViolationError(
+                response.block_reason
+                if response.block_reason is not None
+                else "Request blocked by policy"
+            )
 
         # Call original
         return original_generate(*args, **kwargs)
@@ -164,7 +158,11 @@ def wrap_gemini_model(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             # Call original
             return await original_generate_async(*args, **kwargs)
@@ -198,20 +196,11 @@ def _wrap_chat_session(
     original_send = chat_session.send_message
     original_send_async = getattr(chat_session, "send_message_async", None)
 
-    def _get_loop() -> asyncio.AbstractEventLoop:
-        try:
-            return asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
-
     @wraps(original_send)
     def sync_wrapped_send(content: Any, **kwargs: Any) -> Any:
         prompt = content if isinstance(content, str) else str(content)
 
-        loop = _get_loop()
-        response = loop.run_until_complete(
+        response = run_coroutine_sync(
             axonflow.proxy_llm_call(
                 user_token=user_token,
                 query=prompt,
@@ -225,7 +214,11 @@ def _wrap_chat_session(
         )
 
         if response.blocked:
-            raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+            raise PolicyViolationError(
+                response.block_reason
+                if response.block_reason is not None
+                else "Request blocked by policy"
+            )
 
         return original_send(content, **kwargs)
 
@@ -249,7 +242,11 @@ def _wrap_chat_session(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             return await original_send_async(content, **kwargs)
 

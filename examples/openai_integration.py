@@ -40,7 +40,7 @@ async def main() -> None:
         wrapped_openai = wrap_openai_client(
             openai_client,
             axonflow,
-            user_token="user-123",  # Your user's token
+            user_token=os.environ.get("AXONFLOW_USER_TOKEN", "user-123"),
         )
 
         print("OpenAI client wrapped with AxonFlow governance\n")
@@ -80,6 +80,10 @@ async def main() -> None:
             # path). OpenAI errors = no key / rate limit (acceptable noise).
             # Anything else (e.g. AxonFlow regression) bubbles up.
             print(f"Request handled: {type(e).__name__}: {e}")
+        else:
+            # Whether this query blocks depends on the stack's policy
+            # posture — say so instead of ending silently.
+            print("Not blocked by this stack's policies; response received.")
 
 
 if __name__ == "__main__":
