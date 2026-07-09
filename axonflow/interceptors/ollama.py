@@ -108,7 +108,11 @@ def wrap_ollama_client(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             return original_chat(*args, **kwargs)
 
@@ -136,7 +140,11 @@ def wrap_ollama_client(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             return original_generate(*args, **kwargs)
 
@@ -188,7 +196,11 @@ async def wrap_ollama_client_async(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             return await original_chat(*args, **kwargs)
 
@@ -214,7 +226,11 @@ async def wrap_ollama_client_async(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             return await original_generate(*args, **kwargs)
 

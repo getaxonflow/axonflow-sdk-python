@@ -98,7 +98,11 @@ def wrap_openai_client(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             # Call original
             return await original_create(*args, **kwargs)
@@ -124,7 +128,11 @@ def wrap_openai_client(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             # Call original
             return original_create(*args, **kwargs)

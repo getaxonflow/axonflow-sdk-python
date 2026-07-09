@@ -128,7 +128,11 @@ def wrap_gemini_model(
         )
 
         if response.blocked:
-            raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+            raise PolicyViolationError(
+                response.block_reason
+                if response.block_reason is not None
+                else "Request blocked by policy"
+            )
 
         # Call original
         return original_generate(*args, **kwargs)
@@ -154,7 +158,11 @@ def wrap_gemini_model(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             # Call original
             return await original_generate_async(*args, **kwargs)
@@ -206,7 +214,11 @@ def _wrap_chat_session(
         )
 
         if response.blocked:
-            raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+            raise PolicyViolationError(
+                response.block_reason
+                if response.block_reason is not None
+                else "Request blocked by policy"
+            )
 
         return original_send(content, **kwargs)
 
@@ -230,7 +242,11 @@ def _wrap_chat_session(
             )
 
             if response.blocked:
-                raise PolicyViolationError(response.block_reason or "Request blocked by policy")
+                raise PolicyViolationError(
+                    response.block_reason
+                    if response.block_reason is not None
+                    else "Request blocked by policy"
+                )
 
             return await original_send_async(content, **kwargs)
 
