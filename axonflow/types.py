@@ -407,6 +407,12 @@ class MCPCheckInputRequest(BaseModel):
     """Request to validate input against MCP policies."""
 
     connector_type: str
+    # Two-field (server, tool) identity contract (epic #2905 / #2904). `tool`
+    # carries the tool name so a PEP no longer has to concatenate it into
+    # `connector_type` (e.g. "server.tool") to preserve tool identity.
+    # Source of truth: platform/agent MCPCheckInputRequest (#2904, R3-approved,
+    # not yet merged to axonflow-enterprise at the time this field was added).
+    tool: str | None = Field(default=None)
     statement: str
     parameters: dict[str, Any] | None = Field(default=None)
     operation: str = Field(default="execute")
@@ -462,6 +468,9 @@ class MCPCheckOutputRequest(BaseModel):
     """Request to validate output against MCP policies."""
 
     connector_type: str
+    # Two-field (server, tool) identity contract, mirrored from
+    # MCPCheckInputRequest.tool (epic #2905 / #2904).
+    tool: str | None = Field(default=None)
     response_data: list[dict[str, Any]] | None = Field(default=None)
     message: str | None = Field(default=None)
     metadata: dict[str, Any] | None = Field(default=None)

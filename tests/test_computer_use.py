@@ -11,7 +11,6 @@ from axonflow.adapters.computer_use import (
     DEFAULT_BLOCKED_BASH_PATTERNS,
     CheckResult,
     ComputerUseGovernor,
-    _derive_connector_type,
 )
 from axonflow.types import MCPCheckInputResponse, MCPCheckOutputResponse
 
@@ -60,22 +59,71 @@ def _make_governor(
 
 
 # ---------------------------------------------------------------------------
-# Connector Type Derivation
+# connector_type / tool identity split (epic #2905 / #2904)
 # ---------------------------------------------------------------------------
 
 
-class TestDeriveConnectorType:
-    def test_tool_with_action(self) -> None:
-        assert _derive_connector_type("computer", "left_click") == "computer_use.left_click"
+class TestConnectorTypeToolSplit:
+    """The tool name must never be discarded when an action is present.
 
-    def test_tool_without_action(self) -> None:
-        assert _derive_connector_type("bash") == "computer_use.bash"
+    Previously ``_derive_connector_type`` folded both into a single
+    ``connector_type`` string ("computer_use.{action}"), silently dropping
+    the tool name whenever an action was present. Now `connector_type`
+    always carries the tool name and `tool` carries the action (when any),
+    as two separate wire fields — nothing is discarded.
+    """
 
-    def test_text_editor(self) -> None:
-        assert _derive_connector_type("text_editor") == "computer_use.text_editor"
+    @pytest.mark.asyncio
+    async def test_tool_with_action_preserves_both(self) -> None:
+        governor, client = _make_governor()
+        await governor.check_tool_use(
+            {
+                "name": "computer",
+                "input": {"action": "left_click", "coordinate": [100, 200]},
+            }
+        )
+        call_kwargs = client.mcp_check_input.call_args.kwargs
+        assert call_kwargs["connector_type"] == "computer"
+        assert call_kwargs["tool"] == "left_click"
 
-    def test_action_none(self) -> None:
-        assert _derive_connector_type("computer", None) == "computer_use.computer"
+    @pytest.mark.asyncio
+    async def test_tool_without_action(self) -> None:
+        governor, client = _make_governor()
+        await governor.check_tool_use({"name": "bash", "input": {"command": "echo hi"}})
+        call_kwargs = client.mcp_check_input.call_args.kwargs
+        assert call_kwargs["connector_type"] == "bash"
+        assert call_kwargs["tool"] is None
+
+    @pytest.mark.asyncio
+    async def test_text_editor_no_action(self) -> None:
+        governor, client = _make_governor()
+        await governor.check_tool_use({"name": "text_editor", "input": {}})
+        call_kwargs = client.mcp_check_input.call_args.kwargs
+        assert call_kwargs["connector_type"] == "text_editor"
+        assert call_kwargs["tool"] is None
+
+    @pytest.mark.asyncio
+    async def test_different_actions_distinguishable_for_same_tool(self) -> None:
+        """Two calls to the same tool with different actions must not
+        collide on connector_type — this is exactly what the old
+        `computer_use.{action}`-only derivation broke, since it dropped
+        `name` and could conflate distinct tools that happen to share an
+        action name."""
+        governor, client = _make_governor()
+
+        await governor.check_tool_use(
+            {"name": "computer", "input": {"action": "screenshot"}},
+        )
+        first = client.mcp_check_input.call_args.kwargs
+
+        await governor.check_tool_use(
+            {"name": "computer", "input": {"action": "left_click", "coordinate": [1, 1]}},
+        )
+        second = client.mcp_check_input.call_args.kwargs
+
+        assert first["connector_type"] == second["connector_type"] == "computer"
+        assert first["tool"] == "screenshot"
+        assert second["tool"] == "left_click"
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +241,7 @@ class TestCheckToolUse:
         assert result.block_reason == "PII detected in tool arguments"
 
     @pytest.mark.asyncio
-    async def test_connector_type_uses_action(self) -> None:
+    async def test_connector_type_is_tool_name_action_sent_as_tool(self) -> None:
         governor, client = _make_governor()
         await governor.check_tool_use(
             {
@@ -202,7 +250,8 @@ class TestCheckToolUse:
             }
         )
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "computer_use.left_click"
+        assert call_kwargs["connector_type"] == "computer"
+        assert call_kwargs["tool"] == "left_click"
 
     @pytest.mark.asyncio
     async def test_connector_type_for_bash(self) -> None:
@@ -214,7 +263,8 @@ class TestCheckToolUse:
             }
         )
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "computer_use.bash"
+        assert call_kwargs["connector_type"] == "bash"
+        assert call_kwargs["tool"] is None
 
     @pytest.mark.asyncio
     async def test_custom_blocked_patterns(self) -> None:
@@ -245,7 +295,8 @@ class TestCheckToolUse:
         governor, client = _make_governor()
         await governor.check_tool_use({"input": {"action": "click"}})
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "computer_use.click"
+        assert call_kwargs["connector_type"] == "unknown"
+        assert call_kwargs["tool"] == "click"
 
     @pytest.mark.asyncio
     async def test_missing_input_defaults_to_empty(self) -> None:
@@ -291,7 +342,7 @@ class TestCheckResult:
         governor, client = _make_governor()
         await governor.check_result("text_editor", "file contents")
         call_kwargs = client.mcp_check_output.call_args.kwargs
-        assert call_kwargs["connector_type"] == "computer_use.text_editor"
+        assert call_kwargs["connector_type"] == "text_editor"
 
     @pytest.mark.asyncio
     async def test_dict_redacted_data_json_serialized(self) -> None:

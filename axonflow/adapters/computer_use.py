@@ -83,19 +83,6 @@ class CheckResult:
     """Number of policies the server evaluated."""
 
 
-def _derive_connector_type(tool_name: str, action: str | None = None) -> str:
-    """Derive AxonFlow connector_type from Computer Use tool name and action.
-
-    Examples:
-        _derive_connector_type("computer", "left_click") -> "computer_use.left_click"
-        _derive_connector_type("bash") -> "computer_use.bash"
-        _derive_connector_type("text_editor") -> "computer_use.text_editor"
-    """
-    if action:
-        return f"computer_use.{action}"
-    return f"computer_use.{tool_name}"
-
-
 class ComputerUseGovernor:
     """Governance middleware for Anthropic Computer Use tool_use blocks.
 
@@ -162,18 +149,22 @@ class ComputerUseGovernor:
                         policies_evaluated=0,
                     )
 
-        # Derive connector_type from tool name + action
+        # Two-field (server, tool) identity contract (epic #2905 / #2904):
+        # `connector_type` carries the Computer Use tool name (e.g. "computer",
+        # "bash", "text_editor") and `action` — when present — is sent
+        # separately as `tool` (e.g. "left_click", "screenshot"). Previously
+        # both were folded into a single derived connector_type string
+        # ("computer_use.{action}"), which silently discarded `name` whenever
+        # an action was present. Neither value is dropped now.
         action = tool_input.get("action") if isinstance(tool_input, dict) else None
-        connector_type = _derive_connector_type(
-            name,
-            action if isinstance(action, str) else None,
-        )
+        tool = action if isinstance(action, str) else None
 
         # Serialize input for policy evaluation
         statement = json.dumps(tool_input, default=str)
 
         check = await self._client.mcp_check_input(
-            connector_type=connector_type,
+            connector_type=name,
+            tool=tool,
             statement=statement,
             operation="execute",
         )
@@ -204,10 +195,11 @@ class ComputerUseGovernor:
         Returns:
             CheckResult with allowed status and optional redacted_result.
         """
-        connector_type = _derive_connector_type(tool_name)
-
+        # No `action` is available at this call site, so `tool` is left
+        # unset here — see check_tool_use() for the (connector_type, tool)
+        # split when an action is known.
         check = await self._client.mcp_check_output(
-            connector_type=connector_type,
+            connector_type=tool_name,
             message=result,
         )
 

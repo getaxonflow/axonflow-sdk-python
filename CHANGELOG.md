@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [Unreleased]
+
+### Fixed
+
+- **`ComputerUseGovernor.check_tool_use` no longer drops the tool name when
+  an action is present.** `_derive_connector_type(tool_name, action)` folded
+  both into a single `connector_type` string (`"computer_use.{action}"`),
+  silently discarding `tool_name` whenever `action` was present — every
+  actioned Computer Use tool call (e.g. `computer` with
+  `action="left_click"`) collapsed to the same `connector_type` shape
+  regardless of which tool actually triggered it. `_derive_connector_type`
+  is removed; `check_tool_use` now passes `connector_type=name` and
+  `tool=action` as two separate wire fields, matching the platform's
+  two-field (server, tool) identity contract (epic #2905 / #2904).
+  `mcp_check_input`/`mcp_check_output` gain a matching optional `tool`
+  parameter.
+
 ## [8.5.1] - 2026-07-09 — Interceptor sync bridge + async-client detection + example fixes
 
 Hostile-testing sweep ahead of the BukuWarung integration

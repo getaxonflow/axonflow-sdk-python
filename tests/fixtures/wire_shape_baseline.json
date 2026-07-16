@@ -297,9 +297,10 @@
       "spec_only": []
     },
     "MCPCheckInputRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it.",
+      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it. Also declares `tool` (epic #2905, platform sub-issue #2904, R3-approved/CI-green but not yet merged to axonflow-enterprise) \u2014 the two-field (server, tool) identity contract; agent-api.yaml will gain it once #2904 lands.",
       "sdk_only": [
-        "content_type"
+        "content_type",
+        "tool"
       ],
       "spec_only": []
     },
@@ -309,6 +310,13 @@
         "redacted",
         "redacted_statement",
         "redaction_evaluated"
+      ],
+      "spec_only": []
+    },
+    "MCPCheckOutputRequest": {
+      "note": "acknowledged-sdk-superset: tracked in epic #2905, platform sub-issue #2904 (R3-approved/CI-green but not yet merged to axonflow-enterprise) \u2014 SDK declares `tool`, mirroring MCPCheckInputRequest.tool for the two-field (server, tool) identity contract; agent-api.yaml will gain it once #2904 lands.",
+      "sdk_only": [
+        "tool"
       ],
       "spec_only": []
     },
