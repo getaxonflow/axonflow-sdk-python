@@ -297,9 +297,10 @@
       "spec_only": []
     },
     "MCPCheckInputRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it.",
+      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it. Also declares `tool` (epic #2905, platform sub-issue #2904) \u2014 the two-field (server, tool) identity contract; #2904 is merged to axonflow-enterprise main and live server-side, this drift just tracks the OpenAPI spec pin (pinned to a community mirror commit that predates the merge) catching up.",
       "sdk_only": [
-        "content_type"
+        "content_type",
+        "tool"
       ],
       "spec_only": []
     },
@@ -309,6 +310,13 @@
         "redacted",
         "redacted_statement",
         "redaction_evaluated"
+      ],
+      "spec_only": []
+    },
+    "MCPCheckOutputRequest": {
+      "note": "acknowledged-sdk-superset: tracked in epic #2905, platform sub-issue #2904 \u2014 SDK declares `tool`, mirroring MCPCheckInputRequest.tool for the two-field (server, tool) identity contract. Unlike the input-phase field, the platform's MCPCheckOutputRequest has no matching `tool` field at all yet (#2904 only added it input-side) \u2014 sending this is forward-compatible and harmless but not yet consumed server-side.",
+      "sdk_only": [
+        "tool"
       ],
       "spec_only": []
     },

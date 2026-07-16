@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [Unreleased]
+
+### Fixed
+
+- **LangGraph `mcp_tool_interceptor` no longer concatenates the MCP server
+  name and tool name into a single `connector_type` string.** `mcp_check_input`/
+  `mcp_check_output` (and their `check_tool_input`/`check_tool_output` aliases)
+  now accept an optional `tool` parameter, sent alongside `connector_type` on
+  the wire, matching the platform's two-field (server, tool) identity contract
+  (epic #2905 / #2904). The interceptor sends `connector_type=request.server_name`
+  and `tool=request.name` as two distinct values instead of
+  `f"{server_name}.{name}"`.
+
 ## [8.5.1] - 2026-07-09 — Interceptor sync bridge + async-client detection + example fixes
 
 Hostile-testing sweep ahead of the BukuWarung integration

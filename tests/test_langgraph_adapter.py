@@ -104,14 +104,16 @@ class TestMCPToolInterceptor:
 
         client.mcp_check_input.assert_awaited_once()
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "srv.tool"
+        # server and tool are sent as two separate fields, not concatenated
+        assert call_kwargs["connector_type"] == "srv"
+        assert call_kwargs["tool"] == "tool"
         assert call_kwargs["parameters"] == request.args
         # Statement uses JSON serialization, not Python repr
         expected_args = json.dumps(request.args, default=str)
         assert call_kwargs["statement"] == f"srv.tool({expected_args})"
 
     @pytest.mark.asyncio
-    async def test_same_connector_type_sent_to_check_output(
+    async def test_same_connector_type_and_tool_sent_to_check_output(
         self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
     ) -> None:
         handler = AsyncMock(return_value="ok")
@@ -120,7 +122,8 @@ class TestMCPToolInterceptor:
         await adapter.mcp_tool_interceptor()(request, handler)
 
         call_kwargs = client.mcp_check_output.call_args.kwargs
-        assert call_kwargs["connector_type"] == "srv.tool"
+        assert call_kwargs["connector_type"] == "srv"
+        assert call_kwargs["tool"] == "tool"
 
     @pytest.mark.asyncio
     async def test_output_message_uses_json_serialization(
@@ -242,6 +245,23 @@ class TestMCPToolInterceptor:
         assert call_kwargs["connector_type"] == "srv"
 
     @pytest.mark.asyncio
+    async def test_custom_connector_type_fn_does_not_drop_tool(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        """Even with a fully custom connector_type_fn, `tool` is still sent
+        (derived from request.name) — it is never folded into connector_type
+        nor silently dropped."""
+        handler = AsyncMock(return_value="ok")
+        request = _make_request(server_name="srv", name="tool")
+        opts = MCPInterceptorOptions(connector_type_fn=lambda req: "custom-type")
+
+        await adapter.mcp_tool_interceptor(opts)(request, handler)
+
+        call_kwargs = client.mcp_check_input.call_args.kwargs
+        assert call_kwargs["connector_type"] == "custom-type"
+        assert call_kwargs["tool"] == "tool"
+
+    @pytest.mark.asyncio
     async def test_custom_connector_type_fn_also_used_for_output_check(
         self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
     ) -> None:
@@ -252,6 +272,7 @@ class TestMCPToolInterceptor:
         await adapter.mcp_tool_interceptor(opts)(request, handler)
 
         assert client.mcp_check_output.call_args.kwargs["connector_type"] == "custom-type"
+        assert client.mcp_check_output.call_args.kwargs["tool"] == "tool"
 
     # --- factory returns independent callables ---
 
@@ -879,6 +900,41 @@ class TestToolOutputWrapper:
 
         assert client.mcp_check_input.call_args.kwargs["connector_type"] == "bankInfo"
         assert client.mcp_check_output.call_args.kwargs["connector_type"] == "bankInfo"
+
+    @pytest.mark.asyncio
+    async def test_tool_field_sent_alongside_connector_type(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        """The tool name is always sent as `tool`, in addition to whatever
+        connector_type resolves to (no server info is available at this
+        call site, so connector_type falls back to the bare name too — but
+        the tool identity must never be silently dropped)."""
+        execute = AsyncMock(return_value=_make_tool_message())
+        await adapter.tool_output_wrapper()({"name": "bankInfo", "args": {}, "id": "c1"}, execute)
+
+        assert client.mcp_check_input.call_args.kwargs["tool"] == "bankInfo"
+        assert client.mcp_check_output.call_args.kwargs["tool"] == "bankInfo"
+
+    @pytest.mark.asyncio
+    async def test_tool_field_preserved_with_custom_connector_type_fn(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        """A custom connector_type_fn only overrides connector_type — the
+        tool name is still forwarded separately, not dropped."""
+        opts = MCPInterceptorOptions(connector_type_fn=lambda call: "local")
+        execute = AsyncMock(return_value=_make_tool_message())
+
+        await adapter.tool_output_wrapper(opts)(
+            {"name": "my_tool", "args": {}, "id": "c1"}, execute
+        )
+
+        input_kwargs = client.mcp_check_input.call_args.kwargs
+        assert input_kwargs["connector_type"] == "local"
+        assert input_kwargs["tool"] == "my_tool"
+
+        output_kwargs = client.mcp_check_output.call_args.kwargs
+        assert output_kwargs["connector_type"] == "local"
+        assert output_kwargs["tool"] == "my_tool"
 
     @pytest.mark.asyncio
     async def test_args_serialized_as_statement_for_input_check(
