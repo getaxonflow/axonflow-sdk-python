@@ -2180,7 +2180,7 @@ class AxonFlow:
         trail for governance and compliance.
 
         Args:
-            request: Tool call details including tool name, type, input/output,
+            request: Tool call details including tool name, caller, input/output,
                 and associated workflow/step information.
 
         Returns:
@@ -2190,12 +2190,17 @@ class AxonFlow:
             ValueError: If tool_name is empty.
             AxonFlowError: If audit recording fails.
 
+        Note:
+            `tool_type` is deprecated in favor of `caller_name` and is kept
+            only for backward compatibility. New callers should set
+            `caller_name` to identify which client made the call.
+
         Example:
             >>> from axonflow.types import AuditToolCallRequest
             >>> result = await client.audit_tool_call(
             ...     AuditToolCallRequest(
             ...         tool_name="getUserInfo",
-            ...         tool_type="mcp",
+            ...         caller_name="claude_code",
             ...         workflow_id="wf_abc123",
             ...         success=True,
             ...         duration_ms=45,
@@ -2213,6 +2218,7 @@ class AxonFlow:
             self._logger.debug(
                 "Audit tool call request",
                 tool_name=request.tool_name,
+                caller_name=request.caller_name,
                 tool_type=request.tool_type,
             )
 
