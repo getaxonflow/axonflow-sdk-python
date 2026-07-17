@@ -262,6 +262,32 @@ class TestMCPToolInterceptor:
         assert call_kwargs["tool"] == "tool"
 
     @pytest.mark.asyncio
+    async def test_empty_server_name_sends_empty_connector_type_and_tool(
+        self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
+    ) -> None:
+        """Missing-server edge (epic #2905): with the default resolver,
+        connector_type is the server name. An empty ``server_name`` therefore
+        sends ``connector_type=""`` while ``tool`` still carries the tool
+        name.
+
+        Documented behavior: a real platform rejects an empty
+        ``connector_type`` with HTTP 400, which the client surfaces as a
+        ``ConnectorError`` — the tool call is blocked (fail-closed), never run
+        ungoverned. Callers whose MCP tools have no server must supply a
+        ``connector_type_fn``. Before the de-concatenation the old value was
+        ``".tool"`` (a non-empty string the platform accepted), so this is a
+        deliberate, surfaced behavior change for server-less tools.
+        """
+        handler = AsyncMock(return_value="ok")
+        request = _make_request(server_name="", name="tool")
+
+        await adapter.mcp_tool_interceptor()(request, handler)
+
+        call_kwargs = client.mcp_check_input.call_args.kwargs
+        assert call_kwargs["connector_type"] == ""
+        assert call_kwargs["tool"] == "tool"
+
+    @pytest.mark.asyncio
     async def test_custom_connector_type_fn_also_used_for_output_check(
         self, adapter: AxonFlowLangGraphAdapter, client: AxonFlow
     ) -> None:
