@@ -1482,8 +1482,18 @@ class AuditToolCallRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     tool_name: str = Field(description="Name of the tool that was called")
+    caller_name: str | None = Field(
+        default=None,
+        description=(
+            "Identifies which client made the call (e.g., claude_code, codex, cursor, openclaw)"
+        ),
+    )
     tool_type: str | None = Field(
-        default=None, description="Type of tool (e.g., mcp, api, function)"
+        default=None,
+        description=(
+            "Deprecated: use caller_name instead. Type of tool (e.g., mcp, api, function), "
+            "historically used to identify the calling client."
+        ),
     )
     input: dict[str, Any] | None = Field(default=None, alias="input", description="Tool input data")
     output: dict[str, Any] | None = Field(
