@@ -200,6 +200,13 @@
       ],
       "spec_only": []
     },
+    "AuditToolCallRequest": {
+      "note": "acknowledged-sdk-superset: tracked in getaxonflow/axonflow-enterprise#2912. SDK declares caller_name; platform accepts/writes it (PR #2953) but the community OpenAPI spec has not caught up yet.",
+      "sdk_only": [
+        "caller_name"
+      ],
+      "spec_only": []
+    },
     "Budget": {
       "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `enabled`; platform emits it but spec doesn't yet declare it.",
       "sdk_only": [
