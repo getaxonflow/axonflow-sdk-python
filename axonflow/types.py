@@ -1485,7 +1485,9 @@ class AuditToolCallRequest(BaseModel):
     caller_name: str | None = Field(
         default=None,
         description=(
-            "Identifies which client made the call (e.g., claude_code, codex, cursor, openclaw)"
+            "Identifies which client made the call (e.g., claude_code, codex, cursor, openclaw). "
+            "Requires a platform with caller_name support (v9.11.0+); older platforms silently "
+            "drop this field, so also set tool_type if you need attribution there."
         ),
     )
     tool_type: str | None = Field(

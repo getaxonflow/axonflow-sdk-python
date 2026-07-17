@@ -39,6 +39,19 @@ local-dev Enterprise stack in `axonflow-enterprise/main-tree/.env`). In
 Community mode, tenant-audit reads are tenant-wide regardless, so the header
 is a no-op there.
 
+## Prerequisite: platform support is not yet on `main`
+
+`caller_name` support (axonflow-enterprise#2953) is implemented but, as of
+this writing, still an open PR on the `feat/2912-caller-name-tool-type-deprecation`
+branch — not yet merged to `axonflow-enterprise` main. Against a stack built
+from `axonflow-enterprise` main, this test will FAIL (the 45s poll of
+`GET /api/v1/audit/tenant/{tenant_id}` times out waiting for
+`policy_details.caller_name`, which the server doesn't write yet) — that's
+not a bug in this test, it means the platform side isn't deployed on
+whatever stack you're pointed at. Point your local `axonflow-enterprise`
+checkout at that branch (or a later commit that includes it) before running
+this test.
+
 ## Run
 
 ```
