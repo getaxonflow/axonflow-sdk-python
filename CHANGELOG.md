@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`check-output`) does **not** consume `tool` on any released platform
   version yet (tracked by #2955, targeted for v9.11.0); the SDK sends it
   forward-compatibly and current platforms ignore it.
+
 ### Added
 
 - **`AuditToolCallRequest.caller_name`** (getaxonflow/axonflow-enterprise#2912,
