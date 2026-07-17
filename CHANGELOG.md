@@ -11,75 +11,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **This release contains a breaking change and MUST be published as a major
-> version bump.** The `connector_type` wire value emitted by the LangGraph
-> adapter changes from `"{server}.{tool}"` to the bare server name; policies
-> matching the old concatenated value stop matching until re-scoped (see the
-> migration note below).
->
-> **Merge order.** This PR (#216) and the Computer Use PR (#217) both add the
-> shared optional `tool` parameter to `client.py`/`types.py` and the
-> `wire_shape_baseline.json` entries. Those hunks are byte-identical across
-> both PRs; **merge #216 first**, then #217 auto-resolves the shared hunks.
+## [9.0.0] - 2026-07-18
 
 ### Changed (BREAKING)
 
-- **The LangGraph adapter now reports the (server, tool) identity as two
-  separate wire fields instead of concatenating them into `connector_type`.**
-  `mcp_check_input`/`mcp_check_output` (and their `check_tool_input`/
-  `check_tool_output` aliases) gain an optional `tool` parameter, sent
-  alongside `connector_type` on the wire, matching the platform's two-field
-  (server, tool) identity contract (epic #2905 / #2904). The interceptor now
-  sends `connector_type=request.server_name` and `tool=request.name` as two
-  distinct values instead of `f"{server_name}.{name}"`; the default
-  `connector_type_fn` returns the bare `server_name`. `tool` is always sent
-  separately and is never folded back into `connector_type`, even when a
-  custom `connector_type_fn` is supplied.
+- **The LangGraph and Computer Use adapters now report the (server, tool)
+  identity as two separate wire fields instead of concatenating them into
+  `connector_type`.** `mcp_check_input`/`mcp_check_output` (and their
+  `check_tool_input`/`check_tool_output` aliases) gain an optional `tool`
+  parameter, sent alongside `connector_type` on the wire — the platform's
+  two-field (server, tool) identity contract. The tool name is never folded
+  back into `connector_type`.
+
+  - **LangGraph** (`mcp_tool_interceptor`) now sends
+    `connector_type = request.server_name` and `tool = request.name` instead
+    of `f"{server_name}.{name}"`; the default `connector_type_fn` returns the
+    bare `server_name`. `connector_type_fn` is the compatibility lever — a
+    caller can restore any prior `connector_type` value (including the old
+    concatenated form, `lambda req: f"{req.server_name}.{req.name}"`) without
+    losing the separate `tool` field. The human-readable `statement` is now
+    `"{connector_type}.{tool}(args)"` built from the resolved connector type;
+    with a custom `connector_type_fn` its shape shifts from `"{custom}(args)"`
+    to `"{custom}.{tool}(args)"`. With the default resolver, a tool whose
+    `server_name` is empty sends `connector_type=""`, which the platform
+    rejects with HTTP 400 — the call raises `ConnectorError` and is blocked
+    (fail-closed); supply a `connector_type_fn` for server-less MCP tools.
+
+  - **Computer Use** (`ComputerUseGovernor`) now sends the constant
+    `connector_type = "computer_use"` and `tool =` the tool name (`computer`,
+    `bash`, `text_editor`). The action (e.g. `left_click`) is preserved inside
+    the serialized `statement`, not in `tool` (and not in `operation`, which
+    is constrained to `{query, execute}`). This adapter has **no**
+    `connector_type_fn` escape hatch, so re-scoping policies is the only
+    migration path.
 
   **Migration.** Policies or per-connector settings matching the old
-  concatenated value — e.g. `connector_type == "filesystem.read_file"` — stop
-  matching after upgrade. Re-scope them to match `connector_type ==
-  "filesystem"` together with the `tool` field (e.g. `tool == "read_file"`).
-  The `connector_type_fn` option is the compatibility lever: a caller can
-  restore any prior `connector_type` value (including the old concatenated
-  form, `lambda req: f"{req.server_name}.{req.name}"`) without losing the
-  separate `tool` field.
-
-  **Statement text also changed** for policies that match on the
-  human-readable `statement`: it is now `"{connector_type}.{tool}(args)"`
-  (built from the *resolved* connector type). With a custom `connector_type_fn`
-  the statement shape shifts from the old `"{custom}(args)"` to
-  `"{custom}.{tool}(args)"`.
-
-  **Missing-server edge.** With the default resolver, a tool whose
-  `server_name` is empty now sends `connector_type=""`, which the platform
-  rejects with HTTP 400 → the client raises `ConnectorError` and the tool call
-  is blocked (fail-closed), never run ungoverned. Previously the concatenated
-  value was `".tool"` (a non-empty string the platform accepted). Supply a
-  `connector_type_fn` for server-less MCP tools.
+  concatenated value — e.g. `connector_type == "filesystem.read_file"` or
+  `"computer_use.left_click"` — stop matching after upgrade. Re-scope them to
+  match `connector_type` (the bare server name, or `"computer_use"`) together
+  with the `tool` field (e.g. `tool == "read_file"`).
 
   **Minimum platform.** The `tool` field is consumed on `POST
-  /api/v1/mcp/check-input` by platform **v9.10.0+** (enterprise `c8df2006b`,
-  epic #2905 / #2904). On platforms below v9.10.0 the `tool` field is silently
-  dropped and identity degrades to the bare server name — coarser than the old
-  concatenated value — so **upgrade the platform to v9.10.0+ before adopting
-  this SDK major.** The response plane (`check-output`) does **not** consume
-  `tool` on any released platform version yet (tracked by #2955, targeted for
-  v9.11.0); the SDK sends it forward-compatibly and current platforms ignore
-  it.
+  /api/v1/mcp/check-input` by **AxonFlow platform v9.10.0+**. On older
+  platforms it is silently dropped and identity degrades to the bare
+  `connector_type` — upgrade the platform to v9.10.0+ before adopting this SDK
+  major. Response-plane (`check-output`) `tool` scoping requires **AxonFlow
+  platform v9.11.0+**; until then the SDK sends it forward-compatibly and older
+  platforms ignore it.
 
 ### Added
 
-- **`AuditToolCallRequest.caller_name`** (getaxonflow/axonflow-enterprise#2912,
-  sub-issue of epic #2905) — identifies which client made a non-LLM tool
-  call (e.g. `claude_code`, `codex`, `cursor`, `openclaw`). Replaces the
-  misleadingly-named `tool_type` field, which every real caller actually
-  used to identify the calling client rather than any property of the
-  tool. `tool_type` is kept as a deprecated input fallback (not removed):
-  the server resolves `caller_name` if supplied, else the legacy
-  `tool_type`, else a default. See
-  `runtime-e2e/caller_name_audit/` for the real-stack proof that
-  `caller_name` reaches `policy_details.caller_name` on the audit row.
+- **`AuditToolCallRequest.caller_name`** — identifies which client made a
+  non-LLM tool call (e.g. `claude_code`, `codex`, `cursor`, `openclaw`).
+  Replaces the misleadingly-named `tool_type` field, which every real caller
+  actually used to identify the calling client rather than any property of the
+  tool. `tool_type` is kept as a deprecated input fallback (not removed): the
+  server resolves `caller_name` if supplied, else the legacy `tool_type`, else
+  a default.
 
 ## [8.5.1] - 2026-07-09 — Interceptor sync bridge + async-client detection + example fixes
 
