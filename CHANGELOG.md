@@ -67,6 +67,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tool` on any released platform version yet (tracked by #2955, targeted for
   v9.11.0); the SDK sends it forward-compatibly and current platforms ignore
   it.
+### Added
+
+- **`AuditToolCallRequest.caller_name`** (getaxonflow/axonflow-enterprise#2912,
+  sub-issue of epic #2905) — identifies which client made a non-LLM tool
+  call (e.g. `claude_code`, `codex`, `cursor`, `openclaw`). Replaces the
+  misleadingly-named `tool_type` field, which every real caller actually
+  used to identify the calling client rather than any property of the
+  tool. `tool_type` is kept as a deprecated input fallback (not removed):
+  the server resolves `caller_name` if supplied, else the legacy
+  `tool_type`, else a default. See
+  `runtime-e2e/caller_name_audit/` for the real-stack proof that
+  `caller_name` reaches `policy_details.caller_name` on the audit row.
 
 ## [8.5.1] - 2026-07-09 — Interceptor sync bridge + async-client detection + example fixes
 
