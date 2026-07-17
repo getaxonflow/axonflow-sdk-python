@@ -408,10 +408,11 @@ class MCPCheckInputRequest(BaseModel):
 
     connector_type: str
     # Two-field (server, tool) identity contract (epic #2905 / #2904). `tool`
-    # carries the tool name so a PEP no longer has to concatenate it into
+    # carries the MCP tool name so a PEP no longer has to concatenate it into
     # `connector_type` (e.g. "server.tool") to preserve tool identity.
-    # Source of truth: platform/agent MCPCheckInputRequest (#2904, R3-approved,
-    # not yet merged to axonflow-enterprise at the time this field was added).
+    # Source of truth: platform/agent MCPCheckInputRequest (#2904, merged to
+    # axonflow-enterprise as c8df2006b and first released in platform v9.10.0);
+    # consumed on the request-input plane. Platforms below v9.10.0 ignore it.
     tool: str | None = Field(default=None)
     statement: str
     parameters: dict[str, Any] | None = Field(default=None)
@@ -469,7 +470,11 @@ class MCPCheckOutputRequest(BaseModel):
 
     connector_type: str
     # Two-field (server, tool) identity contract, mirrored from
-    # MCPCheckInputRequest.tool (epic #2905 / #2904).
+    # MCPCheckInputRequest.tool (epic #2905 / #2904). Unlike the input-phase
+    # field, the platform's MCPCheckOutputRequest has no matching `tool` field
+    # on ANY released version yet (tracked by #2955); sending it is
+    # forward-compatible and harmless — the agent's JSON decoder ignores
+    # unrecognized keys — but it is not yet consumed server-side.
     tool: str | None = Field(default=None)
     response_data: list[dict[str, Any]] | None = Field(default=None)
     message: str | None = Field(default=None)

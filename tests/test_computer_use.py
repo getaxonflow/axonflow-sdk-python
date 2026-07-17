@@ -64,17 +64,21 @@ def _make_governor(
 
 
 class TestConnectorTypeToolSplit:
-    """The tool name must never be discarded when an action is present.
+    """The tool name must never be discarded, and the (server, tool) identity
+    is coherent with the LangGraph adapters.
 
-    Previously ``_derive_connector_type`` folded both into a single
-    ``connector_type`` string ("computer_use.{action}"), silently dropping
-    the tool name whenever an action was present. Now `connector_type`
-    always carries the tool name and `tool` carries the action (when any),
-    as two separate wire fields — nothing is discarded.
+    Previously ``_derive_connector_type`` folded the tool name and the action
+    into a single ``connector_type`` string ("computer_use.{action}"),
+    silently dropping the tool name whenever an action was present. Now
+    ``connector_type`` is the constant "computer_use" connector/domain marker
+    and ``tool`` carries the tool NAME (e.g. "computer", "bash") — the same
+    (server, tool) mapping the LangGraph adapters use (RULING 1, epic #2905).
+    The action is preserved inside ``statement`` (the serialized tool input),
+    never in ``tool``.
     """
 
     @pytest.mark.asyncio
-    async def test_tool_with_action_preserves_both(self) -> None:
+    async def test_tool_name_is_tool_field_not_action(self) -> None:
         governor, client = _make_governor()
         await governor.check_tool_use(
             {
@@ -83,32 +87,35 @@ class TestConnectorTypeToolSplit:
             }
         )
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "computer"
-        assert call_kwargs["tool"] == "left_click"
+        # connector_type is the constant domain marker; tool is the tool NAME
+        # (never the action).
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "computer"
+        # The action is preserved in the serialized statement, not in `tool`.
+        assert "left_click" in call_kwargs["statement"]
 
     @pytest.mark.asyncio
     async def test_tool_without_action(self) -> None:
         governor, client = _make_governor()
         await governor.check_tool_use({"name": "bash", "input": {"command": "echo hi"}})
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "bash"
-        assert call_kwargs["tool"] is None
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "bash"
 
     @pytest.mark.asyncio
     async def test_text_editor_no_action(self) -> None:
         governor, client = _make_governor()
         await governor.check_tool_use({"name": "text_editor", "input": {}})
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "text_editor"
-        assert call_kwargs["tool"] is None
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "text_editor"
 
     @pytest.mark.asyncio
-    async def test_different_actions_distinguishable_for_same_tool(self) -> None:
-        """Two calls to the same tool with different actions must not
-        collide on connector_type — this is exactly what the old
-        `computer_use.{action}`-only derivation broke, since it dropped
-        `name` and could conflate distinct tools that happen to share an
-        action name."""
+    async def test_tool_name_survives_regardless_of_action(self) -> None:
+        """Two calls to the same tool with different actions carry the same
+        tool identity — the tool name is never conflated with the action.
+        This is exactly what the old ``computer_use.{action}``-only
+        derivation broke, since it dropped the tool name entirely."""
         governor, client = _make_governor()
 
         await governor.check_tool_use(
@@ -121,9 +128,22 @@ class TestConnectorTypeToolSplit:
         )
         second = client.mcp_check_input.call_args.kwargs
 
-        assert first["connector_type"] == second["connector_type"] == "computer"
-        assert first["tool"] == "screenshot"
-        assert second["tool"] == "left_click"
+        assert first["connector_type"] == second["connector_type"] == "computer_use"
+        assert first["tool"] == second["tool"] == "computer"
+        # The differing action lives in the statement, not the tool identity.
+        assert "screenshot" in first["statement"]
+        assert "left_click" in second["statement"]
+
+    @pytest.mark.asyncio
+    async def test_operation_stays_spec_compliant(self) -> None:
+        """The action must NOT be smuggled into `operation` — the agent-api
+        spec constrains it to the enum {query, execute}."""
+        governor, client = _make_governor()
+        await governor.check_tool_use(
+            {"name": "computer", "input": {"action": "left_click"}},
+        )
+        call_kwargs = client.mcp_check_input.call_args.kwargs
+        assert call_kwargs["operation"] == "execute"
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +261,7 @@ class TestCheckToolUse:
         assert result.block_reason == "PII detected in tool arguments"
 
     @pytest.mark.asyncio
-    async def test_connector_type_is_tool_name_action_sent_as_tool(self) -> None:
+    async def test_connector_type_is_domain_marker_tool_is_tool_name(self) -> None:
         governor, client = _make_governor()
         await governor.check_tool_use(
             {
@@ -250,8 +270,8 @@ class TestCheckToolUse:
             }
         )
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "computer"
-        assert call_kwargs["tool"] == "left_click"
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "computer"
 
     @pytest.mark.asyncio
     async def test_connector_type_for_bash(self) -> None:
@@ -263,8 +283,8 @@ class TestCheckToolUse:
             }
         )
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "bash"
-        assert call_kwargs["tool"] is None
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "bash"
 
     @pytest.mark.asyncio
     async def test_custom_blocked_patterns(self) -> None:
@@ -295,8 +315,12 @@ class TestCheckToolUse:
         governor, client = _make_governor()
         await governor.check_tool_use({"input": {"action": "click"}})
         call_kwargs = client.mcp_check_input.call_args.kwargs
-        assert call_kwargs["connector_type"] == "unknown"
-        assert call_kwargs["tool"] == "click"
+        # connector_type stays the constant domain marker; the missing tool
+        # name falls back to "unknown" in the `tool` field. The action lives
+        # in the statement, never in `tool`.
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "unknown"
+        assert "click" in call_kwargs["statement"]
 
     @pytest.mark.asyncio
     async def test_missing_input_defaults_to_empty(self) -> None:
@@ -338,11 +362,16 @@ class TestCheckResult:
         assert result.block_reason == "Exfiltration detected"
 
     @pytest.mark.asyncio
-    async def test_connector_type_correct(self) -> None:
+    async def test_connector_type_and_tool_coherent_with_input_plane(self) -> None:
         governor, client = _make_governor()
         await governor.check_result("text_editor", "file contents")
         call_kwargs = client.mcp_check_output.call_args.kwargs
-        assert call_kwargs["connector_type"] == "text_editor"
+        # Response plane shares the same (server, tool) identity as the
+        # request plane: connector_type is the domain marker, tool is the
+        # tool NAME (RULING 1). Platform doesn't yet consume `tool` on
+        # check-output (#2955) but the SDK sends it forward-compatibly.
+        assert call_kwargs["connector_type"] == "computer_use"
+        assert call_kwargs["tool"] == "text_editor"
 
     @pytest.mark.asyncio
     async def test_dict_redacted_data_json_serialized(self) -> None:

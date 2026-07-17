@@ -1,6 +1,6 @@
-"""Real-stack assertion: ComputerUseGovernor preserves both tool_name and
-action instead of dropping tool_name whenever action is present (#2910,
-epic #2905/#2904).
+"""Real-stack assertion: ComputerUseGovernor reports the (server, tool)
+identity as two separate wire fields instead of concatenating them, and the
+tool NAME is never dropped (#2910, epic #2905/#2904, RULING 1).
 
 Per CLAUDE.md HARD RULE #0 this test MUST hit a real running AxonFlow agent —
 no mocks. ``httpx.AsyncClient.request`` is wrapped only to OBSERVE the
@@ -9,30 +9,36 @@ response is asserted on); this mirrors the capture pattern already used in
 ``runtime-e2e/x-client-id/test.py``.
 
 Regression background: ``_derive_connector_type(tool_name, action)`` folded
-both into a single ``connector_type`` string (``"computer_use.{action}"``),
-silently discarding ``tool_name`` whenever ``action`` was present — every
-actioned Computer Use tool call (e.g. ``computer`` with
-``action="left_click"``) collapsed to the same ``connector_type`` shape
-regardless of which tool actually triggered it. ``_derive_connector_type``
-is removed; ``ComputerUseGovernor.check_tool_use`` now sends
-``connector_type=name`` and ``tool=action`` as two separate wire fields.
+the tool name and the action into a single ``connector_type`` string
+(``"computer_use.{action}"``), silently discarding ``tool_name`` whenever
+``action`` was present — every actioned Computer Use tool call (e.g.
+``computer`` with ``action="left_click"``) collapsed to the same
+``connector_type`` shape regardless of which tool actually triggered it.
+``_derive_connector_type`` is removed; ``ComputerUseGovernor`` now sends
+``connector_type="computer_use"`` (the constant connector/domain marker) and
+``tool=<tool name>`` — the same ``(server, tool)`` mapping the LangGraph
+adapter uses. The action is preserved inside ``statement`` (the serialized
+tool input), NOT in ``tool`` and NOT in ``operation`` (the agent-api spec
+constrains ``operation`` to ``{query, execute}``).
 
 Assertions against a live agent:
 
   1. An actioned tool (``"computer"`` + ``action="left_click"``) sends
-     ``connector_type="computer"`` AND ``tool="left_click"`` as two
+     ``connector_type="computer_use"`` AND ``tool="computer"`` as two
      distinct wire fields — not the old folded ``"computer_use.left_click"``
-     string, and not dropping the tool name — and the live agent allows it.
-  2. A non-actioned tool (``"text_editor"``, no ``action`` key) sends
-     ``connector_type="text_editor"`` and omits ``tool`` entirely, and the
+     string, not the action in ``tool`` — with the action still present in
+     the serialized ``statement``, ``operation`` still ``"execute"``, and the
      live agent allows it.
+  2. A non-actioned tool (``"bash"``) sends ``connector_type="computer_use"``
+     and ``tool="bash"``, and the live agent allows it.
   3. Two calls to the SAME tool with DIFFERENT actions produce the SAME
-     ``connector_type`` but DIFFERENT ``tool`` values — exactly what the
-     old bug broke (both actioned calls used to collapse to
-     indistinguishable ``connector_type`` strings).
-  4. ``check_result()`` — which has no ``action`` available at its call
-     site — sends ``connector_type=tool_name`` and never sends ``tool``,
-     matching its documented pre-existing behavior (no regression there).
+     ``connector_type`` AND the SAME ``tool`` (the tool identity is stable) —
+     the differing action lives in ``statement``. This is exactly what the
+     old bug broke (it dropped the tool name entirely).
+  4. ``check_result()`` sends the same identity on the response plane
+     (``connector_type="computer_use"``, ``tool=<tool name>``) so request-
+     and response-plane rows correlate. The platform does not yet consume
+     ``tool`` on check-output (#2955); it is sent forward-compatibly.
 
 Run locally:
 
@@ -82,22 +88,22 @@ async def main() -> None:
     governor = ComputerUseGovernor(client)
 
     async with client:
-        # 1. Actioned tool: tool_name AND action must both survive as two
-        #    separate wire fields (the exact bug: action present used to
-        #    discard tool_name).
+        # 1. Actioned tool: connector_type is the constant domain marker,
+        #    tool is the tool NAME (never the action), the action survives in
+        #    the serialized statement, and operation stays spec-compliant.
         _captured.clear()
         result = await governor.check_tool_use(
             {"name": "computer", "input": {"action": "left_click", "coordinate": [100, 200]}}
         )
         body = _captured[-1]["json"] if _captured else {}
         check(
-            "actioned-connector-type-is-bare-tool-name",
-            body.get("connector_type") == "computer",
+            "actioned-connector-type-is-domain-marker",
+            body.get("connector_type") == "computer_use",
             f"connector_type={body.get('connector_type')!r}",
         )
         check(
-            "actioned-tool-field-carries-action",
-            body.get("tool") == "left_click",
+            "actioned-tool-field-is-tool-name",
+            body.get("tool") == "computer",
             f"tool={body.get('tool')!r}",
         )
         check(
@@ -107,25 +113,36 @@ async def main() -> None:
             f"concatenated shape)",
         )
         check(
+            "actioned-action-preserved-in-statement",
+            "left_click" in (body.get("statement") or ""),
+            f"statement={body.get('statement')!r}",
+        )
+        check(
+            "actioned-operation-spec-compliant",
+            body.get("operation") == "execute",
+            f"operation={body.get('operation')!r} (must stay in the "
+            f"agent-api enum {{query, execute}})",
+        )
+        check(
             "actioned-agent-allowed",
             result.allowed and result.policies_evaluated > 0,
             f"allowed={result.allowed} policies_evaluated={result.policies_evaluated}",
         )
 
-        # 2. Non-actioned tool: `tool` must be entirely absent on the wire
-        #    (client.py only adds it when truthy).
+        # 2. Non-actioned tool: connector_type is still the domain marker and
+        #    tool carries the tool name.
         _captured.clear()
-        result2 = await governor.check_tool_use({"name": "text_editor", "input": {}})
+        result2 = await governor.check_tool_use({"name": "bash", "input": {"command": "ls"}})
         body2 = _captured[-1]["json"] if _captured else {}
         check(
             "non-actioned-connector-type",
-            body2.get("connector_type") == "text_editor",
+            body2.get("connector_type") == "computer_use",
             f"connector_type={body2.get('connector_type')!r}",
         )
         check(
-            "non-actioned-tool-field-absent",
-            "tool" not in body2,
-            f"body={body2}",
+            "non-actioned-tool-field-is-tool-name",
+            body2.get("tool") == "bash",
+            f"tool={body2.get('tool')!r}",
         )
         check(
             "non-actioned-agent-allowed",
@@ -133,10 +150,10 @@ async def main() -> None:
             f"allowed={result2.allowed}",
         )
 
-        # 3. Same tool, different actions: connector_type must match while
-        #    tool differs — exactly what the old bug could not do (it
-        #    dropped tool_name, and different-action calls on unrelated
-        #    tools could even collide on the folded string).
+        # 3. Same tool, different actions: the (connector_type, tool) identity
+        #    is stable across both calls — the differing action lives in the
+        #    statement, not the tool identity. The old bug dropped the tool
+        #    name entirely, so identity could not survive at all.
         _captured.clear()
         await governor.check_tool_use({"name": "computer", "input": {"action": "screenshot"}})
         first = _captured[-1]["json"] if _captured else {}
@@ -145,30 +162,36 @@ async def main() -> None:
         )
         second = _captured[-1]["json"] if _captured else {}
         check(
-            "same-tool-different-actions-share-connector-type",
-            first.get("connector_type") == second.get("connector_type") == "computer",
-            f"first={first.get('connector_type')!r} second={second.get('connector_type')!r}",
+            "same-tool-different-actions-share-identity",
+            first.get("connector_type") == second.get("connector_type") == "computer_use"
+            and first.get("tool") == second.get("tool") == "computer",
+            f"first=({first.get('connector_type')!r},{first.get('tool')!r}) "
+            f"second=({second.get('connector_type')!r},{second.get('tool')!r})",
         )
         check(
-            "same-tool-different-actions-distinguishable-by-tool",
-            first.get("tool") == "screenshot" and second.get("tool") == "left_click",
-            f"first tool={first.get('tool')!r} second tool={second.get('tool')!r}",
+            "same-tool-different-actions-distinguishable-in-statement",
+            "screenshot" in (first.get("statement") or "")
+            and "left_click" in (second.get("statement") or ""),
+            f"first statement={first.get('statement')!r} "
+            f"second statement={second.get('statement')!r}",
         )
 
-        # 4. check_result(): no action available at its call site, so
-        #    connector_type=tool_name and `tool` is never sent.
+        # 4. check_result(): same identity on the response plane so request-
+        #    and response-plane rows correlate. The platform does not yet
+        #    consume `tool` on check-output (#2955); it is sent
+        #    forward-compatibly.
         _captured.clear()
         result4 = await governor.check_result("computer", "some tool output text")
         body4 = _captured[-1]["json"] if _captured else {}
         check(
-            "check-result-connector-type-is-tool-name",
-            body4.get("connector_type") == "computer",
+            "check-result-connector-type-is-domain-marker",
+            body4.get("connector_type") == "computer_use",
             f"connector_type={body4.get('connector_type')!r}",
         )
         check(
-            "check-result-tool-field-absent",
-            "tool" not in body4,
-            f"body={body4}",
+            "check-result-tool-field-is-tool-name",
+            body4.get("tool") == "computer",
+            f"tool={body4.get('tool')!r}",
         )
         check(
             "check-result-agent-allowed",
@@ -179,7 +202,7 @@ async def main() -> None:
     if failures:
         print(f"RESULT: FAIL ({len(failures)}): {failures}")
         sys.exit(1)
-    print("RESULT: PASS (12/12)")
+    print(f"RESULT: PASS ({14 - len(failures)}/14)")
 
 
 if __name__ == "__main__":

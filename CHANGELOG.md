@@ -11,20 +11,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+> **This release contains a breaking change and MUST be published as a major
+> version bump.** The `connector_type` wire value emitted by
+> `ComputerUseGovernor` changes shape; policies matching the old value stop
+> matching until re-scoped (see the migration note below).
 
-- **`ComputerUseGovernor.check_tool_use` no longer drops the tool name when
-  an action is present.** `_derive_connector_type(tool_name, action)` folded
-  both into a single `connector_type` string (`"computer_use.{action}"`),
-  silently discarding `tool_name` whenever `action` was present — every
-  actioned Computer Use tool call (e.g. `computer` with
-  `action="left_click"`) collapsed to the same `connector_type` shape
-  regardless of which tool actually triggered it. `_derive_connector_type`
-  is removed; `check_tool_use` now passes `connector_type=name` and
-  `tool=action` as two separate wire fields, matching the platform's
-  two-field (server, tool) identity contract (epic #2905 / #2904).
-  `mcp_check_input`/`mcp_check_output` gain a matching optional `tool`
-  parameter.
+### Changed (BREAKING)
+
+- **`ComputerUseGovernor` now reports the (server, tool) identity as two
+  separate wire fields instead of concatenating them into `connector_type`.**
+  Previously `_derive_connector_type(tool_name, action)` folded the tool name
+  and the action into a single `connector_type` string
+  (`"computer_use.{action}"`), silently discarding the tool name whenever an
+  action was present. Now:
+  - `connector_type` is the constant connector/domain marker `"computer_use"`;
+  - `tool` carries the tool **name** (e.g. `"computer"`, `"bash"`,
+    `"text_editor"`) — the same `(server, tool)` mapping the LangGraph adapter
+    uses, so the `tool_name` audit column means the tool name regardless of
+    which adapter emitted it (epic #2905, RULING 1);
+  - the action (e.g. `"left_click"`) is preserved inside the serialized
+    `statement`, where the policy engine already evaluates it — it is **not**
+    placed in `tool`, nor in `operation` (the agent-api spec constrains
+    `operation` to the enum `{query, execute}`).
+
+  `_derive_connector_type` is removed. `check_result()` sends the same
+  identity on the response plane (`connector_type="computer_use"`,
+  `tool=<tool name>`) so request- and response-plane rows correlate.
+  `mcp_check_input`/`mcp_check_output` (and their `check_tool_input`/
+  `check_tool_output` aliases) gain a matching optional `tool` parameter.
+
+  **Migration.** Policies or per-connector settings scoped to the old
+  concatenated value — e.g. `connector_type == "computer_use.left_click"`, a
+  bare tool name like `"bash"`, or a `computer_use.*` prefix match — stop
+  matching after upgrade. Re-scope them to match `connector_type ==
+  "computer_use"` together with the `tool` field (e.g. `tool == "bash"`).
+  **This adapter has no `connector_type_fn`/`tool_fn` escape hatch**, so there
+  is no way to restore the old concatenated value from the SDK side —
+  re-scoping the policies is the only migration path.
+
+  **Minimum platform.** The `tool` field is consumed on `POST
+  /api/v1/mcp/check-input` by platform **v9.10.0+** (enterprise `c8df2006b`,
+  epic #2905 / #2904). On platforms below v9.10.0 the `tool` field is silently
+  ignored and identity degrades to the bare `"computer_use"` connector, which
+  is coarser than the old concatenated value — **upgrade the platform to
+  v9.10.0+ before adopting this SDK major.** The response plane
+  (`check-output`) does **not** consume `tool` on any released platform
+  version yet (tracked by #2955, targeted for v9.11.0); the SDK sends it
+  forward-compatibly and current platforms ignore it.
 
 ## [8.5.1] - 2026-07-09 — Interceptor sync bridge + async-client detection + example fixes
 
