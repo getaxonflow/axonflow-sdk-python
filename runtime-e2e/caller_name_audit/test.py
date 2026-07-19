@@ -22,10 +22,16 @@ Steps:
   2. Call it again with only the legacy `tool_type` set (no `caller_name`)
      to prove the backward-compat fallback still resolves into
      `policy_details.caller_name` on a real row.
-  3. The orchestrator's AuditLogger batches writes (flush every 10s), so
+  3. Call it a third time with NEITHER `caller_name` NOR `tool_type` set,
+     to prove the platform's default-fallback (getaxonflow/axonflow-
+     enterprise#2903, folded into the same #2953 merge) resolves to
+     `"unknown"` -- an unidentified caller must NOT be silently attributed
+     to a specific client. `"unknown"` replaced the pre-#2903 default of
+     `"claude_code"`.
+  4. The orchestrator's AuditLogger batches writes (flush every 10s), so
      poll `GET /api/v1/audit/tenant/{tenant_id}` (the same route
      `client.get_audit_logs_by_tenant` hits) until each row lands.
-  4. The SDK's typed `AuditLogEntry` does not surface `policy_details`
+  5. The SDK's typed `AuditLogEntry` does not surface `policy_details`
      (it's an internal JSONB blob), so this step reads the raw JSON body
      directly -- the only way to observe `policy_details.caller_name`
      from outside the platform -- and asserts it equals what we sent.
@@ -77,6 +83,8 @@ WANT_CALLER_NAME = f"e2e-caller-name-probe-{_RUN_ID}"
 WORKFLOW_CALLER_NAME = f"e2e-caller-name-wf-{_RUN_ID}"
 WORKFLOW_TOOL_TYPE_FALLBACK = f"e2e-tool-type-fallback-wf-{_RUN_ID}"
 WANT_TOOL_TYPE_FALLBACK = "mcp"
+WORKFLOW_NEITHER_SUPPLIED = f"e2e-neither-supplied-wf-{_RUN_ID}"
+WANT_DEFAULT_CALLER_NAME = "unknown"  # #2903: was "claude_code" pre-fix
 
 # Batch writer flushes every 10s (platform/orchestrator/audit_logger.go);
 # give it generous headroom under CI/local load.
@@ -168,6 +176,19 @@ async def main() -> None:
             f"SDK audit_tool_call (tool_type fallback) -> audit_id={resp2.audit_id} status={resp2.status}"
         )
 
+        # 3. Neither caller_name nor tool_type supplied -- the platform's
+        # default-fallback (#2903) must resolve to "unknown", never silently
+        # attribute an unidentified caller to a specific client.
+        resp3 = await client.audit_tool_call(
+            AuditToolCallRequest(
+                tool_name="e2eNeitherSuppliedTool",
+                workflow_id=WORKFLOW_NEITHER_SUPPLIED,
+            )
+        )
+        print(
+            f"SDK audit_tool_call (neither supplied) -> audit_id={resp3.audit_id} status={resp3.status}"
+        )
+
     policy_details_1 = _fetch_policy_details(WORKFLOW_CALLER_NAME)
     got_caller_name = policy_details_1.get("caller_name")
     if got_caller_name != WANT_CALLER_NAME:
@@ -194,6 +215,19 @@ async def main() -> None:
         f"policy_details.caller_name = {got_fallback!r} (deprecated fallback intact)"
     )
     print(f"Wire policy_details (tool_type fallback case): {policy_details_2}")
+
+    policy_details_3 = _fetch_policy_details(WORKFLOW_NEITHER_SUPPLIED)
+    got_default = policy_details_3.get("caller_name")
+    if got_default != WANT_DEFAULT_CALLER_NAME:
+        _fail(
+            f"default fallback: policy_details.caller_name = {got_default!r}, want "
+            f"{WANT_DEFAULT_CALLER_NAME!r} (#2903) (full policy_details: {policy_details_3})"
+        )
+    print(
+        f"PASS: neither caller_name nor tool_type supplied -> "
+        f"policy_details.caller_name = {got_default!r} (#2903 default, not 'claude_code')"
+    )
+    print(f"Wire policy_details (neither-supplied case): {policy_details_3}")
 
     print("ALL PASS: caller_name (#2912) verified end-to-end through the real SDK + platform")
 
