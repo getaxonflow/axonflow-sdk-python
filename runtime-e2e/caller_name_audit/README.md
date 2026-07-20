@@ -20,6 +20,11 @@ that it marshals onto the wire correctly (that's covered by the
    equals that value verbatim.
 2. Legacy `tool_type="mcp"` with **no** `caller_name` → the deprecated
    fallback still resolves `policy_details.caller_name` to `"mcp"`.
+3. **Neither** `caller_name` **nor** `tool_type` supplied → the platform's
+   default-fallback (getaxonflow/axonflow-enterprise#2903, folded into the
+   same #2953 merge) resolves `policy_details.caller_name` to `"unknown"` —
+   not the pre-#2903 default of `"claude_code"`. An unidentified caller must
+   never be silently attributed to a specific client.
 
 The SDK's typed `AuditLogEntry` does not declare a `policy_details` field
 (it's an internal JSONB blob), so the read side uses a raw `httpx` call
@@ -39,18 +44,17 @@ local-dev Enterprise stack in `axonflow-enterprise/main-tree/.env`). In
 Community mode, tenant-audit reads are tenant-wide regardless, so the header
 is a no-op there.
 
-## Prerequisite: platform support is not yet on `main`
+## Prerequisite: platform version
 
-`caller_name` support (axonflow-enterprise#2953) is implemented but, as of
-this writing, still an open PR on the `feat/2912-caller-name-tool-type-deprecation`
-branch — not yet merged to `axonflow-enterprise` main. Against a stack built
-from `axonflow-enterprise` main, this test will FAIL (the 45s poll of
-`GET /api/v1/audit/tenant/{tenant_id}` times out waiting for
-`policy_details.caller_name`, which the server doesn't write yet) — that's
-not a bug in this test, it means the platform side isn't deployed on
-whatever stack you're pointed at. Point your local `axonflow-enterprise`
-checkout at that branch (or a later commit that includes it) before running
-this test.
+`caller_name` support (axonflow-enterprise#2953, which also folded in the
+#2903 default-fallback fix) is merged to `axonflow-enterprise` main and
+shipped in platform release **v9.11.0**. Point your stack at v9.11.0+ (or a
+`main` checkout at/after commit `7a5984ec7`) before running this test.
+Against an older platform, the third scenario (`unknown` default) and
+possibly `policy_details.caller_name` itself will not resolve as expected,
+and the 45s poll of `GET /api/v1/audit/tenant/{tenant_id}` will time out
+waiting for a row that never lands with the expected shape — that's a
+platform-version mismatch, not a bug in this test.
 
 ## Run
 
@@ -65,7 +69,8 @@ The orchestrator's `AuditLogger` batches writes (flush every 10s per
 `platform/orchestrator/audit_logger.go`), so the test polls
 `GET /api/v1/audit/tenant/{tenant_id}` for up to 45s before failing.
 
-Exits non-zero if `caller_name` (or the `tool_type` fallback) does not reach
+Exits non-zero if `caller_name`, the `tool_type` fallback, or the
+neither-supplied `"unknown"` default does not reach
 `policy_details.caller_name` on the real row.
 
 ## Companion unit coverage
