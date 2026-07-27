@@ -139,10 +139,12 @@ class FalseyClobberFinder(ast.NodeVisitor):
                     (
                         lineno,
                         col,
-                        f"falsey-clobber: `or` falls through on every falsy "
-                        f"value (0, False, '', [], {{}}), not just None. "
-                        f"Use `... if X is not None else fallback`. "
-                        f"Line: {snippet.strip()}",
+                        (
+                            f"falsey-clobber: `or` falls through on every falsy "
+                            f"value (0, False, '', [], {{}}), not just None. "
+                            f"Use `... if X is not None else fallback`. "
+                            f"Line: {snippet.strip()}"
+                        ),
                     )
                 )
         self.generic_visit(node)
