@@ -1157,8 +1157,8 @@ in v3.5.0. This major version formally acknowledges that breaking change.
 ```python
 # Community mode - no secret needed
 client = AxonFlow(
- endpoint="http://localhost:8080",
- client_id="my-app", # Used for request identification
+    endpoint="http://localhost:8080",
+    client_id="my-app",  # Used for request identification
 )
 ```
 
@@ -1213,20 +1213,20 @@ client = AxonFlow(
 **Before (v0.x):**
 ```python
 client = AxonFlow(
- agent_url="http://localhost:8080",
- orchestrator_url="http://localhost:8081",
- portal_url="http://localhost:8082",
- client_id="my-client",
- client_secret="my-secret",
+    agent_url="http://localhost:8080",
+    orchestrator_url="http://localhost:8081",
+    portal_url="http://localhost:8082",
+    client_id="my-client",
+    client_secret="my-secret",
 )
 ```
 
 **After (v1.x):**
 ```python
 client = AxonFlow(
- endpoint="http://localhost:8080",
- client_id="my-client",
- client_secret="my-secret",
+    endpoint="http://localhost:8080",
+    client_id="my-client",
+    client_secret="my-secret",
 )
 ```
 

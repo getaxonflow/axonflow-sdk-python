@@ -111,7 +111,7 @@ class HeartbeatState:
         couldn't find a cache dir.
     """
 
-    def __init__(self, stamp_path: Path | None | object = _USE_DEFAULT_CACHE_DIR) -> None:
+    def __init__(self, stamp_path: Path | object | None = _USE_DEFAULT_CACHE_DIR) -> None:
         self._lock = threading.Lock()
         self._last_checked_monotonic: float | None = None
         self._in_flight = False

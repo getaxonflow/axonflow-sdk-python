@@ -48,7 +48,7 @@ dev = [
     "pytest-httpx>=0.22.0",
     "mypy>=1.5.0",
     "types-cachetools>=5.0.0",
-    "ruff>=0.15.8,<0.16",
+    "ruff>=0.16,<0.17",
     "black>=23.0.0",
     "isort>=5.12.0",
     "pre-commit>=3.0.0",
@@ -136,6 +136,7 @@ ignore = [
     "COM812",  # Trailing comma (conflicts with formatter)
     "ISC001",  # Single line implicit string concatenation
     "PLR0913", # Too many arguments
+    "PLR0917", # Too many positional arguments - public SDK signatures are API decisions (mirror the Go SDK)
     "TRY003",  # Avoid long exception messages
     "A001",    # Variable shadowing builtin
     "A004",    # Import shadowing builtin
