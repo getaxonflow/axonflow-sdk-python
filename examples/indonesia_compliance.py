@@ -17,7 +17,7 @@ import asyncio
 import os
 
 from axonflow import AxonFlow
-from axonflow.exceptions import AxonFlowError
+from axonflow.exceptions import AuthenticationError, AxonFlowError
 from axonflow.policies import PolicyCategory
 
 
@@ -45,7 +45,9 @@ async def main() -> None:
     print("\nSending governed request with NIK...")
     try:
         resp = await client.proxy_llm_call(
-            user_token="",
+            # Enterprise stacks (DEPLOYMENT_MODE=enterprise) validate user
+            # tokens as JWTs; an empty token 401s on every governed call.
+            user_token=os.environ.get("AXONFLOW_USER_TOKEN", ""),
             query="Customer NIK is 3204110507900003 and their name is Budi Santoso",
             request_type="chat",
             context={"purpose": "identity_verification"},
@@ -53,6 +55,8 @@ async def main() -> None:
         print(f"Response blocked: {resp.blocked}")
         if resp.policy_info:
             print(f"Policies evaluated: {resp.policy_info.policies_evaluated}")
+    except AuthenticationError:
+        raise  # credentials problem — never a "no LLM" situation; fail loudly
     except AxonFlowError as e:
         print(f"Request error (expected if no LLM configured): {e}")
 
