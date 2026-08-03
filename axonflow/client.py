@@ -1438,6 +1438,7 @@ class AxonFlow:
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -1455,6 +1456,10 @@ class AxonFlow:
             statement: The SQL query or command to validate.
             operation: Operation type - "query" or "execute" (default).
             parameters: Optional query parameters.
+            tool: Optional tool name, distinct from ``connector_type``. Lets a
+                PEP report the (server, tool) identity as two separate values
+                instead of concatenating them into ``connector_type``
+                (epic #2905 / #2904).
             client_id: Client identifier (overrides client config when set).
             tenant_id: Tenant identifier for multi-tenant scoping.
             user_id: End-user identifier for per-user policies.
@@ -1481,6 +1486,8 @@ class AxonFlow:
         }
         if parameters:
             body["parameters"] = parameters
+        if tool:
+            body["tool"] = tool
         # Wire-canonical scoping fields surfaced in the v6 sweep.
         if client_id is not None:
             body["client_id"] = client_id
@@ -1518,6 +1525,7 @@ class AxonFlow:
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -1530,6 +1538,7 @@ class AxonFlow:
             statement,
             operation,
             parameters,
+            tool=tool,
             client_id=client_id,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -1545,6 +1554,7 @@ class AxonFlow:
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -1561,6 +1571,9 @@ class AxonFlow:
             message: Execute-style response message (e.g., "5 rows affected").
             metadata: Connector metadata for SQLi scanning.
             row_count: Total number of rows returned.
+            tool: Optional tool name, distinct from ``connector_type``. Mirrors
+                the ``tool`` parameter on :meth:`mcp_check_input` (epic #2905 /
+                #2904).
             client_id: Client identifier (overrides client config when set).
             tenant_id: Tenant identifier for multi-tenant scoping.
             user_id: End-user identifier for per-user policies.
@@ -1584,6 +1597,8 @@ class AxonFlow:
             body["metadata"] = metadata
         if row_count > 0:
             body["row_count"] = row_count
+        if tool:
+            body["tool"] = tool
         # Wire-canonical scoping fields surfaced in the v6 sweep.
         if client_id is not None:
             body["client_id"] = client_id
@@ -1618,6 +1633,7 @@ class AxonFlow:
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -1630,6 +1646,7 @@ class AxonFlow:
             message,
             metadata,
             row_count,
+            tool=tool,
             client_id=client_id,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -2163,7 +2180,7 @@ class AxonFlow:
         trail for governance and compliance.
 
         Args:
-            request: Tool call details including tool name, type, input/output,
+            request: Tool call details including tool name, caller, input/output,
                 and associated workflow/step information.
 
         Returns:
@@ -2173,12 +2190,17 @@ class AxonFlow:
             ValueError: If tool_name is empty.
             AxonFlowError: If audit recording fails.
 
+        Note:
+            `tool_type` is deprecated in favor of `caller_name` and is kept
+            only for backward compatibility. New callers should set
+            `caller_name` to identify which client made the call.
+
         Example:
             >>> from axonflow.types import AuditToolCallRequest
             >>> result = await client.audit_tool_call(
             ...     AuditToolCallRequest(
             ...         tool_name="getUserInfo",
-            ...         tool_type="mcp",
+            ...         caller_name="claude_code",
             ...         workflow_id="wf_abc123",
             ...         success=True,
             ...         duration_ms=45,
@@ -2196,6 +2218,7 @@ class AxonFlow:
             self._logger.debug(
                 "Audit tool call request",
                 tool_name=request.tool_name,
+                caller_name=request.caller_name,
                 tool_type=request.tool_type,
             )
 
@@ -7549,6 +7572,7 @@ class SyncAxonFlow:
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -7563,6 +7587,7 @@ class SyncAxonFlow:
                 statement,
                 operation,
                 parameters,
+                tool=tool,
                 client_id=client_id,
                 tenant_id=tenant_id,
                 user_id=user_id,
@@ -7612,6 +7637,7 @@ class SyncAxonFlow:
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -7625,6 +7651,7 @@ class SyncAxonFlow:
                 message,
                 metadata,
                 row_count,
+                tool=tool,
                 client_id=client_id,
                 tenant_id=tenant_id,
                 user_id=user_id,
@@ -7639,6 +7666,7 @@ class SyncAxonFlow:
         operation: str = "execute",
         parameters: dict[str, Any] | None = None,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -7652,6 +7680,7 @@ class SyncAxonFlow:
                 statement,
                 operation,
                 parameters,
+                tool=tool,
                 client_id=client_id,
                 tenant_id=tenant_id,
                 user_id=user_id,
@@ -7668,6 +7697,7 @@ class SyncAxonFlow:
         metadata: dict[str, Any] | None = None,
         row_count: int = 0,
         *,
+        tool: str | None = None,
         client_id: str | None = None,
         tenant_id: str | None = None,
         user_id: str | None = None,
@@ -7681,6 +7711,7 @@ class SyncAxonFlow:
                 message,
                 metadata,
                 row_count,
+                tool=tool,
                 client_id=client_id,
                 tenant_id=tenant_id,
                 user_id=user_id,

@@ -407,6 +407,13 @@ class MCPCheckInputRequest(BaseModel):
     """Request to validate input against MCP policies."""
 
     connector_type: str
+    # Two-field (server, tool) identity contract (epic #2905 / #2904). `tool`
+    # carries the MCP tool name so a PEP no longer has to concatenate it into
+    # `connector_type` (e.g. "server.tool") to preserve tool identity.
+    # Source of truth: platform/agent MCPCheckInputRequest (#2904, merged to
+    # axonflow-enterprise as c8df2006b and first released in platform v9.10.0);
+    # consumed on the request-input plane. Platforms below v9.10.0 ignore it.
+    tool: str | None = Field(default=None)
     statement: str
     parameters: dict[str, Any] | None = Field(default=None)
     operation: str = Field(default="execute")
@@ -462,6 +469,13 @@ class MCPCheckOutputRequest(BaseModel):
     """Request to validate output against MCP policies."""
 
     connector_type: str
+    # Two-field (server, tool) identity contract, mirrored from
+    # MCPCheckInputRequest.tool (epic #2905 / #2904). Unlike the input-phase
+    # field, the platform's MCPCheckOutputRequest has no matching `tool` field
+    # on ANY released version yet (tracked by #2955); sending it is
+    # forward-compatible and harmless — the agent's JSON decoder ignores
+    # unrecognized keys — but it is not yet consumed server-side.
+    tool: str | None = Field(default=None)
     response_data: list[dict[str, Any]] | None = Field(default=None)
     message: str | None = Field(default=None)
     metadata: dict[str, Any] | None = Field(default=None)
@@ -1482,8 +1496,20 @@ class AuditToolCallRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     tool_name: str = Field(description="Name of the tool that was called")
+    caller_name: str | None = Field(
+        default=None,
+        description=(
+            "Identifies which client made the call (e.g., claude_code, codex, cursor, openclaw). "
+            "Requires a platform with caller_name support (v9.11.0+); older platforms silently "
+            "drop this field, so also set tool_type if you need attribution there."
+        ),
+    )
     tool_type: str | None = Field(
-        default=None, description="Type of tool (e.g., mcp, api, function)"
+        default=None,
+        description=(
+            "Deprecated: use caller_name instead. Type of tool (e.g., mcp, api, function), "
+            "historically used to identify the calling client."
+        ),
     )
     input: dict[str, Any] | None = Field(default=None, alias="input", description="Tool input data")
     output: dict[str, Any] | None = Field(

@@ -93,7 +93,10 @@ class MCPInterceptorOptions:
 
     Attributes:
         connector_type_fn: Optional callable that maps an MCP request to a
-            connector type string. Defaults to ``"{server_name}.{tool_name}"``.
+            connector type string. Defaults to the request's ``server_name``.
+            The tool name is always sent separately as the ``tool`` field
+            (see :meth:`~axonflow.client.Client.mcp_check_input`) — it is no
+            longer folded into ``connector_type``.
         operation: Operation type passed to ``mcp_check_input``. Defaults to
             ``"execute"``. Set to ``"query"`` for known read-only tool calls.
     """
@@ -522,11 +525,12 @@ class AxonFlowLangGraphAdapter:
             ...     tool_interceptors=[adapter.mcp_tool_interceptor()],
             ... )
 
-        With custom options:
+        With custom options (the tool name is always sent separately as
+        ``tool`` — ``connector_type_fn`` only controls ``connector_type``):
 
         Example:
             >>> opts = MCPInterceptorOptions(
-            ...     connector_type_fn=lambda req: req.server_name,
+            ...     connector_type_fn=lambda req: f"prod.{req.server_name}",
             ...     operation="query",
             ... )
             >>> tool_interceptors=[adapter.mcp_tool_interceptor(opts)]
@@ -564,17 +568,22 @@ class AxonFlowLangGraphAdapter:
         opts = options or MCPInterceptorOptions()
 
         def _default_connector_type(request: Any) -> str:
-            return f"{request.server_name}.{request.name}"
+            return str(request.server_name)
 
         resolve_connector_type = opts.connector_type_fn or _default_connector_type
 
         async def _interceptor(request: Any, handler: Callable[..., Any]) -> Any:
             connector_type = resolve_connector_type(request)
+            # The tool name is a genuine second identity field (epic #2905 /
+            # #2904) — send it as `tool`, never fold it back into
+            # `connector_type`, even when connector_type_fn is customized.
+            tool = request.name
             args_str = json.dumps(request.args, default=str) if request.args else "{}"
-            statement = f"{connector_type}({args_str})"
+            statement = f"{connector_type}.{tool}({args_str})"
 
             pre_check = await self.client.mcp_check_input(
                 connector_type=connector_type,
+                tool=tool,
                 statement=statement,
                 operation=opts.operation,
                 parameters=request.args,
@@ -590,6 +599,7 @@ class AxonFlowLangGraphAdapter:
                 result_str = str(result)
             output_check = await self.client.mcp_check_output(
                 connector_type=connector_type,
+                tool=tool,
                 message=result_str,
             )
             if not output_check.allowed:
@@ -620,11 +630,12 @@ class AxonFlowLangGraphAdapter:
             >>> wrapper = adapter.tool_output_wrapper()
             >>> tool_node = ToolNode(tools, awrap_tool_call=wrapper)
 
-        With custom options:
+        With custom options (the tool name is always sent separately as
+        ``tool`` — ``connector_type_fn`` only controls ``connector_type``):
 
         Example:
             >>> opts = MCPInterceptorOptions(
-            ...     connector_type_fn=lambda call: f"local.{call['name']}",
+            ...     connector_type_fn=lambda call: "local",
             ... )
             >>> tool_node = ToolNode(tools, awrap_tool_call=adapter.tool_output_wrapper(opts))
 
@@ -648,6 +659,11 @@ class AxonFlowLangGraphAdapter:
         opts = options or MCPInterceptorOptions()
 
         def _default_connector_type(call_request: dict[str, Any]) -> str:
+            # ToolNode's call_request carries no server/origin info to
+            # distinguish from the bare tool name — this is the best
+            # available default. The tool name itself is never dropped: it
+            # is always sent separately as `tool` below (epic #2905 /
+            # #2904), even when it also ends up equal to connector_type here.
             name: str = call_request.get("name", "unknown_tool")
             return name
 
@@ -655,11 +671,13 @@ class AxonFlowLangGraphAdapter:
 
         async def _wrapper(call_request: dict[str, Any], execute: Callable[..., Any]) -> Any:
             connector_type = resolve_connector_type(call_request)
+            tool: str = call_request.get("name", "unknown_tool")
             args = call_request.get("args", {})
             statement = json.dumps(args, default=str)
 
             input_check = await self.client.mcp_check_input(
                 connector_type=connector_type,
+                tool=tool,
                 statement=statement,
                 operation=opts.operation,
             )
@@ -685,6 +703,7 @@ class AxonFlowLangGraphAdapter:
 
             output_check = await self.client.mcp_check_output(
                 connector_type=connector_type,
+                tool=tool,
                 message=serialized,
             )
             if not output_check.allowed:

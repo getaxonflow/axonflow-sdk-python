@@ -200,6 +200,13 @@
       ],
       "spec_only": []
     },
+    "AuditToolCallRequest": {
+      "note": "acknowledged-sdk-superset: tracked in getaxonflow/axonflow-enterprise#2912. SDK declares caller_name; platform accepts/writes it (PR #2953) but the community OpenAPI spec has not caught up yet.",
+      "sdk_only": [
+        "caller_name"
+      ],
+      "spec_only": []
+    },
     "Budget": {
       "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `enabled`; platform emits it but spec doesn't yet declare it.",
       "sdk_only": [
@@ -297,9 +304,10 @@
       "spec_only": []
     },
     "MCPCheckInputRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it.",
+      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it. Also declares `tool` (epic #2905, platform sub-issue #2904) \u2014 the two-field (server, tool) identity contract; #2904 merged to axonflow-enterprise (c8df2006b) and first released in platform v9.10.0, so this drift just tracks the pinned OpenAPI spec (agent-api.yaml) catching up.",
       "sdk_only": [
-        "content_type"
+        "content_type",
+        "tool"
       ],
       "spec_only": []
     },
@@ -309,6 +317,13 @@
         "redacted",
         "redacted_statement",
         "redaction_evaluated"
+      ],
+      "spec_only": []
+    },
+    "MCPCheckOutputRequest": {
+      "note": "acknowledged-sdk-superset: tracked in epic #2905, platform sub-issue #2904 \u2014 SDK declares `tool`, mirroring MCPCheckInputRequest.tool for the two-field (server, tool) identity contract. Unlike the input-phase field, the platform's MCPCheckOutputRequest has no matching `tool` field on any released version yet (tracked by #2955) \u2014 sending it is forward-compatible and harmless but not yet consumed server-side.",
+      "sdk_only": [
+        "tool"
       ],
       "spec_only": []
     },

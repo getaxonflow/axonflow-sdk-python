@@ -32,7 +32,7 @@ A deployed AxonFlow platform (self-hosted or cloud) is required for end-to-end A
 Three short videos covering different angles of the platform:
 
 - **[Community Quickstart Demo (Code + Terminal, 2.5 min)](https://youtu.be/BSqU1z0xxCo)** — governed calls, PII block, Gateway Mode with LangChain/CrewAI, and MAP from YAML
-- **[Runtime Control Demo (Portal + Workflow, 3 min)](https://youtu.be/6UatGpn7KwE)** — approvals, retry safety, execution state, and the audit viewer
+- **[Runtime Control Demo (Portal + Workflow, 2.5 min)](https://youtu.be/sRTv2uF0sxY)** — approvals, retry safety, execution state, and the audit viewer
 - **[Architecture Deep Dive (12 min)](https://youtu.be/Q2CZ1qnquhg)** — how the control plane works, policy enforcement flow, and multi-agent planning
 
 ## Installation
@@ -93,19 +93,19 @@ No Docker, no license, no installation. Rate-limited to 20 req/min. [Learn more]
 import asyncio
 from axonflow import AxonFlow
 
+
 async def main():
     async with AxonFlow(
         endpoint="https://your-agent.axonflow.com",
         client_id="your-client-id",
-        client_secret="your-client-secret"
+        client_secret="your-client-secret",
     ) as client:
         # Execute a governed query
         response = await client.proxy_llm_call(
-            user_token="user-jwt-token",
-            query="What is AI governance?",
-            request_type="chat"
+            user_token="user-jwt-token", query="What is AI governance?", request_type="chat"
         )
         print(response.data)
+
 
 asyncio.run(main())
 ```
@@ -118,12 +118,10 @@ from axonflow import AxonFlow
 with AxonFlow.sync(
     endpoint="https://your-agent.axonflow.com",
     client_id="your-client-id",
-    client_secret="your-client-secret"
+    client_secret="your-client-secret",
 ) as client:
     response = client.proxy_llm_call(
-        user_token="user-jwt-token",
-        query="What is AI governance?",
-        request_type="chat"
+        user_token="user-jwt-token", query="What is AI governance?", request_type="chat"
     )
     print(response.data)
 ```
@@ -140,9 +138,7 @@ from axonflow import AxonFlow, TokenUsage
 async with AxonFlow(...) as client:
     # 1. Pre-check: Get policy approval
     ctx = await client.get_policy_approved_context(
-        user_token="user-jwt",
-        query="Find patient records",
-        data_sources=["postgres"]
+        user_token="user-jwt", query="Find patient records", data_sources=["postgres"]
     )
 
     if not ctx.approved:
@@ -150,8 +146,7 @@ async with AxonFlow(...) as client:
 
     # 2. Make LLM call directly (your code)
     llm_response = await openai.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": str(ctx.approved_data)}]
+        model="gpt-4", messages=[{"role": "user", "content": str(ctx.approved_data)}]
     )
 
     # 3. Audit the call
@@ -163,9 +158,9 @@ async with AxonFlow(...) as client:
         token_usage=TokenUsage(
             prompt_tokens=llm_response.usage.prompt_tokens,
             completion_tokens=llm_response.usage.completion_tokens,
-            total_tokens=llm_response.usage.total_tokens
+            total_tokens=llm_response.usage.total_tokens,
         ),
-        latency_ms=250
+        latency_ms=250,
     )
 ```
 
@@ -186,8 +181,7 @@ wrapped = wrap_openai_client(openai, axonflow, user_token="user-123")
 
 # Use as normal
 response = wrapped.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": "Hello!"}]
+    model="gpt-4", messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
 
@@ -204,7 +198,7 @@ result = await client.query_connector(
     user_token="user-jwt",
     connector_name="postgres",
     operation="query",
-    params={"sql": "SELECT * FROM users LIMIT 10"}
+    params={"sql": "SELECT * FROM users LIMIT 10"},
 )
 ```
 
@@ -218,7 +212,7 @@ result = await client.query_connector(
     user_token="user-jwt",
     connector_name="postgres",
     operation="query",
-    params={"sql": "SELECT * FROM customers"}
+    params={"sql": "SELECT * FROM customers"},
 )
 
 # Check exfiltration info
@@ -247,8 +241,7 @@ Generate and execute multi-agent plans:
 ```python
 # Generate a plan
 plan = await client.generate_plan(
-    query="Book a flight and hotel for my trip to Paris",
-    domain="travel"
+    query="Book a flight and hotel for my trip to Paris", domain="travel"
 )
 
 print(f"Plan has {len(plan.steps)} steps")
@@ -265,19 +258,19 @@ from axonflow import AxonFlow, Mode, RetryConfig
 
 client = AxonFlow(
     endpoint="https://your-agent.axonflow.com",
-    client_id="your-client-id",               # Required for enterprise features
-    client_secret="your-client-secret",       # Required for enterprise features
-    mode=Mode.PRODUCTION,                     # or Mode.SANDBOX
-    debug=True,                               # Enable debug logging
-    timeout=60.0,                             # Request timeout in seconds
-    retry_config=RetryConfig(                 # Retry configuration
+    client_id="your-client-id",  # Required for enterprise features
+    client_secret="your-client-secret",  # Required for enterprise features
+    mode=Mode.PRODUCTION,  # or Mode.SANDBOX
+    debug=True,  # Enable debug logging
+    timeout=60.0,  # Request timeout in seconds
+    retry_config=RetryConfig(  # Retry configuration
         enabled=True,
         max_attempts=3,
         initial_delay=1.0,
         max_delay=30.0,
     ),
-    cache_enabled=True,                       # Enable response caching
-    cache_ttl=60.0,                           # Cache TTL in seconds
+    cache_enabled=True,  # Enable response caching
+    cache_ttl=60.0,  # Cache TTL in seconds
 )
 ```
 
@@ -351,15 +344,13 @@ Complete working examples for all features are available in the [examples folder
 ```python
 # PII Detection - Automatically detect sensitive data
 result = await client.get_policy_approved_context(
-    user_token="user-123",
-    query="My SSN is 123-45-6789"
+    user_token="user-123", query="My SSN is 123-45-6789"
 )
 # result.approved = True, result.requires_redaction = True (SSN detected)
 
 # SQL Injection Detection - Block malicious queries
 result = await client.get_policy_approved_context(
-    user_token="user-123",
-    query="SELECT * FROM users; DROP TABLE users;"
+    user_token="user-123", query="SELECT * FROM users; DROP TABLE users;"
 )
 # result.approved = False, result.block_reason = "SQL injection detected"
 
@@ -371,7 +362,7 @@ policies = await client.list_policies()
 await client.create_dynamic_policy(
     name="block-competitor-queries",
     conditions={"contains": ["competitor", "pricing"]},
-    action="block"
+    action="block",
 )
 
 # MCP Connectors - Query external data sources
@@ -379,14 +370,11 @@ resp = await client.query_connector(
     user_token="user-123",
     connector_name="postgres-db",
     operation="query",
-    params={"sql": "SELECT name FROM customers"}
+    params={"sql": "SELECT name FROM customers"},
 )
 
 # Multi-Agent Planning - Orchestrate complex workflows
-plan = await client.generate_plan(
-    query="Research AI governance regulations",
-    domain="legal"
-)
+plan = await client.generate_plan(query="Research AI governance regulations", domain="legal")
 result = await client.execute_plan(plan.plan_id)
 
 # Audit Logging - Track all LLM interactions
@@ -396,7 +384,7 @@ await client.audit_llm_call(
     provider="openai",
     model="gpt-4",
     token_usage=TokenUsage(prompt_tokens=100, completion_tokens=200, total_tokens=300),
-    latency_ms=450
+    latency_ms=450,
 )
 ```
 
@@ -410,7 +398,7 @@ pr_result = await client.review_pull_request(
     repo_owner="your-org",
     repo_name="your-repo",
     pr_number=123,
-    check_types=["security", "style", "performance"]
+    check_types=["security", "style", "performance"],
 )
 
 # Cost Controls - Budget management for LLM usage

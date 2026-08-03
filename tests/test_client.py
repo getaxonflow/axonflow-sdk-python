@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -1480,3 +1481,94 @@ class TestMCPQueryMethods:
         assert result.success is True
         assert result.policy_info is not None
         assert result.policy_info.policies_evaluated == 3
+
+
+class TestCheckToolAliases:
+    """check_tool_input/check_tool_output (epic #2905 / #2904): these are
+    documented aliases for mcp_check_input/mcp_check_output with "identical
+    parameters" (axonflow-docs/docs/mcp/policy-enforcement.md) — the `tool`
+    parameter must forward through both alias pairs, not just the methods
+    they alias.
+    """
+
+    @pytest.mark.asyncio
+    async def test_check_tool_input_forwards_tool(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/mcp/check-input",
+            method="POST",
+            json={"allowed": True},
+        )
+
+        await client.check_tool_input(
+            "postgres",
+            "SELECT 1",
+            tool="query",
+        )
+
+        request = httpx_mock.get_requests()[0]
+        sent_body = json.loads(request.content)
+        assert sent_body["connector_type"] == "postgres"
+        assert sent_body["tool"] == "query"
+
+    @pytest.mark.asyncio
+    async def test_check_tool_output_forwards_tool(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/mcp/check-output",
+            method="POST",
+            json={"allowed": True},
+        )
+
+        await client.check_tool_output(
+            "postgres",
+            message="1 row",
+            tool="query",
+        )
+
+        request = httpx_mock.get_requests()[0]
+        sent_body = json.loads(request.content)
+        assert sent_body["connector_type"] == "postgres"
+        assert sent_body["tool"] == "query"
+
+    def test_sync_check_tool_input_forwards_tool(
+        self,
+        sync_client: Any,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/mcp/check-input",
+            method="POST",
+            json={"allowed": True},
+        )
+
+        sync_client.check_tool_input("postgres", "SELECT 1", tool="query")
+
+        request = httpx_mock.get_requests()[0]
+        sent_body = json.loads(request.content)
+        assert sent_body["connector_type"] == "postgres"
+        assert sent_body["tool"] == "query"
+
+    def test_sync_check_tool_output_forwards_tool(
+        self,
+        sync_client: Any,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        httpx_mock.add_response(
+            url="https://test.axonflow.com/api/v1/mcp/check-output",
+            method="POST",
+            json={"allowed": True},
+        )
+
+        sync_client.check_tool_output("postgres", message="1 row", tool="query")
+
+        request = httpx_mock.get_requests()[0]
+        sent_body = json.loads(request.content)
+        assert sent_body["connector_type"] == "postgres"
+        assert sent_body["tool"] == "query"

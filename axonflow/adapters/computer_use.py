@@ -83,19 +83,6 @@ class CheckResult:
     """Number of policies the server evaluated."""
 
 
-def _derive_connector_type(tool_name: str, action: str | None = None) -> str:
-    """Derive AxonFlow connector_type from Computer Use tool name and action.
-
-    Examples:
-        _derive_connector_type("computer", "left_click") -> "computer_use.left_click"
-        _derive_connector_type("bash") -> "computer_use.bash"
-        _derive_connector_type("text_editor") -> "computer_use.text_editor"
-    """
-    if action:
-        return f"computer_use.{action}"
-    return f"computer_use.{tool_name}"
-
-
 class ComputerUseGovernor:
     """Governance middleware for Anthropic Computer Use tool_use blocks.
 
@@ -162,18 +149,30 @@ class ComputerUseGovernor:
                         policies_evaluated=0,
                     )
 
-        # Derive connector_type from tool name + action
-        action = tool_input.get("action") if isinstance(tool_input, dict) else None
-        connector_type = _derive_connector_type(
-            name,
-            action if isinstance(action, str) else None,
-        )
+        # Two-field (server, tool) identity contract (epic #2905 / #2904).
+        # `connector_type` is the Computer Use connector/domain marker
+        # ("computer_use") and `tool` is the tool NAME (e.g. "computer",
+        # "bash", "text_editor") — the same (server, tool) mapping the
+        # LangGraph adapters use, so the `tool_name` audit column means the
+        # tool name regardless of which adapter emitted it.
+        #
+        # The `action` (e.g. "left_click", "screenshot") is NOT a tool
+        # identity, so it must not go in `tool`. It stays inside `statement`
+        # below — `json.dumps(tool_input)` already includes the "action"
+        # key, and the policy engine evaluates the statement. It is
+        # deliberately NOT placed in the `operation` field, which the
+        # agent-api spec constrains to the enum {query, execute}.
+        #
+        # Previously both were folded into a single derived connector_type
+        # string ("computer_use.{action}"), which silently discarded the tool
+        # name whenever an action was present. Neither value is dropped now.
 
-        # Serialize input for policy evaluation
+        # Serialize input for policy evaluation (retains the action).
         statement = json.dumps(tool_input, default=str)
 
         check = await self._client.mcp_check_input(
-            connector_type=connector_type,
+            connector_type="computer_use",
+            tool=name,
             statement=statement,
             operation="execute",
         )
@@ -204,10 +203,16 @@ class ComputerUseGovernor:
         Returns:
             CheckResult with allowed status and optional redacted_result.
         """
-        connector_type = _derive_connector_type(tool_name)
-
+        # Same (server, tool) identity as check_tool_use(): the connector is
+        # the "computer_use" domain marker and the tool NAME is `tool_name`
+        # (e.g. "computer", "bash"), so the request- and response-plane rows
+        # share one connector_type and one tool identity. NB: the platform's
+        # check-output schema does not yet consume `tool` (#2955, targeted for
+        # v9.11.0); it is sent now for forward compatibility and is ignored by
+        # every current platform version (omitted on the wire when empty).
         check = await self._client.mcp_check_output(
-            connector_type=connector_type,
+            connector_type="computer_use",
+            tool=tool_name,
             message=result,
         )
 

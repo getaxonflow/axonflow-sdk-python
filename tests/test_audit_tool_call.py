@@ -160,6 +160,109 @@ class TestAuditToolCall:
         assert len(httpx_mock.get_requests()) == 1
 
     @pytest.mark.asyncio
+    async def test_caller_name_sent_in_request_body(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test that caller_name is sent in the outgoing request body when supplied."""
+        httpx_mock.add_response(
+            status_code=201,
+            json={
+                "audit_id": "aud_caller",
+                "status": "recorded",
+                "timestamp": "2026-03-14T13:00:00Z",
+            },
+        )
+
+        request = AuditToolCallRequest(
+            tool_name="getUserInfo",
+            caller_name="claude_code",
+            success=True,
+        )
+
+        result = await client.audit_tool_call(request)
+
+        assert result.audit_id == "aud_caller"
+
+        sent_request = httpx_mock.get_request()
+        assert sent_request is not None
+        import json
+
+        body = json.loads(sent_request.content)
+        assert body["caller_name"] == "claude_code"
+        assert "tool_type" not in body
+
+    @pytest.mark.asyncio
+    async def test_tool_type_standalone_backward_compat(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test that tool_type alone still works without caller_name (backward compat)."""
+        httpx_mock.add_response(
+            status_code=201,
+            json={
+                "audit_id": "aud_legacy",
+                "status": "recorded",
+                "timestamp": "2026-03-14T13:15:00Z",
+            },
+        )
+
+        request = AuditToolCallRequest(
+            tool_name="getUserInfo",
+            tool_type="mcp",
+            success=True,
+        )
+
+        result = await client.audit_tool_call(request)
+
+        assert result.audit_id == "aud_legacy"
+
+        sent_request = httpx_mock.get_request()
+        assert sent_request is not None
+        import json
+
+        body = json.loads(sent_request.content)
+        assert body["tool_type"] == "mcp"
+        assert "caller_name" not in body
+
+    @pytest.mark.asyncio
+    async def test_caller_name_and_tool_type_together(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """Test that caller_name and tool_type can both be supplied together."""
+        httpx_mock.add_response(
+            status_code=201,
+            json={
+                "audit_id": "aud_both",
+                "status": "recorded",
+                "timestamp": "2026-03-14T13:30:00Z",
+            },
+        )
+
+        request = AuditToolCallRequest(
+            tool_name="getUserInfo",
+            caller_name="codex",
+            tool_type="mcp",
+            success=True,
+        )
+
+        result = await client.audit_tool_call(request)
+
+        assert result.audit_id == "aud_both"
+
+        sent_request = httpx_mock.get_request()
+        assert sent_request is not None
+        import json
+
+        body = json.loads(sent_request.content)
+        assert body["caller_name"] == "codex"
+        assert body["tool_type"] == "mcp"
+
+    @pytest.mark.asyncio
     async def test_excludes_none_fields_from_request(
         self,
         client: AxonFlow,
@@ -239,6 +342,21 @@ class TestAuditToolCallTypes:
         assert response.audit_id == "aud_123"
         assert response.status == "recorded"
         assert response.timestamp == "2026-03-14T10:00:00Z"
+
+    def test_request_model_validate_with_caller_name(self) -> None:
+        """Test AuditToolCallRequest model validation with caller_name."""
+        request = AuditToolCallRequest.model_validate(
+            {
+                "tool_name": "myTool",
+                "caller_name": "cursor",
+                "input": {"key": "value"},
+                "duration_ms": 100,
+            }
+        )
+
+        assert request.tool_name == "myTool"
+        assert request.caller_name == "cursor"
+        assert request.tool_type is None
 
     def test_request_serialization_excludes_none(self) -> None:
         """Test that model_dump excludes None fields."""
