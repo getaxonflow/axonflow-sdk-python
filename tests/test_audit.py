@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -442,3 +444,169 @@ class TestAuditTypes:
         assert len(response.entries) == 2
         assert response.total == 100
         assert response.limit == 10
+
+
+# Real capture: captured 2026-08-03 from an isolated community v9.13.0 stack
+# (getaxonflow/axonflow tag v9.13.0 = df027c788), session 3254. Raw
+# POST /api/v1/audit/search response through the agent proxy, verbatim.
+REAL_CAPTURE_PATH = Path(__file__).parent / "fixtures" / "audit_search_live_v9130.json"
+
+
+class TestAuditRealWireShape:
+    """#3254: the audit read model against the REAL 9.x wire shape.
+
+    The seven fiction fields (query_summary, success, blocked, risk_score,
+    latency_ms, policy_violations, metadata) have never been served on the
+    9.x line; the real wire carries policy_decision, policy_details and
+    response_time_ms. These tests pin the additive interim: real fields
+    populate, fiction fields stay at defaults, nothing throws.
+    """
+
+    def test_real_capture_parses_with_new_fields_populated(self) -> None:
+        """Deserialize the REAL captured payload, unmodified.
+
+        Fixture provenance: captured 2026-08-03 from an isolated community
+        v9.13.0 stack, session 3254 (see REAL_CAPTURE_PATH comment).
+        """
+        payload = json.loads(REAL_CAPTURE_PATH.read_text())
+        response = AuditSearchResponse.model_validate(payload)
+
+        assert response.total == 2
+        assert len(response.entries) == 2
+
+        error_entry = response.entries[0]
+        allowed_entry = response.entries[1]
+
+        # New real-wire fields are populated from the capture.
+        assert error_entry.policy_decision == "error"
+        assert error_entry.policy_details["tool_name"] == "s3254_blocked_probe"
+        expected_error = "blocked by policy sys_sqli_or_true"
+        assert error_entry.policy_details["error_message"] == expected_error
+        assert allowed_entry.policy_decision == "allowed"
+        assert allowed_entry.policy_details["success"] is True
+        assert allowed_entry.response_time_ms == 0
+
+        # The verdict set is OPEN: "error" is not in the code-documented
+        # allowed/blocked/redacted set and must still parse as a plain string.
+        assert isinstance(error_entry.policy_decision, str)
+
+        # The seven fiction fields are ABSENT from the real wire and must
+        # stay at their defaults, silently.
+        for entry in response.entries:
+            assert entry.query_summary == ""
+            assert entry.success is True
+            assert entry.blocked is False
+            assert entry.risk_score == 0.0
+            assert entry.latency_ms == 0
+            assert entry.policy_violations == []
+            assert entry.metadata == {}
+
+        # Real fields that were already modeled keep parsing.
+        assert error_entry.request_type == "tool_call_audit"
+        assert error_entry.tenant_id == "community"
+
+    def test_old_server_payload_without_new_fields_defaults(self) -> None:
+        """Old-server tolerance: a payload WITHOUT the three new fields
+        parses and the new fields default (absence-tolerant contract).
+
+        Hand-modified capture: the real 2026-08-03 session-3254 capture with
+        policy_decision, policy_details and response_time_ms removed.
+        """
+        payload = json.loads(REAL_CAPTURE_PATH.read_text())
+        for raw in payload["entries"]:
+            del raw["policy_decision"]
+            del raw["policy_details"]
+            del raw["response_time_ms"]
+
+        response = AuditSearchResponse.model_validate(payload)
+
+        assert len(response.entries) == 2
+        for entry in response.entries:
+            assert entry.policy_decision == ""
+            assert entry.policy_details == {}
+            assert entry.response_time_ms == 0
+
+    def test_both_fiction_and_real_fields_in_one_payload(self) -> None:
+        """Fictional AND real fields together parse with no collision.
+
+        Hand-modified capture: the real 2026-08-03 session-3254 capture with
+        the seven fiction fields injected alongside the real ones.
+        """
+        payload = json.loads(REAL_CAPTURE_PATH.read_text())
+        fiction = {
+            "query_summary": "legacy summary",
+            "success": False,
+            "blocked": True,
+            "risk_score": 0.75,
+            "latency_ms": 1234,
+            "policy_violations": ["legacy-policy-1"],
+            "metadata": {"legacy": True},
+        }
+        for raw in payload["entries"]:
+            raw.update(fiction)
+
+        response = AuditSearchResponse.model_validate(payload)
+
+        for entry in response.entries:
+            # Fiction fields parse when present (kept for compatibility).
+            assert entry.query_summary == "legacy summary"
+            assert entry.success is False
+            assert entry.blocked is True
+            assert entry.risk_score == 0.75
+            assert entry.latency_ms == 1234
+            assert entry.policy_violations == ["legacy-policy-1"]
+            assert entry.metadata == {"legacy": True}
+        # Real fields are untouched by the fiction fields' presence.
+        assert response.entries[0].policy_decision == "error"
+        assert response.entries[1].policy_decision == "allowed"
+        assert response.entries[0].policy_details["tool_name"] == "s3254_blocked_probe"
+
+    def test_null_policy_details_parses(self) -> None:
+        """The orchestrator marshals a nil Go map/slice as JSON null -
+        observed live on real /api/v1/audit/search rows (session 3254,
+        runtime-e2e/audit_real_wire_fields). Null-tolerant, not merely
+        absence-tolerant.
+
+        Hand-modified capture: the real 2026-08-03 session-3254 capture
+        with policy_details/metadata/policy_violations set to null.
+        """
+        payload = json.loads(REAL_CAPTURE_PATH.read_text())
+        for raw in payload["entries"]:
+            raw["policy_details"] = None
+            raw["metadata"] = None
+            raw["policy_violations"] = None
+
+        response = AuditSearchResponse.model_validate(payload)
+
+        for entry in response.entries:
+            assert entry.policy_details == {}
+            assert entry.metadata == {}
+            assert entry.policy_violations == []
+        assert response.entries[0].policy_decision == "error"
+
+    def test_search_request_action_field(self) -> None:
+        """AuditSearchRequest.action is optional and defaults to None."""
+        request = AuditSearchRequest()
+        assert request.action is None
+
+        request = AuditSearchRequest(action="blocked")
+        assert request.action == "blocked"
+
+    @pytest.mark.asyncio
+    async def test_search_sends_action_filter(
+        self,
+        client: AxonFlow,
+        httpx_mock: HTTPXMock,
+    ) -> None:
+        """The action filter is sent on the wire; request_type is still
+        sent when set (deprecated but harmless, #3254)."""
+        httpx_mock.add_response(json={"entries": [], "total": 0, "limit": 100, "offset": 0})
+
+        await client.search_audit_logs(
+            AuditSearchRequest(action="error", request_type="legacy_filter")
+        )
+
+        sent = httpx_mock.get_requests()[-1]
+        body = json.loads(sent.content)
+        assert body["action"] == "error"
+        assert body["request_type"] == "legacy_filter"
