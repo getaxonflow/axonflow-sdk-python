@@ -75,13 +75,25 @@ def _specs_dir() -> Path | None:
     """Return the OpenAPI specs directory, or None when the env var is unset.
 
     Unset AXONFLOW_OPENAPI_SPECS_DIR is the designed local-dev skip. A
-    variable that IS set but points at a missing directory is a
-    misconfiguration and fails loudly instead: previously it produced 7
-    silent skips and exit 0, so a broken CI checkout read as green.
+    variable that IS set - but empty, or pointing at a missing directory
+    or a non-directory - is a misconfiguration and fails loudly instead:
+    previously those cases produced 7 silent skips and exit 0, so a
+    broken CI checkout read as green. Set-but-empty fails (rather than
+    reading as unset) because a CI consumer wiring the var from an
+    expression that evaluates empty is exactly the broken-checkout class.
     """
     env = os.environ.get("AXONFLOW_OPENAPI_SPECS_DIR")
-    if not env:
+    if env is None:
         return None
+    if not env.strip():
+        pytest.fail(
+            "AXONFLOW_OPENAPI_SPECS_DIR is set but empty. Refusing to treat "
+            "it as unset: an empty value usually means the CI expression "
+            "that was supposed to produce the specs path evaluated to "
+            "nothing, and a silent skip would make that read as a green "
+            "wire-shape gate. Fix the expression, or unset the variable to "
+            "skip locally."
+        )
     p = Path(env)
     if not p.is_dir():
         pytest.fail(
@@ -568,6 +580,38 @@ def test_specs_dir_set_but_missing_fails_loudly(
     missing = tmp_path / "no-such-specs-dir"
     monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", str(missing))
     with pytest.raises(pytest.fail.Exception, match="AXONFLOW_OPENAPI_SPECS_DIR"):
+        _specs_dir()
+
+
+def test_specs_dir_set_but_empty_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Env SET but EMPTY must FAIL, not read as unset.
+
+    Choice (of fail-on-empty vs empty-as-unset): fail. A CI consumer
+    wiring the variable from an expression that evaluates empty is the
+    same broken-checkout class as a missing directory - treating it as
+    the designed local-dev skip would green-light a gate that checked
+    nothing. Whitespace-only counts as empty.
+    """
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", "")
+    with pytest.raises(pytest.fail.Exception, match="set but empty"):
+        _specs_dir()
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", "   ")
+    with pytest.raises(pytest.fail.Exception, match="set but empty"):
+        _specs_dir()
+
+
+def test_specs_dir_set_to_a_file_fails_loudly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Env SET but pointing at a FILE (not a directory) must FAIL.
+
+    Behaviorally covered by the is_dir() check; pinned here so a future
+    refactor to exists() cannot silently reopen the class.
+    """
+    a_file = tmp_path / "specs.yaml"
+    a_file.write_text("openapi: 3.0.0\n")
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", str(a_file))
+    with pytest.raises(pytest.fail.Exception, match="not an existing directory"):
         _specs_dir()
 
 
