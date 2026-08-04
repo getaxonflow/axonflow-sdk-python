@@ -133,7 +133,25 @@ class Finding:
 
 @dataclass
 class AISystemRegistry:
-    """Registered AI system in the MAS FEAT registry."""
+    """Registered AI system in the MAS FEAT registry.
+
+    Attributes:
+        technical_owner: Deprecated: never populated on the 9.x line -
+            the server has never sent this field
+            (getaxonflow/axonflow-enterprise#3254); the wire carries
+            ``owner_email`` (read into ``business_owner``) and
+            ``owner_team``. The register/update write paths still send
+            it (harmless, unread server-side). Scheduled for removal in
+            the next major.
+        business_owner: Populated from the wire field ``owner_email``
+            (legacy spelling read first for compatibility).
+        customer_impact: Populated from the wire field
+            ``risk_rating_impact`` (legacy spelling read first).
+        model_complexity: Populated from the wire field
+            ``risk_rating_complexity`` (legacy spelling read first).
+        human_reliance: Populated from the wire field
+            ``risk_rating_reliance`` (legacy spelling read first).
+    """
 
     id: str
     org_id: str
@@ -157,7 +175,35 @@ class AISystemRegistry:
 
 @dataclass
 class RegistrySummary:
-    """Summary of all AI systems in the registry."""
+    """Summary of all AI systems in the registry.
+
+    Attributes:
+        total_systems: Total registered systems.
+        active_systems: Systems with status "active".
+        high_materiality_count: High-materiality systems. Populated from
+            the wire field ``high_materiality`` (legacy spelling read
+            first for compatibility).
+        medium_materiality_count: Medium-materiality systems (wire:
+            ``medium_materiality``).
+        low_materiality_count: Low-materiality systems (wire:
+            ``low_materiality``).
+        by_use_case: Deprecated: never populated on the 9.x line - the
+            server has never sent this field
+            (getaxonflow/axonflow-enterprise#3254); no wire equivalent
+            (the wire RegistrySummary serves flat counts only). Read the
+            flat count fields instead. Scheduled for removal in the next
+            major.
+        by_status: Deprecated: never populated on the 9.x line - the
+            server has never sent this field
+            (getaxonflow/axonflow-enterprise#3254); no wire equivalent
+            (the wire RegistrySummary serves flat counts only). Read
+            ``active_systems`` and the materiality counts instead.
+            Scheduled for removal in the next major.
+        org_id: Organization the summary is scoped to (#3254 additive).
+        assessments_due: Systems with an assessment due (#3254 additive).
+        kill_switches_triggered: Kill switches currently in triggered
+            state (#3254 additive).
+    """
 
     total_systems: int
     active_systems: int
@@ -166,6 +212,9 @@ class RegistrySummary:
     low_materiality_count: int
     by_use_case: dict[str, int] = field(default_factory=dict)
     by_status: dict[str, int] = field(default_factory=dict)
+    org_id: str = ""
+    assessments_due: int = 0
+    kill_switches_triggered: int = 0
 
 
 # ===========================================================================
@@ -321,8 +370,13 @@ def registry_summary_from_dict(data: dict[str, Any]) -> RegistrySummary:
             data.get("medium_materiality_count") or data.get("medium_materiality", 0)
         ),
         low_materiality_count=data.get("low_materiality_count") or data.get("low_materiality", 0),
+        # Deprecated (#3254): never served on 9.x; stay {} against real servers.
         by_use_case=data.get("by_use_case", {}),
         by_status=data.get("by_status", {}),
+        # #3254 additive: real wire fields the model previously lacked.
+        org_id=data.get("org_id", ""),
+        assessments_due=data.get("assessments_due", 0),
+        kill_switches_triggered=data.get("kill_switches_triggered", 0),
     )
 
 

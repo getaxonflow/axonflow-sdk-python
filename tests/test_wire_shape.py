@@ -452,13 +452,15 @@ def test_baseline_has_not_grown_stale(
     """
     expected_drift = baseline.get("per_model_drift", {})
     stale_entries: list[tuple[str, list[str], list[str]]] = []
+    # #3262: dataclass bindings participate in staleness reporting too.
+    dataclass_bindings = _masfeat_dataclass_bindings()
 
     for name, expected in expected_drift.items():
-        if name not in sdk_models or name not in openapi_schemas:
+        is_dataclass = name in dataclass_bindings
+        if (name not in sdk_models and not is_dataclass) or name not in openapi_schemas:
             stale_entries.append((name, ["<model or schema no longer exists>"], []))
             continue
-        model = sdk_models[name]
-        sdk_fields = _wire_fields(model)
+        sdk_fields = dataclass_bindings[name] if is_dataclass else _wire_fields(sdk_models[name])
         spec_fields = openapi_schemas[name]
         only_sdk = set(sdk_fields) - set(spec_fields)
         only_spec = set(spec_fields) - set(sdk_fields)
@@ -499,10 +501,13 @@ def test_registered_models_still_map(
             "baseline has no registered_models list; rename-escape guard "
             "is disabled until the baseline is regenerated with that key."
         )
+    # #3262: masfeat dataclass bindings count as SDK models for the
+    # rename-escape guard too (they are registered in the baseline).
+    known_sdk_names = set(sdk_models) | set(_masfeat_dataclass_bindings())
     missing_model: list[str] = []
     missing_schema: list[str] = []
     for name in registered:
-        if name not in sdk_models:
+        if name not in known_sdk_names:
             missing_model.append(name)
         if name not in openapi_schemas:
             missing_schema.append(name)
@@ -513,7 +518,9 @@ def test_registered_models_still_map(
             "",
         ]
         if missing_model:
-            lines.append(f"  No matching SDK pydantic class for: {missing_model}")
+            lines.append(
+                f"  No matching SDK pydantic class or bound dataclass for: {missing_model}"
+            )
         if missing_schema:
             lines.append(f"  No matching OpenAPI schema for: {missing_schema}")
         lines.append("")
@@ -621,3 +628,257 @@ def test_specs_dir_set_and_present_resolves(
     """Env set to an existing directory resolves to that path."""
     monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", str(tmp_path))
     assert _specs_dir() == tmp_path
+
+
+# ---------------------------------------------------------------------------
+# masfeat dataclass binding (#3262, mechanism class of #3254)
+# ---------------------------------------------------------------------------
+# The masfeat surface (axonflow/masfeat.py) is plain dataclasses with
+# hand-written *_from_dict parsers, so the pydantic walker above cannot
+# see it - the exact mechanism that let the audit models certify fiction
+# (#3254). Binding choice (stated per #3262): extract the wire names by
+# DRIVING THE REAL PARSERS with a key-recording payload, rather than
+# migrating the models to pydantic - a migration changes the public
+# types (constructor semantics, dataclasses.asdict/astuple consumers,
+# isinstance checks) and is next-major work, and a hand-declared
+# field->wire-name table would test the declaration instead of the path.
+#
+# Seed payloads are SOURCE-DERIVED from the server structs at tag
+# v9.13.0 (platform/orchestrator/masfeat/types.go, getaxonflow/axonflow
+# @ df027c788) - they are not captures. They carry ONLY the real wire
+# names: every legacy-name read sits FIRST in an `x or y` fallback
+# chain, so it is always attempted (and recorded) regardless, while a
+# seed that included a legacy name would satisfy the chain early and
+# hide the real-name read from the recorder.
+
+
+class _WireKeyRecorder(dict):
+    """Payload dict recording every wire key a parser ATTEMPTS to read.
+
+    ``get`` and ``[]`` record; ``in`` deliberately does NOT - presence
+    probes (e.g. kill_switch_from_dict unwrapping a ``{"kill_switch":
+    ...}`` envelope) are response-shape dispatch, not field reads.
+    """
+
+    def __init__(self, seed: dict[str, Any]) -> None:
+        super().__init__(seed)
+        self.consumed: set[str] = set()
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        self.consumed.add(key)
+        return super().get(key, default)
+
+    def __getitem__(self, key: Any) -> Any:
+        self.consumed.add(key)
+        return super().__getitem__(key)
+
+
+_SEED_REGISTRY_SUMMARY: dict[str, Any] = {
+    "org_id": "org-src-derived",
+    "total_systems": 3,
+    "active_systems": 2,
+    "high_materiality": 1,
+    "medium_materiality": 1,
+    "low_materiality": 1,
+    "assessments_due": 1,
+    "kill_switches_triggered": 1,
+}
+
+_SEED_KILL_SWITCH: dict[str, Any] = {
+    "id": "ks-src-derived",
+    "org_id": "org-src-derived",
+    "system_id": "sys-1",
+    "status": "triggered",
+    "trigger_reason": "bias threshold exceeded",
+    "trigger_conditions": {"metric": "bias"},
+    "auto_trigger_enabled": True,
+    "accuracy_threshold": 0.9,
+    "bias_threshold": 0.1,
+    "error_rate_threshold": 0.05,
+    "triggered_at": "2026-08-01T00:00:00Z",
+    "triggered_by": "ops@example.com",
+    "restored_at": "2026-08-02T00:00:00Z",
+    "restored_by": "ops@example.com",
+    "restore_reason": "model retrained",
+    "created_at": "2026-07-01T00:00:00Z",
+    "updated_at": "2026-08-02T00:00:00Z",
+}
+
+_SEED_AI_SYSTEM_REGISTRY: dict[str, Any] = {
+    "id": "reg-src-derived",
+    "org_id": "org-src-derived",
+    "system_id": "sys-1",
+    "system_name": "Credit Scorer",
+    "description": "src-derived",
+    "use_case": "credit_scoring",
+    "status": "active",
+    "risk_rating_impact": 3,
+    "risk_rating_complexity": 2,
+    "risk_rating_reliance": 1,
+    "materiality_classification": "high",
+    "owner_team": "risk",
+    "owner_email": "owner@example.com",
+    "data_sources": ["core-banking"],
+    "model_type": "gradient-boosting",
+    "version": "1.2.0",
+    "deployment_date": "2026-01-01T00:00:00Z",
+    "last_assessment_date": "2026-06-01T00:00:00Z",
+    "next_assessment_due": "2026-12-01T00:00:00Z",
+    "metadata": {},
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-06-01T00:00:00Z",
+    "created_by": "owner@example.com",
+    "updated_by": "owner@example.com",
+}
+
+
+def _masfeat_dataclass_bindings() -> dict[str, list[str]]:
+    """``{class_name: sorted wire keys the REAL parser consumes}``.
+
+    A parser raising on its seed means the seed drifted from the server
+    struct - that is a test failure, not a skip.
+    """
+    from axonflow import masfeat  # noqa: PLC0415
+
+    bindings: dict[str, list[str]] = {}
+    for name, parser, seed in (
+        ("RegistrySummary", masfeat.registry_summary_from_dict, _SEED_REGISTRY_SUMMARY),
+        ("KillSwitch", masfeat.kill_switch_from_dict, _SEED_KILL_SWITCH),
+        ("AISystemRegistry", masfeat.ai_system_registry_from_dict, _SEED_AI_SYSTEM_REGISTRY),
+    ):
+        recorder = _WireKeyRecorder(seed)
+        parser(recorder)
+        bindings[name] = sorted(recorder.consumed)
+    return bindings
+
+
+def test_no_new_masfeat_dataclass_vs_spec_drift(
+    openapi_schemas: dict[str, list[str]],
+    baseline: dict[str, Any],
+) -> None:
+    """#3262: the masfeat dataclasses' consumed wire names vs their
+    masfeat-api.yaml schemas, held to the same baseline discipline as
+    the pydantic gate. sdk_only here means "the parser reads a key the
+    spec does not declare" (a legacy/fiction spelling); spec_only means
+    "the spec declares a property no parser path reads" (coverage gap).
+    """
+    expected_drift = baseline.get("per_model_drift", {})
+    new_drift: list[tuple[str, list[str], list[str], list[str], list[str]]] = []
+    matched = 0
+
+    for name, consumed in sorted(_masfeat_dataclass_bindings().items()):
+        if name not in openapi_schemas:
+            continue
+        matched += 1
+        spec_fields = openapi_schemas[name]
+        only_sdk = sorted(set(consumed) - set(spec_fields))
+        only_spec = sorted(set(spec_fields) - set(consumed))
+
+        expected = expected_drift.get(name, {})
+        unexpected_sdk = sorted(set(only_sdk) - set(expected.get("sdk_only", [])))
+        unexpected_spec = sorted(set(only_spec) - set(expected.get("spec_only", [])))
+
+        if unexpected_sdk or unexpected_spec:
+            new_drift.append((name, only_sdk, only_spec, unexpected_sdk, unexpected_spec))
+
+    if new_drift:
+        lines = [
+            "",
+            "NEW masfeat dataclass wire-shape drift detected (not covered by baseline):",
+            "",
+        ]
+        for name, only_sdk, only_spec, unexpected_sdk, unexpected_spec in new_drift:
+            lines.append(f"  {name} (dataclass, parser-consumed keys):")
+            if unexpected_sdk:
+                lines.append(f"    NEW, read by parser but not in OpenAPI: {unexpected_sdk}")
+            if unexpected_spec:
+                lines.append(f"    NEW, in OpenAPI but never read:         {unexpected_spec}")
+            if only_sdk and set(only_sdk) != set(unexpected_sdk):
+                lines.append(
+                    f"    (baseline, parser-only):  {sorted(set(only_sdk) - set(unexpected_sdk))}"
+                )
+            if only_spec and set(only_spec) != set(unexpected_spec):
+                lines.append(
+                    f"    (baseline, spec-only):    {sorted(set(only_spec) - set(unexpected_spec))}"
+                )
+        lines.append("")
+        lines.append(
+            "Fix: align the parser's wire reads with the OpenAPI property "
+            "names, OR baseline the drift with a note naming the tracking "
+            "issue (#3254 for the masfeat legacy spellings)."
+        )
+        pytest.fail("\n".join(lines))
+
+    assert matched > 0, "No masfeat dataclass matched any OpenAPI schema by name."
+
+
+# --- #3262 machinery self-tests (decoy + negative control). These do not
+# need the specs dir, so they run in the regular suite.
+
+
+def test_masfeat_recorder_catches_a_decoy_fiction_read() -> None:
+    """Decoy self-test: a parser reading a key the schema does not
+    declare MUST surface as sdk-only drift. Proves the recorder sees
+    both `[]` and `.get` reads, including reads of ABSENT keys (the
+    fiction-read shape: get returns None, the read still happened).
+    """
+    schema_fields = ["real_a", "real_b"]
+
+    def decoy_parser(data: dict[str, Any]) -> tuple[Any, Any, Any]:
+        return (
+            data["real_a"],
+            data.get("decoy_fiction_field") or data.get("real_b"),
+            data.get("decoy_getitem_missing"),
+        )
+
+    recorder = _WireKeyRecorder({"real_a": 1, "real_b": 2})
+    decoy_parser(recorder)
+    only_sdk = sorted(set(recorder.consumed) - set(schema_fields))
+    assert only_sdk == ["decoy_fiction_field", "decoy_getitem_missing"], (
+        f"decoy fiction reads not flagged: consumed={sorted(recorder.consumed)}"
+    )
+
+
+def test_masfeat_recorder_negative_control() -> None:
+    """Negative control: a parser reading exactly the schema-declared
+    names produces zero drift in either direction."""
+    schema_fields = ["real_a", "real_b"]
+
+    def clean_parser(data: dict[str, Any]) -> tuple[Any, Any]:
+        return data["real_a"], data.get("real_b")
+
+    recorder = _WireKeyRecorder({"real_a": 1, "real_b": 2})
+    clean_parser(recorder)
+    assert sorted(set(recorder.consumed) - set(schema_fields)) == []
+    assert sorted(set(schema_fields) - set(recorder.consumed)) == []
+
+
+def test_masfeat_recorder_does_not_record_presence_probes() -> None:
+    """`in` probes are response-shape dispatch (the kill_switch
+    envelope), not field reads - pinned so a refactor cannot start
+    flagging the envelope key as fiction."""
+    recorder = _WireKeyRecorder({"kill_switch": {}})
+    assert "kill_switch" in recorder
+    assert recorder.consumed == set()
+
+
+def test_masfeat_seeds_do_not_contain_legacy_spellings() -> None:
+    """The seeds must carry ONLY real wire names: a legacy name in a
+    seed satisfies its `x or y` fallback chain early and hides the
+    real-name read from the recorder (stated in the section comment;
+    pinned here)."""
+    legacy = {
+        "high_materiality_count",
+        "medium_materiality_count",
+        "low_materiality_count",
+        "by_use_case",
+        "by_status",
+        "triggered_reason",
+        "technical_owner",
+        "business_owner",
+        "customer_impact",
+        "model_complexity",
+        "human_reliance",
+    }
+    for seed in (_SEED_REGISTRY_SUMMARY, _SEED_KILL_SWITCH, _SEED_AI_SYSTEM_REGISTRY):
+        assert not (set(seed) & legacy), f"legacy spelling in seed: {set(seed) & legacy}"

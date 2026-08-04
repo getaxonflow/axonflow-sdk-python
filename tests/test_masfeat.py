@@ -419,6 +419,39 @@ class TestRegistrySummaryFromDict:
         assert result.high_materiality_count == 2
         assert result.medium_materiality_count == 5
 
+    def test_real_wire_fields_added_by_3254(self) -> None:
+        """#3254 pin-advance batch: the real wire RegistrySummary
+        (platform/orchestrator/masfeat/types.go @ v9.13.0) serves
+        org_id/assessments_due/kill_switches_triggered; the parser must
+        surface them. Payload is source-derived, not a capture.
+        """
+        data = {
+            "org_id": "org-1",
+            "total_systems": 3,
+            "active_systems": 2,
+            "high_materiality": 1,
+            "medium_materiality": 1,
+            "low_materiality": 1,
+            "assessments_due": 2,
+            "kill_switches_triggered": 1,
+        }
+        result = registry_summary_from_dict(data)
+        assert result.org_id == "org-1"
+        assert result.assessments_due == 2
+        assert result.kill_switches_triggered == 1
+        # The deprecated fiction fields (#3254) stay empty against a
+        # real-shaped payload - the server has never sent them on 9.x.
+        assert result.by_use_case == {}
+        assert result.by_status == {}
+
+    def test_new_fields_default_when_absent(self) -> None:
+        """Old-server tolerance for the #3254 additions."""
+        data = {"total_systems": 1, "active_systems": 1}
+        result = registry_summary_from_dict(data)
+        assert result.org_id == ""
+        assert result.assessments_due == 0
+        assert result.kill_switches_triggered == 0
+
 
 class TestFEATAssessmentFromDict:
     """Test feat_assessment_from_dict conversion."""
