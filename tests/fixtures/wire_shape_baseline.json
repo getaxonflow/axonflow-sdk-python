@@ -11,39 +11,19 @@
         "error"
       ]
     },
-    "BiasRecord": {
+    "CreateOverrideRequest": {
       "agent-api.yaml": [
-        "category",
-        "group_a",
-        "group_a_rate",
-        "group_b",
-        "group_b_rate",
-        "id",
-        "is_violation",
-        "model_id",
-        "org_id",
-        "sample_size",
-        "score",
-        "threshold",
-        "timestamp"
+        "action_override",
+        "enabled_override",
+        "expires_at",
+        "override_reason"
       ],
       "orchestrator-api.yaml": [
-        "category",
-        "group_a",
-        "group_a_rate",
-        "group_b",
-        "group_b_rate",
-        "id",
-        "is_violation",
-        "metadata",
-        "model_id",
-        "org_id",
-        "sample_size",
-        "score",
-        "threshold",
-        "timestamp",
-        "window_end",
-        "window_start"
+        "override_reason",
+        "policy_id",
+        "policy_type",
+        "tool_signature",
+        "ttl_seconds"
       ]
     },
     "CreatePolicyRequest": {
@@ -63,40 +43,80 @@
       ],
       "policy-api.yaml": [
         "actions",
+        "category",
         "conditions",
         "description",
         "enabled",
         "name",
         "priority",
+        "tags",
+        "tier",
         "type"
       ]
     },
-    "EUAIActExportRequest": {
+    "DecisionExplanation": {
       "agent-api.yaml": [
-        "format",
-        "from_date",
-        "include_accuracy_metrics",
-        "include_assessments",
-        "include_bias_records",
-        "include_decision_chains",
-        "include_hitl_records",
-        "org_id",
-        "to_date"
+        "decision",
+        "decision_id",
+        "historical_hit_count_session",
+        "matched_rules",
+        "override_available",
+        "override_existing_id",
+        "policy_matches",
+        "policy_source_link",
+        "reason",
+        "risk_level",
+        "timestamp",
+        "tool_signature"
       ],
       "orchestrator-api.yaml": [
-        "date_from",
-        "date_to",
-        "export_type",
-        "format",
-        "model_ids"
+        "context",
+        "context_truncated",
+        "decision",
+        "decision_id",
+        "historical_hit_count_session",
+        "latest_policy_version",
+        "matched_rules",
+        "override_available",
+        "override_existing_id",
+        "policy_matches",
+        "policy_source_link",
+        "policy_version_at_decision",
+        "reason",
+        "risk_level",
+        "timestamp",
+        "tool_signature"
+      ]
+    },
+    "Finding": {
+      "masfeat-api.yaml": [
+        "category",
+        "description",
+        "due_date",
+        "id",
+        "pillar",
+        "remediation",
+        "severity",
+        "status"
+      ],
+      "orchestrator-api.yaml": [
+        "article",
+        "category",
+        "description",
+        "id",
+        "remediation",
+        "severity",
+        "status"
       ]
     },
     "HealthResponse": {
       "agent-api.yaml": [
         "capabilities",
+        "plugin_compatibility",
         "sdk_compatibility",
         "service",
         "status",
+        "tier",
         "timestamp",
         "version"
       ],
@@ -104,6 +124,7 @@
         "capabilities",
         "components",
         "features",
+        "plugin_compatibility",
         "sdk_compatibility",
         "service",
         "status",
@@ -127,33 +148,6 @@
         "timestamp"
       ]
     },
-    "PolicyOverride": {
-      "agent-api.yaml": [
-        "action_override",
-        "created_at",
-        "created_by",
-        "enabled_override",
-        "expires_at",
-        "id",
-        "organization_id",
-        "override_reason",
-        "policy_id",
-        "policy_type",
-        "tenant_id",
-        "updated_at",
-        "updated_by"
-      ],
-      "policy-api.yaml": [
-        "action_override",
-        "created_at",
-        "created_by",
-        "enabled_override",
-        "expires_at",
-        "id",
-        "override_reason",
-        "policy_id"
-      ]
-    },
     "UpdatePolicyRequest": {
       "orchestrator-api.yaml": [
         "action",
@@ -168,145 +162,102 @@
       ],
       "policy-api.yaml": [
         "actions",
+        "category",
         "conditions",
         "description",
         "enabled",
         "name",
         "priority",
+        "tags",
         "type"
       ]
     }
   },
-  "openapi_specs_sha": "0bd9256237ebbffb9c0101126da71f2c940a1695",
+  "openapi_specs_sha": "df027c788b60c18d044278c45aa4bce3a1ac8717",
   "per_model_drift": {
     "AISystemRegistry": {
-      "note": "acknowledged-sdk-superset: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262) - the parser reads the REAL server wire names (platform/orchestrator/masfeat/types.go at v9.13.0) ahead of this fiction-era spec pin, which still declares the legacy shape. Resolves when the pin advances to v9.13.0 (PR #214), where the legacy spellings the parser reads first-for-compatibility become the sdk_only set instead. owner_email/risk_rating_impact/risk_rating_complexity/risk_rating_reliance are the real wire names read as fallbacks behind the legacy business_owner/customer_impact/model_complexity/human_reliance spellings; technical_owner is deprecated fiction (never served on 9.x).",
+      "note": "deprecated-pending-removal: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262). sdk_only lists the LEGACY spellings the parser reads first-for-compatibility before falling back to the real v9.13.0 wire names (now spec-declared), here business_owner/customer_impact/model_complexity/human_reliance (real wire: owner_email/risk_rating_impact/risk_rating_complexity/risk_rating_reliance), plus deprecated fiction technical_owner (never served on 9.x). spec_only fields (data_sources/model_type/version/deployment_date/last_assessment_date/next_assessment_due/updated_by) are informational coverage gaps (PR #224). Legacy spellings burn down in the next major.",
       "sdk_only": [
-        "owner_email",
-        "risk_rating_complexity",
-        "risk_rating_impact",
-        "risk_rating_reliance"
+        "business_owner",
+        "customer_impact",
+        "human_reliance",
+        "model_complexity",
+        "technical_owner"
       ],
-      "spec_only": []
+      "spec_only": [
+        "data_sources",
+        "deployment_date",
+        "last_assessment_date",
+        "model_type",
+        "next_assessment_due",
+        "updated_by",
+        "version"
+      ]
     },
     "AuditLogEntry": {
-      "note": "spec-bug-pending: #1745 \u2014 agent-api.yaml AuditLogEntry omits metadata/model/policy_violations the agent emits on every audit-log read. Plus getaxonflow/axonflow-enterprise#3254 additive interim: policy_decision/policy_details/response_time_ms are the REAL 9.x wire fields (platform/orchestrator/audit_logger.go AuditEntry serves them at v9.6.1 and v9.13.0); this pre-v9 spec pin predates them, so they read as sdk_only until the pin moves to v9.13.0 (PR #214).",
+      "note": "deprecated-pending-removal: getaxonflow/axonflow-enterprise#3254 additive interim. The seven sdk_only fields (blocked/success/risk_score/latency_ms/query_summary/policy_violations/metadata) were NEVER served on the 9.x line - the v9.6.1-era spec described a fiction shape and the v9.13.0 spec sync corrected it to the real audit_logger.go AuditEntry struct. They are deprecated on the SDK model (PR #223), keep parsing to defaults, and burn down in the coordinated four-SDK next major per the #3254 operator decision. The real wire fields policy_decision/policy_details/response_time_ms are modeled since PR #223 and now match the spec. spec_only: 15 real wire fields the SDK does not yet model (query/query_hash, user_id/user_role/org_id, cost, error_message, correlation_id/session_id/plane/decision_id, redacted_fields/response_sample/compliance_flags/security_metrics) - a read-side coverage gap, not a break; candidates for the next-major audit model rewrite.",
       "sdk_only": [
-        "data_residency",
+        "blocked",
+        "latency_ms",
         "metadata",
-        "model",
-        "policy_decision",
-        "policy_details",
         "policy_violations",
-        "response_time_ms",
-        "transfer_basis"
+        "query_summary",
+        "risk_score",
+        "success"
       ],
-      "spec_only": []
+      "spec_only": [
+        "compliance_flags",
+        "correlation_id",
+        "cost",
+        "decision_id",
+        "error_message",
+        "org_id",
+        "plane",
+        "query",
+        "query_hash",
+        "redacted_fields",
+        "response_sample",
+        "security_metrics",
+        "session_id",
+        "user_id",
+        "user_role"
+      ]
     },
     "AuditSearchRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts decision_id/offset/override_id/policy_name as query params; agent-api.yaml AuditSearchRequest doesn't yet declare them. Plus getaxonflow/axonflow-enterprise#3254: `action` is the search filter the 9.x server actually reads (audit_read_handlers.go); this pre-v9 spec pin predates it, so it reads as sdk_only until the pin moves to v9.13.0 (PR #214).",
+      "note": "deprecated-pending-removal: getaxonflow/axonflow-enterprise#3254. sdk_only `request_type` is not read as a search filter by the 9.x server (a search filtered only by it silently returns unfiltered results - proven by the session-3254 live capture); deprecated on the search request (PR #223), still sent when set (harmless, ignored), removed in the next major. The real filter `action` is modeled since PR #223 and matches the spec. spec_only `session_id`: filter declared by the v9.13.0 spec, not yet modeled - coverage gap, not a break.",
       "sdk_only": [
-        "action",
-        "decision_id",
-        "offset",
-        "override_id",
-        "policy_name"
+        "request_type"
       ],
-      "spec_only": []
+      "spec_only": [
+        "session_id"
+      ]
     },
-    "AuditToolCallRequest": {
-      "note": "acknowledged-sdk-superset: tracked in getaxonflow/axonflow-enterprise#2912. SDK declares caller_name; platform accepts/writes it (PR #2953) but the community OpenAPI spec has not caught up yet.",
+    "DecideResponse": {
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `error`; the agent's decide error envelope (sendDecideError) emits it alongside verdict=deny on malformed requests so PEP code parses a single envelope, but agent-api.yaml DecideResponse doesn't yet declare it.",
       "sdk_only": [
-        "caller_name"
-      ],
-      "spec_only": []
-    },
-    "Budget": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `enabled`; platform emits it but spec doesn't yet declare it.",
-      "sdk_only": [
-        "enabled"
-      ],
-      "spec_only": []
-    },
-    "CancelPlanResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `message`; platform emits it but spec doesn't yet declare it.",
-      "sdk_only": [
-        "message"
-      ],
-      "spec_only": []
-    },
-    "ClientRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `media` on the request; the platform's multimodal governance code path consumes it but the request schema in the spec doesn't yet declare it.",
-      "sdk_only": [
-        "media"
-      ],
-      "spec_only": []
-    },
-    "ClientResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `budget_info` (Issue #1082) and `media_analysis` on the response; the platform emits both but the spec doesn't yet declare them.",
-      "sdk_only": [
-        "budget_info",
-        "media_analysis"
-      ],
-      "spec_only": []
-    },
-    "CreateStaticPolicyRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `organization_id` for org-tier policies (Enterprise); spec doesn't yet declare it on the request schema.",
-      "sdk_only": [
-        "organization_id"
-      ],
-      "spec_only": []
-    },
-    "CreateWorkflowResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `created_at`/`source`; platform emits both but spec doesn't yet declare them.",
-      "sdk_only": [
-        "created_at",
-        "source"
+        "error"
       ],
       "spec_only": []
     },
     "DecisionExplanation": {
-      "note": "acknowledged-sdk-superset: context + context_truncated are surfaced by the SDK ahead of the OpenAPI spec (platform #2509 / epic #2508); the spec will declare them in the v8.5.0 sync.",
-      "sdk_only": [
-        "context",
-        "context_truncated"
-      ],
-      "spec_only": []
+      "note": "acknowledged-spec-superset: the former sdk_only context/context_truncated entries resolved - the v9.13.0 spec declares them (platform #2509 / epic #2508). spec_only latest_policy_version/policy_version_at_decision (policy-version pinning surface) are declared by v9.13.0 but not yet modeled - additive, no break.",
+      "sdk_only": [],
+      "spec_only": [
+        "latest_policy_version",
+        "policy_version_at_decision"
+      ]
     },
-    "DynamicPolicy": {
-      "note": "spec-bug-pending: #1745 \u2014 policy-api.yaml DynamicPolicy omits 7 fields (category, created_at, organization_id, priority, tier, type, updated_at) every policy-CRUD caller needs.",
-      "sdk_only": [
-        "category",
-        "created_at",
-        "organization_id",
-        "priority",
-        "tier",
-        "type",
-        "updated_at"
-      ],
-      "spec_only": []
+    "DecisionTarget": {
+      "note": "acknowledged-spec-superset: the v9.13.0 spec declares optional `server` on DecisionTarget (two-field (server, tool) identity contract, epic #2905 / platform #2904); the SDK does not yet model it there - additive optional, no break.",
+      "sdk_only": [],
+      "spec_only": [
+        "server"
+      ]
     },
     "DynamicPolicyMatch": {
       "note": "deprecated-pending-removal: `reason` is marked DEPRECATED + 'Removed in v7' on its Field() docstring; the canonical wire field is `message` (already present, matches spec).",
       "sdk_only": [
         "reason"
-      ],
-      "spec_only": []
-    },
-    "ExecutionSnapshot": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `approval_required`/`approved_at`/`approved_by`; platform emits these in HITL flows but spec doesn't yet declare them.",
-      "sdk_only": [
-        "approval_required",
-        "approved_at",
-        "approved_by"
-      ],
-      "spec_only": []
-    },
-    "ExecutionSummary": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `input_summary`/`output_summary`; platform emits both but spec doesn't yet declare them.",
-      "sdk_only": [
-        "input_summary",
-        "output_summary"
       ],
       "spec_only": []
     },
@@ -317,65 +268,31 @@
       ],
       "spec_only": []
     },
+    "HITLApprovalRequest": {
+      "note": "acknowledged-spec-superset: the v9.13.0 spec declares id/override_authorized_by/override_justification/reviewer_role on HITLApprovalRequest; the SDK does not yet model them - additive server-side surface, no break. Newly registered by the v9.13.0 pin.",
+      "sdk_only": [],
+      "spec_only": [
+        "id",
+        "override_authorized_by",
+        "override_justification",
+        "reviewer_role"
+      ]
+    },
     "KillSwitch": {
-      "note": "acknowledged-sdk-superset: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262) - the parser reads the REAL server wire names (platform/orchestrator/masfeat/types.go at v9.13.0) ahead of this fiction-era spec pin, which still declares the legacy shape. Resolves when the pin advances to v9.13.0 (PR #214), where the legacy spellings the parser reads first-for-compatibility become the sdk_only set instead. triggered_reason is the legacy first-choice read; trigger_reason (masfeat/types.go:288) is the real wire name.",
+      "note": "deprecated-pending-removal: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262). sdk_only lists the LEGACY spellings the parser reads first-for-compatibility before falling back to the real v9.13.0 wire names (now spec-declared), here triggered_reason (real wire: trigger_reason, masfeat/types.go:288). spec_only trigger_conditions/restore_reason are informational coverage gaps, not modeled (stated in PR #224). Legacy spelling burns down in the next major.",
       "sdk_only": [
-        "trigger_reason"
+        "triggered_reason"
       ],
-      "spec_only": []
-    },
-    "MCPCheckInputRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it. Also declares `tool` (epic #2905, platform sub-issue #2904) \u2014 the two-field (server, tool) identity contract; #2904 merged to axonflow-enterprise (c8df2006b) and first released in platform v9.10.0, so this drift just tracks the pinned OpenAPI spec (agent-api.yaml) catching up.",
-      "sdk_only": [
-        "content_type",
-        "tool"
-      ],
-      "spec_only": []
-    },
-    "MCPCheckInputResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `redacted`/`redacted_statement`/`redaction_evaluated`; the agent emits them on every evaluated check-input allow path (engine-fulfillable redact_pii obligations, ADR-056). Verified live against an enterprise agent.",
-      "sdk_only": [
-        "redacted",
-        "redacted_statement",
-        "redaction_evaluated"
-      ],
-      "spec_only": []
-    },
-    "MCPCheckOutputRequest": {
-      "note": "acknowledged-sdk-superset: tracked in epic #2905, platform sub-issue #2904 \u2014 SDK declares `tool`, mirroring MCPCheckInputRequest.tool for the two-field (server, tool) identity contract. Unlike the input-phase field, the platform's MCPCheckOutputRequest has no matching `tool` field on any released version yet (tracked by #2955) \u2014 sending it is forward-compatible and harmless but not yet consumed server-side.",
-      "sdk_only": [
-        "tool"
-      ],
-      "spec_only": []
+      "spec_only": [
+        "restore_reason",
+        "trigger_conditions"
+      ]
     },
     "MCPCheckOutputResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `redaction_evaluated` for response-phase obligation fail-closed parity with check-input (ADR-056); platform predates the field on check-output, so it defaults False.",
+      "note": "acknowledged-sdk-superset: the former `redaction_evaluated` entry resolved - the v9.13.0 spec declares it (#2865/#2866). SDK still declares decision-context fields `policy_matches`/`redacted_message` (Plugin Batch 1, v7.1.0 cycle) ahead of the spec; tracked in #1745.",
       "sdk_only": [
-        "redaction_evaluated"
-      ],
-      "spec_only": []
-    },
-    "MarkStepCompletedRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `metadata` on step-completed; platform reads it but spec doesn't yet declare it.",
-      "sdk_only": [
-        "metadata"
-      ],
-      "spec_only": []
-    },
-    "PlanResponse": {
-      "note": "spec-bug-pending: #1745 \u2014 orchestrator-api.yaml PlanResponse omits complexity/domain/parallel/status returned from every generate_plan call.",
-      "sdk_only": [
-        "complexity",
-        "domain",
-        "parallel",
-        "status"
-      ],
-      "spec_only": []
-    },
-    "PolicyEvaluationInfo": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `code_artifact` on the policy_info block; the platform's code-governance path emits it but the spec doesn't yet declare it.",
-      "sdk_only": [
-        "code_artifact"
+        "policy_matches",
+        "redacted_message"
       ],
       "spec_only": []
     },
@@ -384,7 +301,13 @@
       "sdk_only": [
         "active"
       ],
-      "spec_only": []
+      "spec_only": [
+        "organization_id",
+        "policy_type",
+        "tenant_id",
+        "updated_at",
+        "updated_by"
+      ]
     },
     "PolicyVersion": {
       "note": "deprecated-pending-removal: `change_description`, `new_values`, `previous_values` are each marked DEPRECATED + 'Removed in v7' on their Field() docstrings; the canonical wire fields are `change_summary` + `snapshot` (already present, match spec).",
@@ -396,74 +319,32 @@
       "spec_only": []
     },
     "RegistrySummary": {
-      "note": "acknowledged-sdk-superset: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262) - the parser reads the REAL server wire names (platform/orchestrator/masfeat/types.go at v9.13.0) ahead of this fiction-era spec pin, which still declares the legacy shape. Resolves when the pin advances to v9.13.0 (PR #214), where the legacy spellings the parser reads first-for-compatibility become the sdk_only set instead. Real fields org_id/assessments_due/kill_switches_triggered added by this batch; by_use_case/by_status are deprecated fiction (never served on 9.x), spec-declared only by this fiction-era pin.",
+      "note": "deprecated-pending-removal: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262). sdk_only lists the LEGACY spellings the parser reads first-for-compatibility before falling back to the real v9.13.0 wire names (now spec-declared), here high/medium/low_materiality_count (real wire: high/medium/low_materiality), plus the deprecated fiction fields by_use_case/by_status (never served on 9.x, no wire equivalent). Legacy spellings and fiction fields burn down in the coordinated next major.",
       "sdk_only": [
-        "assessments_due",
-        "high_materiality",
-        "kill_switches_triggered",
-        "low_materiality",
-        "medium_materiality",
-        "org_id"
+        "by_status",
+        "by_use_case",
+        "high_materiality_count",
+        "low_materiality_count",
+        "medium_materiality_count"
       ],
       "spec_only": []
     },
-    "ResumePlanResponse": {
-      "note": "spec-bug-pending: #1745 \u2014 orchestrator-api.yaml ResumePlanResponse omits 7 fields returned on every WCP step approval/resume.",
-      "sdk_only": [
-        "approved",
-        "message",
-        "next_step",
-        "next_step_name",
-        "step_result",
-        "total_steps",
-        "workflow_id"
-      ],
-      "spec_only": []
-    },
-    "UpdateStaticPolicyRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts `category` on update; platform applies it but spec doesn't yet declare it.",
-      "sdk_only": [
-        "category"
-      ],
-      "spec_only": []
-    },
-    "UsageBreakdown": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `period`/`period_end`/`period_start`; platform emits these on usage rollups but spec doesn't yet declare them.",
-      "sdk_only": [
-        "period",
-        "period_end",
-        "period_start"
-      ],
-      "spec_only": []
-    },
-    "UsageRecord": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `timestamp`; platform emits it but spec doesn't yet declare it.",
-      "sdk_only": [
-        "timestamp"
-      ],
-      "spec_only": []
-    },
-    "UsageSummary": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `period`; platform emits it but spec doesn't yet declare it.",
-      "sdk_only": [
-        "period"
-      ],
-      "spec_only": []
-    },
-    "WorkflowStepInfo": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `approved_by`/`completed_at`/`decision_reason` for per-step audit context; platform emits these but spec doesn't yet declare them.",
-      "sdk_only": [
-        "approved_by",
-        "completed_at",
-        "decision_reason"
-      ],
-      "spec_only": []
+    "UnifiedStepStatus": {
+      "note": "acknowledged-spec-superset: the v9.13.0 spec declares rejected_at/rejected_by/tokens_in/tokens_out on UnifiedStepStatus; the SDK does not yet model them - additive server-side surface, no break. Newly registered by the v9.13.0 pin.",
+      "sdk_only": [],
+      "spec_only": [
+        "rejected_at",
+        "rejected_by",
+        "tokens_in",
+        "tokens_out"
+      ]
     }
   },
   "registered_models": [
     "AISystemRegistry",
     "AuditLogEntry",
     "AuditSearchRequest",
+    "AuditSearchResponse",
     "AuditToolCallRequest",
     "AuditToolCallResponse",
     "Budget",
@@ -479,7 +360,11 @@
     "CreateStaticPolicyRequest",
     "CreateWorkflowRequest",
     "CreateWorkflowResponse",
+    "DecideRequest",
+    "DecideResponse",
+    "DecisionCallerIdentity",
     "DecisionExplanation",
+    "DecisionTarget",
     "DynamicPolicy",
     "DynamicPolicyInfo",
     "DynamicPolicyMatch",
@@ -488,6 +373,12 @@
     "ExfiltrationCheckInfo",
     "ExplainPolicy",
     "ExplainRule",
+    "HITLApprovalRequest",
+    "HITLReviewInput",
+    "ImpactReportInput",
+    "ImpactReportRequest",
+    "ImpactReportResponse",
+    "ImpactReportResult",
     "KillSwitch",
     "LLMProviderListResponse",
     "ListWorkflowsResponse",
@@ -500,12 +391,16 @@
     "MediaGovernanceConfig",
     "MediaGovernanceStatus",
     "ModelPricing",
+    "ObligationFulfillment",
     "PaginationMeta",
     "PendingApproval",
     "PendingApprovalsResponse",
     "PlanResponse",
     "PlanVersionEntry",
     "PlanVersionsResponse",
+    "PolicyConflict",
+    "PolicyConflictRef",
+    "PolicyConflictResponse",
     "PolicyEvaluationInfo",
     "PolicyEvaluationResult",
     "PolicyMatch",
@@ -519,12 +414,16 @@
     "ResumePlanResponse",
     "RetryContext",
     "RollbackPlanResponse",
+    "SimulatePoliciesRequest",
+    "SimulatePoliciesResponse",
+    "SimulationDailyUsage",
     "StaticPolicy",
     "StepGateRequest",
     "StepGateResponse",
     "TimelineEntry",
     "TokenUsage",
     "ToolContext",
+    "UnifiedStepStatus",
     "UpdatePlanRequest",
     "UpdatePlanResponse",
     "UpdateStaticPolicyRequest",
