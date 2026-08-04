@@ -179,6 +179,16 @@
   },
   "openapi_specs_sha": "0bd9256237ebbffb9c0101126da71f2c940a1695",
   "per_model_drift": {
+    "AISystemRegistry": {
+      "note": "acknowledged-sdk-superset: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262) - the parser reads the REAL server wire names (platform/orchestrator/masfeat/types.go at v9.13.0) ahead of this fiction-era spec pin, which still declares the legacy shape. Resolves when the pin advances to v9.13.0 (PR #214), where the legacy spellings the parser reads first-for-compatibility become the sdk_only set instead. owner_email/risk_rating_impact/risk_rating_complexity/risk_rating_reliance are the real wire names read as fallbacks behind the legacy business_owner/customer_impact/model_complexity/human_reliance spellings; technical_owner is deprecated fiction (never served on 9.x).",
+      "sdk_only": [
+        "owner_email",
+        "risk_rating_complexity",
+        "risk_rating_impact",
+        "risk_rating_reliance"
+      ],
+      "spec_only": []
+    },
     "AuditLogEntry": {
       "note": "spec-bug-pending: #1745 \u2014 agent-api.yaml AuditLogEntry omits metadata/model/policy_violations the agent emits on every audit-log read. Plus getaxonflow/axonflow-enterprise#3254 additive interim: policy_decision/policy_details/response_time_ms are the REAL 9.x wire fields (platform/orchestrator/audit_logger.go AuditEntry serves them at v9.6.1 and v9.13.0); this pre-v9 spec pin predates them, so they read as sdk_only until the pin moves to v9.13.0 (PR #214).",
       "sdk_only": [
@@ -307,6 +317,13 @@
       ],
       "spec_only": []
     },
+    "KillSwitch": {
+      "note": "acknowledged-sdk-superset: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262) - the parser reads the REAL server wire names (platform/orchestrator/masfeat/types.go at v9.13.0) ahead of this fiction-era spec pin, which still declares the legacy shape. Resolves when the pin advances to v9.13.0 (PR #214), where the legacy spellings the parser reads first-for-compatibility become the sdk_only set instead. triggered_reason is the legacy first-choice read; trigger_reason (masfeat/types.go:288) is the real wire name.",
+      "sdk_only": [
+        "trigger_reason"
+      ],
+      "spec_only": []
+    },
     "MCPCheckInputRequest": {
       "note": "acknowledged-sdk-superset: tracked in #2563/#2571 \u2014 SDK declares `content_type` (request-redaction detector selector, ADR-056); the agent consumes it on POST /api/v1/mcp/check-input but agent-api.yaml doesn't yet declare it. Also declares `tool` (epic #2905, platform sub-issue #2904) \u2014 the two-field (server, tool) identity contract; #2904 merged to axonflow-enterprise (c8df2006b) and first released in platform v9.10.0, so this drift just tracks the pinned OpenAPI spec (agent-api.yaml) catching up.",
       "sdk_only": [
@@ -378,6 +395,18 @@
       ],
       "spec_only": []
     },
+    "RegistrySummary": {
+      "note": "acknowledged-sdk-superset: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262) - the parser reads the REAL server wire names (platform/orchestrator/masfeat/types.go at v9.13.0) ahead of this fiction-era spec pin, which still declares the legacy shape. Resolves when the pin advances to v9.13.0 (PR #214), where the legacy spellings the parser reads first-for-compatibility become the sdk_only set instead. Real fields org_id/assessments_due/kill_switches_triggered added by this batch; by_use_case/by_status are deprecated fiction (never served on 9.x), spec-declared only by this fiction-era pin.",
+      "sdk_only": [
+        "assessments_due",
+        "high_materiality",
+        "kill_switches_triggered",
+        "low_materiality",
+        "medium_materiality",
+        "org_id"
+      ],
+      "spec_only": []
+    },
     "ResumePlanResponse": {
       "note": "spec-bug-pending: #1745 \u2014 orchestrator-api.yaml ResumePlanResponse omits 7 fields returned on every WCP step approval/resume.",
       "sdk_only": [
@@ -432,6 +461,7 @@
     }
   },
   "registered_models": [
+    "AISystemRegistry",
     "AuditLogEntry",
     "AuditSearchRequest",
     "AuditToolCallRequest",
@@ -458,6 +488,7 @@
     "ExfiltrationCheckInfo",
     "ExplainPolicy",
     "ExplainRule",
+    "KillSwitch",
     "LLMProviderListResponse",
     "ListWorkflowsResponse",
     "MCPCheckInputRequest",
@@ -483,6 +514,7 @@
     "PolicyVersion",
     "PricingInfo",
     "RateLimitInfo",
+    "RegistrySummary",
     "ResumeFromCheckpointResponse",
     "ResumePlanResponse",
     "RetryContext",

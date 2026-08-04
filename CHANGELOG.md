@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real wire fields `policy_decision`, `policy_details`, `response_time_ms` on
   the audit read model (`AuditLogEntry`), and `action` on audit search
   (`AuditSearchRequest`).
+- Real wire fields `org_id`, `assessments_due`, `kill_switches_triggered` on
+  `RegistrySummary` (#3254 pin-advance batch).
+- The wire-shape contract gate now binds the masfeat dataclass models
+  (`RegistrySummary`/`KillSwitch`/`AISystemRegistry`) by driving their real
+  parsers with a key-recording payload (#3262).
 
 ### Deprecated
 
@@ -23,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `policy_violations`/`metadata` (read model) and `request_type` (search
   request) - never served/read on the 9.x line (#3254). Removal rides the
   next major.
+- `RegistrySummary.by_use_case`/`by_status` and
+  `AISystemRegistry.technical_owner` - never served on the 9.x line (#3254
+  pin-advance batch). Removal rides the next major.
 
 ## [9.0.0] - 2026-07-18
 

@@ -47,6 +47,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_MODULE_PATH = REPO_ROOT / "tests" / "test_wire_shape.py"
 BASELINE_PATH = REPO_ROOT / "tests" / "fixtures" / "wire_shape_baseline.json"
 
+# Bind ``import axonflow`` to THIS repo's package, ahead of any installed
+# (or editable-installed-from-elsewhere) copy on sys.path. Without this,
+# ``python scripts/refresh_wire_shape_baseline.py`` puts scripts/ (not the
+# repo root) at sys.path[0], so a stale editable install pointing at a
+# DIFFERENT checkout silently wins and the regenerated baseline records
+# that other tree's models - observed in practice (#3254 batch 2): a
+# sibling checkout's pre-fix masfeat parser produced a wrong-but-plausible
+# drift entry with no error.
+sys.path.insert(0, str(REPO_ROOT))
+
 
 def _load_test_helpers():
     spec = importlib.util.spec_from_file_location("_ws", TEST_MODULE_PATH)
@@ -129,14 +139,14 @@ def main() -> int:
 
     registered: list[str] = []
     drift: dict[str, dict[str, Any]] = {}
-    for name, model in models.items():
+
+    def _record(name: str, sdk_fields: list[str]) -> None:
         if name not in merged:
-            continue
+            return
         registered.append(name)
-        sdk_fields = helpers._wire_fields(model)
         spec_fields = merged[name]
         if sdk_fields == spec_fields:
-            continue
+            return
         entry: dict[str, Any] = {
             "sdk_only": sorted(set(sdk_fields) - set(spec_fields)),
             "spec_only": sorted(set(spec_fields) - set(sdk_fields)),
@@ -144,6 +154,15 @@ def main() -> int:
         if name in existing_notes:
             entry["note"] = existing_notes[name]
         drift[name] = entry
+
+    for name, model in models.items():
+        _record(name, helpers._wire_fields(model))
+
+    # #3262: masfeat dataclass bindings (parser-consumed wire keys) join
+    # the baseline on the same terms as pydantic models, so a pin bump
+    # regen recomputes their drift instead of silently dropping it.
+    for name, consumed in helpers._masfeat_dataclass_bindings().items():
+        _record(name, consumed)
 
     cross_spec: dict[str, dict[str, list[str]]] = {
         name: {spec: list(fields) for spec, fields in sorted(decls.items())}
