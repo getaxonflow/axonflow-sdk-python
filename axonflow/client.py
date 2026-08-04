@@ -444,6 +444,11 @@ def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
         body["start_time"] = request.start_time.isoformat()
     if request.end_time:
         body["end_time"] = request.end_time.isoformat()
+    if request.action:
+        body["action"] = request.action
+    # Deprecated (#3254): the 9.x server does not read request_type as a
+    # search filter. Still sent when set (harmless, ignored) until the next
+    # major removes the field.
     if request.request_type:
         body["request_type"] = request.request_type
     if request.decision_id:

@@ -72,12 +72,38 @@ pytestmark = pytest.mark.wire_shape
 
 
 def _specs_dir() -> Path | None:
-    """Return the OpenAPI specs directory, or None if not set / missing."""
+    """Return the OpenAPI specs directory, or None when the env var is unset.
+
+    Unset AXONFLOW_OPENAPI_SPECS_DIR is the designed local-dev skip. A
+    variable that IS set - but empty, or pointing at a missing directory
+    or a non-directory - is a misconfiguration and fails loudly instead:
+    previously those cases produced 7 silent skips and exit 0, so a
+    broken CI checkout read as green. Set-but-empty fails (rather than
+    reading as unset) because a CI consumer wiring the var from an
+    expression that evaluates empty is exactly the broken-checkout class.
+    """
     env = os.environ.get("AXONFLOW_OPENAPI_SPECS_DIR")
-    if not env:
+    if env is None:
         return None
+    if not env.strip():
+        pytest.fail(
+            "AXONFLOW_OPENAPI_SPECS_DIR is set but empty. Refusing to treat "
+            "it as unset: an empty value usually means the CI expression "
+            "that was supposed to produce the specs path evaluated to "
+            "nothing, and a silent skip would make that read as a green "
+            "wire-shape gate. Fix the expression, or unset the variable to "
+            "skip locally."
+        )
     p = Path(env)
-    return p if p.is_dir() else None
+    if not p.is_dir():
+        pytest.fail(
+            f"AXONFLOW_OPENAPI_SPECS_DIR is set to {env!r} but that is not an "
+            "existing directory. Refusing to skip: with the variable set, a "
+            "silent skip would make a broken specs checkout read as a green "
+            "wire-shape gate. Fix the path, or unset the variable to skip "
+            "locally."
+        )
+    return p
 
 
 def _wire_fields(model: type[BaseModel]) -> list[str]:
@@ -230,8 +256,8 @@ def loaded_specs() -> tuple[dict[str, list[str]], dict[str, dict[str, list[str]]
     spec_dir = _specs_dir()
     if spec_dir is None:
         pytest.skip(
-            "AXONFLOW_OPENAPI_SPECS_DIR not set to an existing directory; "
-            "wire-shape contract tests skipped. The dedicated CI job clones "
+            "AXONFLOW_OPENAPI_SPECS_DIR not set; wire-shape contract tests "
+            "skipped. The dedicated CI job clones "
             "https://github.com/getaxonflow/axonflow and exports the specs "
             "dir before running this file."
         )
@@ -527,3 +553,71 @@ def test_unmapped_spec_schemas_are_tracked(
     print(f"\n{len(unmapped)} OpenAPI schema(s) have no matching Python SDK model:")
     for name in unmapped:
         print(f"  - {name}")
+
+
+# ---------------------------------------------------------------------------
+# _specs_dir misconfiguration guard (#3254 review follow-up)
+# ---------------------------------------------------------------------------
+# These do not use the loaded_specs fixture, so they run in the regular
+# suite too (the module's other tests skip there via the fixture).
+
+
+def test_specs_dir_unset_keeps_designed_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Env unset -> None, which the loaded_specs fixture turns into the
+    designed local-dev skip."""
+    monkeypatch.delenv("AXONFLOW_OPENAPI_SPECS_DIR", raising=False)
+    assert _specs_dir() is None
+
+
+def test_specs_dir_set_but_missing_fails_loudly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Env SET but pointing at a missing directory must FAIL, not skip.
+
+    Before this guard, that misconfiguration produced 7 silent skips and
+    exit 0 - a broken CI specs checkout read as a green gate.
+    """
+    missing = tmp_path / "no-such-specs-dir"
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", str(missing))
+    with pytest.raises(pytest.fail.Exception, match="AXONFLOW_OPENAPI_SPECS_DIR"):
+        _specs_dir()
+
+
+def test_specs_dir_set_but_empty_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Env SET but EMPTY must FAIL, not read as unset.
+
+    Choice (of fail-on-empty vs empty-as-unset): fail. A CI consumer
+    wiring the variable from an expression that evaluates empty is the
+    same broken-checkout class as a missing directory - treating it as
+    the designed local-dev skip would green-light a gate that checked
+    nothing. Whitespace-only counts as empty.
+    """
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", "")
+    with pytest.raises(pytest.fail.Exception, match="set but empty"):
+        _specs_dir()
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", "   ")
+    with pytest.raises(pytest.fail.Exception, match="set but empty"):
+        _specs_dir()
+
+
+def test_specs_dir_set_to_a_file_fails_loudly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Env SET but pointing at a FILE (not a directory) must FAIL.
+
+    Behaviorally covered by the is_dir() check; pinned here so a future
+    refactor to exists() cannot silently reopen the class.
+    """
+    a_file = tmp_path / "specs.yaml"
+    a_file.write_text("openapi: 3.0.0\n")
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", str(a_file))
+    with pytest.raises(pytest.fail.Exception, match="not an existing directory"):
+        _specs_dir()
+
+
+def test_specs_dir_set_and_present_resolves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Env set to an existing directory resolves to that path."""
+    monkeypatch.setenv("AXONFLOW_OPENAPI_SPECS_DIR", str(tmp_path))
+    assert _specs_dir() == tmp_path

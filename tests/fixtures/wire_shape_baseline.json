@@ -180,19 +180,23 @@
   "openapi_specs_sha": "0bd9256237ebbffb9c0101126da71f2c940a1695",
   "per_model_drift": {
     "AuditLogEntry": {
-      "note": "spec-bug-pending: #1745 \u2014 agent-api.yaml AuditLogEntry omits metadata/model/policy_violations the agent emits on every audit-log read.",
+      "note": "spec-bug-pending: #1745 \u2014 agent-api.yaml AuditLogEntry omits metadata/model/policy_violations the agent emits on every audit-log read. Plus getaxonflow/axonflow-enterprise#3254 additive interim: policy_decision/policy_details/response_time_ms are the REAL 9.x wire fields (platform/orchestrator/audit_logger.go AuditEntry serves them at v9.6.1 and v9.13.0); this pre-v9 spec pin predates them, so they read as sdk_only until the pin moves to v9.13.0 (PR #214).",
       "sdk_only": [
         "data_residency",
         "metadata",
         "model",
+        "policy_decision",
+        "policy_details",
         "policy_violations",
+        "response_time_ms",
         "transfer_basis"
       ],
       "spec_only": []
     },
     "AuditSearchRequest": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts decision_id/offset/override_id/policy_name as query params; agent-api.yaml AuditSearchRequest doesn't yet declare them.",
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK accepts decision_id/offset/override_id/policy_name as query params; agent-api.yaml AuditSearchRequest doesn't yet declare them. Plus getaxonflow/axonflow-enterprise#3254: `action` is the search filter the 9.x server actually reads (audit_read_handlers.go); this pre-v9 spec pin predates it, so it reads as sdk_only until the pin moves to v9.13.0 (PR #214).",
       "sdk_only": [
+        "action",
         "decision_id",
         "offset",
         "override_id",

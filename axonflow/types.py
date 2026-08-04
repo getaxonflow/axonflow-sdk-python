@@ -891,7 +891,11 @@ class AuditSearchRequest(BaseModel):
         client_id: Filter by client/application ID
         start_time: Start of time range to search
         end_time: End of time range to search
-        request_type: Filter by request type (e.g., "llm_chat", "policy_check")
+        action: Filters by action/request type with verdict normalization on
+            the server side.
+        request_type: Deprecated: the 9.x server does not read this filter; a
+            search filtered only by it returns unfiltered results. Use
+            ``action``. Scheduled for removal in the next major (#3254).
         limit: Maximum results to return (default: 100, max: 1000)
         offset: Pagination offset (default: 0)
     """
@@ -900,7 +904,21 @@ class AuditSearchRequest(BaseModel):
     client_id: str | None = Field(default=None, description="Filter by client ID")
     start_time: datetime | None = Field(default=None, description="Start of time range")
     end_time: datetime | None = Field(default=None, description="End of time range")
-    request_type: str | None = Field(default=None, description="Filter by request type")
+    action: str | None = Field(
+        default=None,
+        description=(
+            "Filters by action/request type with verdict normalization on the server side."
+        ),
+    )
+    request_type: str | None = Field(
+        default=None,
+        description=(
+            "Deprecated: the 9.x server does not read this filter; a search "
+            "filtered only by it returns unfiltered results. Use `action`. "
+            "Scheduled for removal in the next major (#3254). Still sent when "
+            "set (harmless, ignored)."
+        ),
+    )
     # ADR-043: explainability + audit cross-reference filters.
     decision_id: str | None = Field(default=None, description="Filter by decision ID")
     policy_name: str | None = Field(default=None, description="Filter by matched policy name")
@@ -957,16 +975,63 @@ class AuditLogEntry(BaseModel):
         client_id: Client/application that made the request
         tenant_id: Tenant identifier
         request_type: Type of request (e.g., "llm_chat", "sql", "mcp-query")
-        query_summary: Summary of the query/request
-        success: Whether the request succeeded
-        blocked: Whether the request was blocked by policy
-        risk_score: Calculated risk score (0.0-1.0)
+        policy_decision: Policy verdict for the request. Open string set, not
+            an enum: "allowed", "blocked", "redacted" observed in code and
+            "error" observed live; newer platforms may add values.
+        policy_details: Policy evaluation context (object with arbitrary
+            keys, e.g. tool_name, success, error_message).
+        response_time_ms: Server-measured response time in milliseconds.
+        query_summary: Deprecated: never populated on the 9.x line - the
+            server has never sent this field
+            (getaxonflow/axonflow-enterprise#3254); the wire carries
+            `query`/`query_hash`, not modeled in this interim. Read
+            `policy_decision` for the verdict ("blocked" replaces
+            `blocked=true`; "allowed" replaces `success=true`),
+            `policy_details` for violation context, and `response_time_ms`
+            for latency. Scheduled for removal in the next major.
+        success: Deprecated: never populated on the 9.x line - the server has
+            never sent this field (getaxonflow/axonflow-enterprise#3254).
+            Read `policy_decision` for the verdict ("blocked" replaces
+            `blocked=true`; "allowed" replaces `success=true`),
+            `policy_details` for violation context, and `response_time_ms`
+            for latency. Scheduled for removal in the next major.
+        blocked: Deprecated: never populated on the 9.x line - the server has
+            never sent this field (getaxonflow/axonflow-enterprise#3254).
+            Read `policy_decision` for the verdict ("blocked" replaces
+            `blocked=true`; "allowed" replaces `success=true`),
+            `policy_details` for violation context, and `response_time_ms`
+            for latency. Scheduled for removal in the next major.
+        risk_score: Deprecated: never populated on the 9.x line - the server
+            has never sent this field
+            (getaxonflow/axonflow-enterprise#3254); no wire equivalent. Read
+            `policy_decision` for the verdict ("blocked" replaces
+            `blocked=true`; "allowed" replaces `success=true`),
+            `policy_details` for violation context, and `response_time_ms`
+            for latency. Scheduled for removal in the next major.
         provider: LLM provider used (if applicable)
         model: Model used (if applicable)
         tokens_used: Total tokens consumed
-        latency_ms: Request latency in milliseconds
-        policy_violations: List of violated policy IDs (if any)
-        metadata: Additional context
+        latency_ms: Deprecated: never populated on the 9.x line - the server
+            has never sent this field (getaxonflow/axonflow-enterprise#3254).
+            Read `policy_decision` for the verdict ("blocked" replaces
+            `blocked=true`; "allowed" replaces `success=true`),
+            `policy_details` for violation context, and `response_time_ms`
+            for latency. Scheduled for removal in the next major.
+        policy_violations: Deprecated: never populated on the 9.x line - the
+            server has never sent this field
+            (getaxonflow/axonflow-enterprise#3254). Read `policy_decision`
+            for the verdict ("blocked" replaces `blocked=true`; "allowed"
+            replaces `success=true`), `policy_details` for violation context,
+            and `response_time_ms` for latency. Scheduled for removal in the
+            next major.
+        metadata: Deprecated: never populated on the 9.x line - the server
+            has never sent this field
+            (getaxonflow/axonflow-enterprise#3254); the wire carries
+            `policy_details`/`security_metrics` instead. Read
+            `policy_decision` for the verdict ("blocked" replaces
+            `blocked=true`; "allowed" replaces `success=true`),
+            `policy_details` for violation context, and `response_time_ms`
+            for latency. Scheduled for removal in the next major.
     """
 
     id: str = Field(..., description="Unique audit log ID")
@@ -976,16 +1041,95 @@ class AuditLogEntry(BaseModel):
     client_id: str = Field(default="", description="Client ID")
     tenant_id: str = Field(default="", description="Tenant ID")
     request_type: str = Field(default="", description="Request type")
-    query_summary: str = Field(default="", description="Query summary")
-    success: bool = Field(default=True, description="Request succeeded")
-    blocked: bool = Field(default=False, description="Request was blocked")
-    risk_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Risk score")
+    policy_decision: str = Field(
+        default="",
+        description=(
+            "Policy verdict. Open string set, not an enum: 'allowed', "
+            "'blocked', 'redacted' observed in code and 'error' observed "
+            "live; newer platforms may add values."
+        ),
+    )
+    policy_details: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Policy evaluation context (arbitrary keys)",
+    )
+    response_time_ms: int = Field(
+        default=0, ge=0, description="Server-measured response time in ms"
+    )
+    query_summary: str = Field(
+        default="",
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); the wire "
+            "carries query/query_hash. Removal rides the next major."
+        ),
+    )
+    success: bool = Field(
+        default=True,
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); read "
+            "policy_decision ('allowed' replaces success=true). Removal "
+            "rides the next major."
+        ),
+    )
+    blocked: bool = Field(
+        default=False,
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); read "
+            "policy_decision ('blocked' replaces blocked=true). Removal "
+            "rides the next major."
+        ),
+    )
+    risk_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); no wire "
+            "equivalent. Removal rides the next major."
+        ),
+    )
     provider: str = Field(default="", description="LLM provider")
     model: str = Field(default="", description="Model used")
     tokens_used: int = Field(default=0, ge=0, description="Tokens consumed")
-    latency_ms: int = Field(default=0, ge=0, description="Latency in ms")
-    policy_violations: list[str] = Field(default_factory=list, description="Violated policies")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    latency_ms: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); read "
+            "response_time_ms. Removal rides the next major."
+        ),
+    )
+    policy_violations: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); read "
+            "policy_details for violation context. Removal rides the next "
+            "major."
+        ),
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Deprecated: never populated on the 9.x line (#3254); the wire "
+            "carries policy_details/security_metrics instead. Removal rides "
+            "the next major."
+        ),
+    )
+
+    @field_validator("policy_details", "metadata", mode="before")
+    @classmethod
+    def _coerce_none_to_dict(cls, v: object) -> object:
+        # The orchestrator marshals a nil Go map as JSON null (observed
+        # live on real /api/v1/audit/search rows, #3254): null-tolerant,
+        # not merely absence-tolerant.
+        return v if v is not None else {}
+
+    @field_validator("policy_violations", mode="before")
+    @classmethod
+    def _coerce_none_to_list(cls, v: object) -> object:
+        # Same class as above for a nil Go slice, defensively.
+        return v if v is not None else []
+
     data_residency: str | None = Field(
         default=None, description="ISO 3166-1 alpha-2 data residency code"
     )

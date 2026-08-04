@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Real wire fields `policy_decision`, `policy_details`, `response_time_ms` on
+  the audit read model (`AuditLogEntry`), and `action` on audit search
+  (`AuditSearchRequest`).
+
+### Deprecated
+
+- `query_summary`/`success`/`blocked`/`risk_score`/`latency_ms`/
+  `policy_violations`/`metadata` (read model) and `request_type` (search
+  request) - never served/read on the 9.x line (#3254). Removal rides the
+  next major.
+
 ## [9.0.0] - 2026-07-18
 
 ### Changed (BREAKING)
