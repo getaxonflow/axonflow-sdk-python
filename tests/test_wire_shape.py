@@ -446,9 +446,14 @@ def test_baseline_has_not_grown_stale(
     sdk_models: dict[str, type[BaseModel]],
     baseline: dict[str, Any],
 ) -> None:
-    """Informational: when a baseline entry's drift has been partially or
-    fully resolved, print that fact so the baseline can be shrunk. Does
-    not fail — baselines are always allowed to be larger than needed.
+    """FAIL when a baseline entry allows drift that no longer exists.
+
+    A phantom allowance (a listed sdk_only/spec_only field that is no
+    longer drifting, or an entry whose model/schema is gone) is a hole
+    the exact width of a future regression: the field could re-drift
+    silently under the dead allowance. The Go SDK's equivalent check
+    hard-fails; print-only here was a cross-SDK asymmetry (#3254 batch
+    R3). Fix the baseline entry - do not soften this check.
     """
     expected_drift = baseline.get("per_model_drift", {})
     stale_entries: list[tuple[str, list[str], list[str]]] = []
@@ -472,13 +477,25 @@ def test_baseline_has_not_grown_stale(
             stale_entries.append((name, stale_sdk, stale_spec))
 
     if stale_entries:
-        print("\nBaseline entries that no longer match observed drift (safe to shrink):")
+        lines = [
+            "",
+            "Baseline entries allow drift that no longer exists (stale allowances):",
+            "",
+        ]
         for name, stale_sdk, stale_spec in stale_entries:
-            print(f"  {name}:")
+            lines.append(f"  {name}:")
             if stale_sdk:
-                print(f"    sdk_only entries no longer drifting: {stale_sdk}")
+                lines.append(f"    sdk_only entries no longer drifting: {stale_sdk}")
             if stale_spec:
-                print(f"    spec_only entries no longer drifting: {stale_spec}")
+                lines.append(f"    spec_only entries no longer drifting: {stale_spec}")
+        lines.append("")
+        lines.append(
+            "Fix: remove the burned-down fields (or the whole entry) from "
+            "tests/fixtures/wire_shape_baseline.json - a dead allowance "
+            "would let the same field re-drift silently later. Regenerate "
+            "via scripts/refresh_wire_shape_baseline.py to shrink exactly."
+        )
+        pytest.fail("\n".join(lines))
 
 
 def test_registered_models_still_map(
@@ -655,14 +672,20 @@ def test_specs_dir_set_and_present_resolves(
 class _WireKeyRecorder(dict):
     """Payload dict recording every wire key a parser ATTEMPTS to read.
 
-    ``get`` and ``[]`` record; ``in`` deliberately does NOT - presence
-    probes (e.g. kill_switch_from_dict unwrapping a ``{"kill_switch":
-    ...}`` envelope) are response-shape dispatch, not field reads.
+    ``get`` and ``[]`` record into ``consumed``; ``in`` records into the
+    separate ``probed`` set. A key that is probed but never read is the
+    ghost-read evasion shape - ``data["k"] if "k" in data else None``
+    leaves no ``consumed`` trace when the key is absent from the seed,
+    which is exactly where a fiction key sits. The binding extractor
+    FAILS on such keys unless they are declared envelope-dispatch keys
+    (response-shape unwrapping, not field reads - the
+    ``kill_switch_from_dict`` envelope at axonflow/masfeat.py).
     """
 
     def __init__(self, seed: dict[str, Any]) -> None:
         super().__init__(seed)
         self.consumed: set[str] = set()
+        self.probed: set[str] = set()
 
     def get(self, key: Any, default: Any = None) -> Any:
         self.consumed.add(key)
@@ -671,6 +694,44 @@ class _WireKeyRecorder(dict):
     def __getitem__(self, key: Any) -> Any:
         self.consumed.add(key)
         return super().__getitem__(key)
+
+    def __contains__(self, key: Any) -> bool:
+        self.probed.add(key)
+        return super().__contains__(key)
+
+
+# Envelope-dispatch keys: presence-probed to unwrap a nested response
+# shape, legitimately never read as flat fields. Add here only with the
+# probing parser named.
+_ENVELOPE_DISPATCH_KEYS: dict[str, set[str]] = {
+    # kill_switch_from_dict: trigger/restore responses arrive as
+    # {"kill_switch": {...}, "message": ...} and are unwrapped.
+    "KillSwitch": {"kill_switch"},
+}
+
+
+def _consumed_keys(
+    name: str,
+    parser: Any,
+    seed: dict[str, Any],
+) -> set[str]:
+    """Drive ``parser`` over a recording copy of ``seed`` and return the
+    consumed wire keys, failing on probed-but-never-read keys (the
+    ghost-read evasion) unless exempted as envelope dispatch."""
+    recorder = _WireKeyRecorder(seed)
+    parser(recorder)
+    ghost = recorder.probed - recorder.consumed - _ENVELOPE_DISPATCH_KEYS.get(name, set())
+    if ghost:
+        pytest.fail(
+            f"{name}: parser presence-probed key(s) it never read: "
+            f"{sorted(ghost)}. A probe-guarded read "
+            "(`data[k] if k in data else ...`) of an absent key leaves no "
+            "consumed trace, so a fiction key could hide from the gate. "
+            "Either read the key through get/[] so it is recorded, or - if "
+            "it is genuinely response-shape envelope dispatch - add it to "
+            "_ENVELOPE_DISPATCH_KEYS with the probing parser named."
+        )
+    return recorder.consumed
 
 
 _SEED_REGISTRY_SUMMARY: dict[str, Any] = {
@@ -746,9 +807,7 @@ def _masfeat_dataclass_bindings() -> dict[str, list[str]]:
         ("KillSwitch", masfeat.kill_switch_from_dict, _SEED_KILL_SWITCH),
         ("AISystemRegistry", masfeat.ai_system_registry_from_dict, _SEED_AI_SYSTEM_REGISTRY),
     ):
-        recorder = _WireKeyRecorder(seed)
-        parser(recorder)
-        bindings[name] = sorted(recorder.consumed)
+        bindings[name] = sorted(_consumed_keys(name, parser, seed))
     return bindings
 
 
@@ -853,13 +912,52 @@ def test_masfeat_recorder_negative_control() -> None:
     assert sorted(set(schema_fields) - set(recorder.consumed)) == []
 
 
-def test_masfeat_recorder_does_not_record_presence_probes() -> None:
-    """`in` probes are response-shape dispatch (the kill_switch
-    envelope), not field reads - pinned so a refactor cannot start
-    flagging the envelope key as fiction."""
+def test_masfeat_recorder_separates_probes_from_reads() -> None:
+    """`in` probes land in ``probed``, not ``consumed`` - so envelope
+    dispatch is not misreported as a field read, while the extractor can
+    still see (and fail on) probed-but-never-read keys."""
     recorder = _WireKeyRecorder({"kill_switch": {}})
     assert "kill_switch" in recorder
     assert recorder.consumed == set()
+    assert recorder.probed == {"kill_switch"}
+
+
+def test_masfeat_extractor_fails_on_ghost_probe_guarded_read() -> None:
+    """Ghost-read evasion MUST go red: `data[k] if k in data else None`
+    on a key absent from the seed leaves no consumed trace - exactly
+    where a fiction key sits. R3 proved the previous recorder stayed
+    green on this shape at both pins.
+    """
+
+    def ghost_parser(data: dict[str, Any]) -> Any:
+        # The if-in shape IS the evasion under test (hence the suppression).
+        return data["ghost_fiction_field"] if "ghost_fiction_field" in data else None  # noqa: SIM401
+
+    with pytest.raises(pytest.fail.Exception, match="ghost_fiction_field"):
+        _consumed_keys("GhostModel", ghost_parser, {"real_a": 1})
+
+
+def test_masfeat_extractor_allows_declared_envelope_dispatch() -> None:
+    """The exempted envelope key stays green: the REAL kill_switch
+    parser probes 'kill_switch' on a flat payload and never reads it,
+    and the extractor must not flag it (it is declared in
+    _ENVELOPE_DISPATCH_KEYS)."""
+    from axonflow import masfeat  # noqa: PLC0415
+
+    consumed = _consumed_keys("KillSwitch", masfeat.kill_switch_from_dict, _SEED_KILL_SWITCH)
+    assert "kill_switch" not in consumed
+    assert "trigger_reason" in consumed
+
+
+def test_masfeat_extractor_probe_followed_by_read_is_clean() -> None:
+    """A probe that IS followed by a read (key present) is a legitimate
+    guarded read: recorded as consumed, nothing flagged."""
+
+    def guarded_parser(data: dict[str, Any]) -> Any:
+        return data["real_a"] if "real_a" in data else None  # noqa: SIM401 - guarded-read shape under test
+
+    consumed = _consumed_keys("GuardedModel", guarded_parser, {"real_a": 1})
+    assert consumed == {"real_a"}
 
 
 def test_masfeat_seeds_do_not_contain_legacy_spellings() -> None:
