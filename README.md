@@ -9,13 +9,13 @@ Enterprise AI Governance in 3 Lines of Code.
 
 > **Upgrade strongly recommended.** AxonFlow ships substantial monthly security and quality hardening; staying on the latest major is the security-supported release line. [Latest release](https://github.com/getaxonflow/axonflow-sdk-python/releases/latest) · [Security advisories](https://github.com/getaxonflow/axonflow-sdk-python/security/advisories)
 
-> **Evaluating AxonFlow for a real deployment?**
+> **Taking a sponsored workflow to production?**
 >
 > Choose the path that fits:
 > - **Self-serve:** free 90-day [Evaluation License](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval)
-> - **Hands-on:** [Design Partner Program](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python) — Enterprise access for the scoped engagement, founder-led architecture and rollout support, and preferential pricing after successful rollout
+> - **Paid production program:** [Design Partner or Confidential Pilot](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python)  -  one scoped workflow over 60 or 75 days, founder-led rollout support, upfront conversion pricing, and a fixed decision date; public track from $2,000 or confidential track from $4,000
 >
-> Priority support, architecture review, incident-readiness review, and roadmap input are included for selected partners. We reply within 48 hours.
+> The paid program requires a dated forcing event, written controls, an executive sponsor, and a technical owner. Prices are subject to eligibility and a signed agreement.
 
 > **Questions or feedback?**
 >
@@ -66,7 +66,7 @@ Concurrent executions applies to MAP and WCP executions per tenant. Pending exec
 
 > **Note:** Evidence export and policy simulation are licensed AxonFlow platform capabilities available alongside the SDK on your deployed platform — not language-specific SDK helpers. Access them via the platform API or customer portal. The SDK row is included to show what your licensed deployment unlocks at each tier.
 
-[Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Apply for Design Partner](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
+[Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Run a paid production program](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
 
 ## Try Without Installing
 
