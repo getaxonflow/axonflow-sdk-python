@@ -44,6 +44,20 @@ jobs:
       - name: Run falsey-clobber check (no `data.get(...) or X` against pre-existing baseline)
         run: python3 scripts/lint_no_falsey_clobber.py axonflow/ --baseline .lint_baselines/falsey_clobber.json
 
+      # ADR-065: axonflow/authzen_types_gen.py is generated from the vendored
+      # copy of the platform's canonical AuthZEN surface artifact. It is
+      # committed so a `pip install axonflow` receives working types without
+      # running a generator — which is only trustworthy if something proves the
+      # committed bytes are the output of the committed input. This is that
+      # proof, and it fails on BOTH edits: an artifact bumped without
+      # regenerating, and a hand edit of the generated module.
+      #
+      # tests/test_authzen_generator.py asserts the same property in the test
+      # job and asserts that THIS command agrees with it, so the two gates
+      # cannot report different answers.
+      - name: Check the AuthZEN types are regenerated from the surface artifact
+        run: python3 scripts/gen_authzen_types.py --check
+
   test:
     runs-on: ubuntu-latest
     strategy:

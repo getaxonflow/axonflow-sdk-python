@@ -26,6 +26,22 @@ Example:
 """
 
 from axonflow._version import __version__
+from axonflow.authzen import (
+    AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED,
+    AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE,
+    AUTHZEN_UNKNOWN_MALFORMED_VALUE,
+    AUTHZEN_UNKNOWN_NOT_SUPPLIED,
+    AUTHZEN_UNKNOWN_REQUIRED_ABSENT,
+    AUTHZEN_UNKNOWN_RESOLUTION_FAILED,
+    AUTHZEN_UNKNOWN_SCHEMA_MISMATCH,
+    AUTHZEN_UNKNOWN_STALE,
+    AuthZENAttribute,
+    AuthZENDecision,
+    AuthZENProtocolError,
+    AuthZENRefusal,
+)
+from axonflow.authzen_types_gen import *  # noqa: F403 - see the __all__ note at the foot of this file
+from axonflow.authzen_types_gen import __all__ as _AUTHZEN_GENERATED_NAMES
 from axonflow.client import (
     AxonFlow,
     HealthResponse,
@@ -453,6 +469,20 @@ __all__ = [
     "CodeGovernanceMetrics",
     "ExportOptions",
     "ExportResponse",
+    # AuthZEN-native authorization (ADR-065) — the HAND-WRITTEN half. The wire
+    # types and enum constants are generated and appended to __all__ below.
+    "AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED",
+    "AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE",
+    "AUTHZEN_UNKNOWN_MALFORMED_VALUE",
+    "AUTHZEN_UNKNOWN_NOT_SUPPLIED",
+    "AUTHZEN_UNKNOWN_REQUIRED_ABSENT",
+    "AUTHZEN_UNKNOWN_RESOLUTION_FAILED",
+    "AUTHZEN_UNKNOWN_SCHEMA_MISMATCH",
+    "AUTHZEN_UNKNOWN_STALE",
+    "AuthZENAttribute",
+    "AuthZENDecision",
+    "AuthZENProtocolError",
+    "AuthZENRefusal",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",
@@ -558,3 +588,12 @@ __all__ = [
     "UnifiedListExecutionsRequest",
     "UnifiedListExecutionsResponse",
 ]
+
+# The AuthZEN wire types, enum constants and profile identifiers are GENERATED
+# from the platform's canonical surface artifact (scripts/gen_authzen_types.py),
+# and are appended here rather than transcribed into the literal above. A
+# hand-maintained list would be a second transcription of the artifact — the
+# exact drift the generator exists to prevent — and it would silently leave a
+# newly-added error code unreachable from `axonflow` while four other SDKs had
+# it. Regenerating the types is all it takes for the public surface to follow.
+__all__ += list(_AUTHZEN_GENERATED_NAMES)
