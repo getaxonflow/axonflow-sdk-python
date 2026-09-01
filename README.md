@@ -547,6 +547,21 @@ they're distinguishable from production heartbeat).
 
 `AXONFLOW_TELEMETRY=off` disables the anonymous SDK heartbeat (version, OS, architecture). On **self-hosted** and **in-VPC** deployments, that heartbeat is the only data the SDK sends to AxonFlow, so setting `=off` means we receive nothing. On **Community SaaS** (`try.getaxonflow.com`) the hosted service also processes operational data — registrations, audit logs, policy enforcement records, workflow state, plan data, and request-header metadata aggregated for usage analytics — as part of running the platform; that operational data flow is governed by the [Privacy Policy](https://getaxonflow.com/privacy/), not by `AXONFLOW_TELEMETRY`.
 
+### Platform licence tier (`license_tier`)
+
+Each heartbeat also reports the licence tier of the AxonFlow platform the SDK is configured to talk to — for example `community`, `evaluation`, `Enterprise`, or the transient `starting` while a platform is still booting. This lets us tell an enterprise-licensed deployment apart from an unlicensed community one in aggregate adoption figures, which the heartbeat previously could not distinguish.
+
+What is and is not collected:
+
+- **Collected:** the coarse tier string only.
+- **Not collected:** your licence key, its expiry, its seat or node count, your organisation's name, and any other licence detail. The SDK never reads your licence key.
+
+The value is read from the `tier` field of the platform's own `/health` response — the same response the heartbeat already fetches to report the platform version, and an endpoint that returns this field to any caller without authentication. **No additional network request is made, and the SDK gains no access to anything `/health` does not already return.**
+
+The field is **omitted entirely** whenever the tier could not be determined — the platform is unreachable, returns an error, returns an unparseable body, or returns no `tier` field. It is never defaulted to a guessed value, so an absent field means "not known", never "community".
+
+`AXONFLOW_TELEMETRY=off` suppresses this field along with the rest of the heartbeat.
+
 `DO_NOT_TRACK` is **not** honored as an opt-out for AxonFlow telemetry. It is commonly inherited from host tools and developer environments, which makes it an unreliable expression of user intent.
 
 See [Telemetry Documentation](https://docs.getaxonflow.com/docs/telemetry) for full details.

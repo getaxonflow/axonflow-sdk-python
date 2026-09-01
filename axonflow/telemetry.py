@@ -22,6 +22,7 @@ import platform
 import threading
 import time
 import uuid
+from typing import NamedTuple
 from urllib.parse import urlparse
 
 import httpx
@@ -87,24 +88,63 @@ def _is_telemetry_enabled() -> bool:
     return os.environ.get("AXONFLOW_TELEMETRY", "").strip().lower() != "off"
 
 
-def _detect_platform_version(endpoint: str, timeout: float = 2.0) -> str | None:
-    """Detect platform version by calling the agent's /health endpoint.
+class PlatformHealthProbe(NamedTuple):
+    """What a single ``/health`` fetch established.
 
-    Returns the version string or None on any failure. The caller passes a
-    timeout derived from the shared telemetry deadline so the health probe
-    and the checkpoint POST don't stack into a larger combined budget — see
-    issue #1692.
+    Each field is INDEPENDENT: a response carrying one but not the other
+    yields a partially-populated result rather than discarding both.
+    ``None`` means "not learned" and is omitted from the wire — it never
+    degrades to a default. See ``_build_payload`` for why that distinction
+    is load-bearing.
+    """
+
+    platform_version: str | None
+    license_tier: str | None
+
+
+_EMPTY_HEALTH_PROBE = PlatformHealthProbe(platform_version=None, license_tier=None)
+
+
+def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealthProbe:
+    """Probe the agent's ``/health`` endpoint ONCE for every telemetry dimension.
+
+    Returns both fields ``None`` on any failure — unreachable endpoint,
+    non-2xx, unparseable body — so telemetry degrades to omitting the fields
+    and never fails the ping or raises into the caller.
+
+    This is the SDK's only ``/health`` fetch on the telemetry path; the
+    licence tier rides along on the response already being fetched for the
+    version. Adding a second request here would double the telemetry path's
+    blocking budget and its failure surface — do not.
+
+    The caller passes a timeout derived from the shared telemetry deadline so
+    the health probe and the checkpoint POST don't stack into a larger
+    combined budget — see issue #1692.
     """
     try:
         resp = httpx.get(f"{endpoint}/health", timeout=timeout)
-        if resp.status_code == _HTTP_OK:
-            body = resp.json()
-            version = body.get("version")
-            if isinstance(version, str) and version:
-                return version
+        if resp.status_code != _HTTP_OK:
+            return _EMPTY_HEALTH_PROBE
+        body = resp.json()
+        if not isinstance(body, dict):
+            return _EMPTY_HEALTH_PROBE
+
+        # Each field is promoted independently and only when it is a
+        # non-empty string. An absent key, a non-string value and an
+        # explicit "" are all "not learned", leaving None rather than
+        # putting a meaningless value on the wire.
+        version = body.get("version")
+        tier = body.get("tier")
+        return PlatformHealthProbe(
+            platform_version=version if isinstance(version, str) and version else None,
+            # Verbatim, including the transient "starting" the agent returns
+            # before its licence is validated. "starting" is a real signal
+            # the receiver buckets deliberately, not an error to filter
+            # client-side.
+            license_tier=tier if isinstance(tier, str) and tier else None,
+        )
     except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError, AttributeError):
-        pass
-    return None
+        return _EMPTY_HEALTH_PROBE
 
 
 # Loopback and any-interface addresses. "0.0.0.0" is intentionally included
@@ -223,6 +263,7 @@ def _build_payload(
     platform_version: str | None = None,
     endpoint_type: str = "unknown",
     deployment_mode: str = "unknown",
+    license_tier: str | None = None,
 ) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping.
 
@@ -242,6 +283,38 @@ def _build_payload(
     JSON-encoding) and the server defaults to ``"heartbeat"``. The
     wire-allowlist is enforced server-side — see checkpoint-service
     ``IsValidIncomingStream``.
+
+    ``license_tier`` is the licence tier the connected platform reported on
+    its own ``/health`` response — ``"community"``, ``"evaluation"``,
+    ``"Enterprise"``, the csaas ``"Plus"`` alias for EnterprisePlus, or the
+    transient ``"starting"``. Coarse adoption signal only: no licence key,
+    no expiry, no seat count, no customer name. Issue #3619.
+
+    THREE SIMILARLY-NAMED CONCEPTS LIVE NEARBY. Do not merge them:
+
+    1. ``deployment_mode`` — SDK-derived TOPOLOGY:
+       ``self_hosted | community_saas | unknown``, classified from the
+       endpoint URL. Says WHERE the platform runs.
+    2. The platform's own ``DEPLOYMENT_MODE`` env var — a server-side
+       setting deciding which schema/tables the binary uses. Never read by
+       this SDK and never sent on this field.
+    3. ``license_tier`` — the platform's EDITION/entitlement. Says WHAT the
+       platform is licensed for.
+
+    A community-mode binary can run on any topology and vice versa, so
+    neither field is derivable from the other.
+
+    The tier is sent verbatim. Casing and alias folding is the receiver's
+    job (checkpoint-service ``NormalizeLicenseTier``) and is deliberately
+    NOT duplicated here — a client that folded locally would silently mask a
+    tier this SDK build predates.
+
+    ``None`` OMITS the key entirely, which is what "not learned" means on
+    this wire. Absent must never become a known value: emitting
+    ``"community"`` for a platform we could not reach would be a false claim
+    about a customer's deployment. Note this differs from
+    ``platform_version``, which has always been sent as an explicit ``null``
+    — that is its long-standing wire shape and is left unchanged.
     """
     payload: dict[str, object] = {
         "telemetry_type": "sdk",
@@ -259,6 +332,11 @@ def _build_payload(
     }
     if mode == "sandbox":
         payload["stream"] = "sandbox"
+    # Key inserted ONLY when the tier was learned. Setting it to None would
+    # serialize as JSON null, which is a claim ("the tier is nothing")
+    # rather than an omission ("we do not know the tier").
+    if license_tier is not None:
+        payload["license_tier"] = license_tier
     return payload
 
 
@@ -287,12 +365,23 @@ def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) ->
     try:
         # Health probe uses remaining budget, capped so the POST still has time.
         health_budget = min(1.0, max(0.0, deadline - time.monotonic()))
-        platform_version = None
+        # One /health fetch supplies both platform_version and license_tier.
+        # Re-read on every heartbeat rather than cached for the process
+        # lifetime: a licence can be applied to, or expire on, a running
+        # platform, and a cached tier would keep reporting the pre-change
+        # edition for as long as the client lives.
+        probe = _EMPTY_HEALTH_PROBE
         if endpoint and health_budget > _MIN_BUDGET_SECONDS:
-            platform_version = _detect_platform_version(endpoint, timeout=health_budget)
+            probe = _probe_platform_health(endpoint, timeout=health_budget)
         endpoint_type = _classify_endpoint(endpoint)
         deployment_mode = _classify_deployment_mode(endpoint)
-        payload = _build_payload(mode, platform_version, endpoint_type, deployment_mode)
+        payload = _build_payload(
+            mode,
+            probe.platform_version,
+            endpoint_type,
+            deployment_mode,
+            probe.license_tier,
+        )
 
         # POST uses all remaining budget.
         post_budget = max(0.0, deadline - time.monotonic())
