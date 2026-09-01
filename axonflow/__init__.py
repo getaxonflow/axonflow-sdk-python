@@ -27,6 +27,8 @@ Example:
 
 from axonflow._version import __version__
 from axonflow.authzen import (
+    AUTHZEN_PATH,
+    AUTHZEN_PROFILE_HEADER,
     AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED,
     AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE,
     AUTHZEN_UNKNOWN_MALFORMED_VALUE,
@@ -39,6 +41,8 @@ from axonflow.authzen import (
     AuthZENDecision,
     AuthZENProtocolError,
     AuthZENRefusal,
+    build_envelope,
+    to_wire,
 )
 from axonflow.authzen_types_gen import *  # noqa: F403 - see the __all__ note at the foot of this file
 from axonflow.authzen_types_gen import __all__ as _AUTHZEN_GENERATED_NAMES
@@ -471,6 +475,8 @@ __all__ = [
     "ExportResponse",
     # AuthZEN-native authorization (ADR-065) — the HAND-WRITTEN half. The wire
     # types and enum constants are generated and appended to __all__ below.
+    "AUTHZEN_PATH",
+    "AUTHZEN_PROFILE_HEADER",
     "AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED",
     "AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE",
     "AUTHZEN_UNKNOWN_MALFORMED_VALUE",
@@ -483,6 +489,10 @@ __all__ = [
     "AuthZENDecision",
     "AuthZENProtocolError",
     "AuthZENRefusal",
+    "build_envelope",
+    "to_wire",
+    "build_envelope",
+    "to_wire",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",

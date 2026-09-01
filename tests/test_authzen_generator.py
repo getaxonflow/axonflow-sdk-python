@@ -384,11 +384,59 @@ class TestTheEmitterRefusesAnUnsupportedArtifact:
             gen.emit(dataclasses.replace(surface, enums=()))
 
 
-class TestTheVendoredArtifactMatchesThePlatform:
-    def test_the_digest_and_profile_are_carried_into_the_types(self, surface: gen.Surface) -> None:
-        """The three identifiers that make drift detectable at all.
+class TestTheVendoredArtifactIsThePinnedOne:
+    """R3 round 1 renamed this class.
 
-        A vendored copy with no provenance is a fork nobody has noticed yet.
+    It used to be called ``TestTheVendoredArtifactMatchesThePlatform`` while
+    asserting only that three strings INSIDE the artifact were copied into the
+    emitted module - a property that survives any edit to the artifact, because
+    those strings move with it. A reviewer asking "is the vendored copy
+    verified?" found the old name and concluded yes.
+
+    The fidelity check is ``verify_vendored_digest``: a sha256 of the FILE,
+    recorded outside it, verified byte-for-byte against the platform copy and
+    the Go SDK's copy when it was vendored.
+    """
+
+    def test_the_vendored_file_matches_the_pinned_digest(self) -> None:
+        gen.verify_vendored_digest(gen.SURFACE_PATH.read_bytes())
+
+    def test_an_edited_artifact_is_refused_even_if_everything_regenerates(self) -> None:
+        """The guard test.
+
+        Without the digest the regeneration gate is a closed loop: edit the
+        artifact, regenerate, and both the CI check and the byte-comparison
+        test go green over a contract the platform never published.
+        """
+        doc = json.loads(gen.SURFACE_PATH.read_text(encoding="utf-8"))
+        subject = next(t for t in doc["types"] if t["name"] == "authzen_subject")
+        next(f for f in subject["fields"] if f["name"] == "id")["required"] = False
+        edited = json.dumps(doc).encode()
+
+        # The edited artifact still PARSES and still GENERATES cleanly - which
+        # is exactly why the other gates cannot see it.
+        assert gen.emit(gen.parse_surface(edited)) != gen.OUTPUT_PATH.read_text(encoding="utf-8")
+        with pytest.raises(gen.SurfaceError, match="not the pinned"):
+            gen.verify_vendored_digest(edited)
+
+    def test_the_check_command_runs_the_digest_check(self) -> None:
+        """A control on the CI wiring, not on the function.
+
+        The digest check is only worth having if the command CI runs performs
+        it; a helper nothing calls is a comment.
+        """
+        source = (REPO_ROOT / "scripts" / "gen_authzen_types.py").read_text(encoding="utf-8")
+        main_body = source[source.index("def main(") :]
+        assert "verify_vendored_digest(raw_bytes)" in main_body
+
+    def test_the_artifacts_self_declared_strings_reached_the_types(
+        self, surface: gen.Surface
+    ) -> None:
+        """Named for what it asserts: a COPY check, not a fidelity check.
+
+        It catches an emitter that forgot to carry the provenance through. It
+        establishes nothing about where the artifact came from - that is the
+        digest above.
         """
         from axonflow.authzen_types_gen import (
             AUTHZEN_CONTRACT_SCHEMA_VERSION,
@@ -400,3 +448,138 @@ class TestTheVendoredArtifactMatchesThePlatform:
         assert surface.contract_schema_version == AUTHZEN_CONTRACT_SCHEMA_VERSION
         assert surface.source_schema_sha256 == AUTHZEN_SOURCE_SCHEMA_SHA256
         assert AUTHZEN_SOURCE_SCHEMA_SHA256.startswith("sha256:")
+
+
+class TestTheEmitterRefusesWhatItCannotRender:
+    """R3 round 1: the emitter interpolated artifact strings with no escaping,
+    and never checked that an emitted field name was a usable identifier.
+
+    The artifact is first-party, so the realistic failure is the benign one - a
+    ``\"\"\"`` or a backslash arriving in a platform doc comment and emitting a
+    module that does not parse. The emitter's own claim is that it refuses what
+    it cannot render, and that claim did not hold for any string it copied.
+    """
+
+    @staticmethod
+    def _mutated(mutate: object) -> bytes:
+        doc = json.loads(gen.SURFACE_PATH.read_text(encoding="utf-8"))
+        mutate(doc)  # type: ignore[operator]
+        return json.dumps(doc).encode()
+
+    def test_a_docstring_terminator_in_a_doc_is_refused(self) -> None:
+        def plant(doc: dict) -> None:
+            doc["types"][0]["doc"] = 'ends the docstring """ and starts something else'
+
+        with pytest.raises(gen.SurfaceError, match="doc text contains"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_backslash_in_a_doc_is_refused(self) -> None:
+        def plant(doc: dict) -> None:
+            doc["types"][0]["doc"] = "a windows path C:\\temp"
+
+        with pytest.raises(gen.SurfaceError, match="doc text contains"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_quote_in_an_enum_value_is_refused(self) -> None:
+        def plant(doc: dict) -> None:
+            doc["enums"][0]["values"].append("it's")
+
+        with pytest.raises(gen.SurfaceError, match="carries a quote"):
+            gen.parse_surface(self._mutated(plant))
+
+    @pytest.mark.parametrize("name", ["class", "model_config", "x-trace", "2fa"])
+    def test_a_field_name_that_cannot_be_an_attribute_is_refused(self, name: str) -> None:
+        """``class`` is a SyntaxError; ``model_config`` generates cleanly and
+        ships a package that raises on import. Both are refused here.
+        """
+
+        def plant(doc: dict) -> None:
+            doc["types"][0]["fields"][0]["name"] = name
+
+        with pytest.raises(gen.SurfaceError, match=r"identifier|reserved"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_bound_on_a_kind_it_cannot_constrain_is_refused(self) -> None:
+        """A ``min_length`` on a bool looks like a live constraint in the
+        artifact and enforces nothing in the SDK. Silently dropping it is how a
+        constraint exists on paper and nowhere else.
+        """
+
+        def plant_length(doc: dict) -> None:
+            action = next(t for t in doc["types"] if t["name"] == "authzen_action")
+            next(f for f in action["fields"] if f["name"] == "properties")["min_length"] = 1
+
+        with pytest.raises(gen.SurfaceError, match="min_length"):
+            gen.parse_surface(self._mutated(plant_length))
+
+        def plant_items(doc: dict) -> None:
+            action = next(t for t in doc["types"] if t["name"] == "authzen_action")
+            next(f for f in action["fields"] if f["name"] == "name")["min_items"] = 2
+
+        with pytest.raises(gen.SurfaceError, match="min_items"):
+            gen.parse_surface(self._mutated(plant_items))
+
+    def test_a_negative_bound_is_refused(self) -> None:
+        def plant(doc: dict) -> None:
+            bulk = next(t for t in doc["types"] if t["name"] == "authzen_bulk")
+            next(f for f in bulk["fields"] if f["name"] == "evaluations")["min_items"] = -1
+
+        with pytest.raises(gen.SurfaceError, match="negative bound"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_non_boolean_required_is_refused(self) -> None:
+        """``bool("false")`` is True. A coerced read makes the string "false"
+        mean required here and optional in the sibling SDK, from one artifact,
+        with both regeneration gates green.
+        """
+
+        def plant(doc: dict) -> None:
+            doc["types"][0]["fields"][0]["required"] = "false"
+
+        with pytest.raises(gen.SurfaceError, match="JSON boolean"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_container_nested_in_a_container_is_refused(self) -> None:
+        """Not because it is unrenderable in Python - it very nearly is - but
+        because the sibling emitter refuses it, and a construct one SDK
+        generates for and the other rejects is a four-of-five release.
+        """
+
+        def plant(doc: dict) -> None:
+            bulk = next(t for t in doc["types"] if t["name"] == "authzen_bulk")
+            field = next(f for f in bulk["fields"] if f["name"] == "evaluations")
+            field["type"] = {
+                "kind": "array",
+                "items": {"kind": "array", "items": {"kind": "string"}},
+            }
+
+        with pytest.raises(gen.SurfaceError, match="nests a"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_duplicated_exactly_one_of_member_is_refused(self) -> None:
+        """``[["evaluation","evaluation"]]`` emits a type that can never be
+        constructed: one member cannot be present exactly twice.
+        """
+
+        def plant(doc: dict) -> None:
+            envelope = next(t for t in doc["types"] if t["name"] == "authzen_envelope")
+            envelope["exactly_one_of"] = [["evaluation", "evaluation"]]
+
+        with pytest.raises(gen.SurfaceError, match="same member twice"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_an_over_long_line_is_refused_rather_than_emitted(self) -> None:
+        """A generated file that fails `ruff check` cannot be fixed by hand -
+        the header forbids it - so the emitter fails at generation time, where
+        a maintainer can act on it.
+        """
+        import dataclasses
+
+        surface = gen.parse_surface(gen.SURFACE_PATH.read_bytes())
+        long_name = "x" * 200
+        widened = dataclasses.replace(
+            surface,
+            enums=(gen.Enum(name=long_name, values=("a",)), *surface.enums),
+        )
+        with pytest.raises(gen.SurfaceError, match="columns"):
+            gen.emit(widened)

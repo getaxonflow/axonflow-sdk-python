@@ -33,14 +33,16 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from axonflow.authzen_types_gen import (
     AUTHZEN_CONTRACT_SCHEMA_VERSION,
     AUTHZEN_ERROR_CODE_EVALUATION_UNAVAILABLE,
     AUTHZEN_ERROR_CODE_INCOMPLETE_EVALUATION,
+    AUTHZEN_ERROR_CODE_MALFORMED_ENVELOPE,
     AUTHZEN_ERROR_CODE_UNEVALUABLE_ATTRIBUTE,
     AUTHZEN_OPERATIONAL_STATE_ALLOW,
+    AUTHZEN_OPERATIONAL_STATE_ERROR,
     AUTHZEN_OPERATIONAL_STATE_VALUES,
     AUTHZEN_PROFILE_V1,
     AuthZENAction,
@@ -82,6 +84,8 @@ __all__ = [
     "AuthZENDecision",
     "AuthZENProtocolError",
     "AuthZENRefusal",
+    "build_envelope",
+    "to_wire",
 ]
 
 # The AuthZEN evaluation endpoint.
@@ -315,7 +319,7 @@ class AuthZENDecision(AuthZENResponse):
         # type is public and a caller can build one by hand — and the safe
         # reading of an outcome that carries no state is not ALLOW.
         if self.context is None:
-            return "ERROR"
+            return AUTHZEN_OPERATIONAL_STATE_ERROR
         return self.context.state
 
     @property
@@ -397,22 +401,40 @@ class _Unresolvable(Exception):
 # silently rewrite one into the other.
 _DROP: Final = object()
 
+# How deep an attribute bag may nest before the SDK stops walking it.
+#
+# Without a bound, a bag that refers to itself recurses until the interpreter
+# gives up, and the caller gets a RecursionError out of `evaluate` -- an error
+# type nothing documents and no enforcement point catches. A bound turns that
+# into the same typed refusal every other malformed bag gets. 64 is far past
+# anything a policy attribute path plausibly nests (the platform's own attribute
+# paths are three or four segments) and far short of the interpreter's limit.
+_MAX_ATTRIBUTE_DEPTH: Final = 64
 
-def _resolve_value(value: Any, pointer: str) -> Any:  # noqa: ANN401 - any JSON value
+
+def _resolve_value(value: Any, pointer: str, depth: int = 0) -> Any:  # noqa: ANN401 - any JSON
     """Resolve one value, recursing through containers."""
+    if depth > _MAX_ATTRIBUTE_DEPTH:
+        msg = (
+            f"nests deeper than {_MAX_ATTRIBUTE_DEPTH} levels, which this SDK will not walk; "
+            f"a bag that refers to itself would otherwise recurse until the interpreter stopped"
+        )
+        raise _Unresolvable(pointer, msg)
     if isinstance(value, AuthZENAttribute):
         if value.state == "known":
             # A known attribute may itself hold a container carrying more
             # attributes; resolving the payload keeps the rule uniform rather
             # than depending on how deeply a caller nested its resolver output.
-            return _resolve_value(value.value, pointer)
+            return _resolve_value(value.value, pointer, depth + 1)
         if value.state == "absent":
             return _DROP
         raise _Unresolvable(pointer, value.reason)
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for key, item in value.items():
-            resolved = _resolve_value(item, f"{pointer}/{_escape_pointer_token(str(key))}")
+            resolved = _resolve_value(
+                item, f"{pointer}/{_escape_pointer_token(str(key))}", depth + 1
+            )
             if resolved is not _DROP:
                 out[key] = resolved
         return out
@@ -423,7 +445,7 @@ def _resolve_value(value: Any, pointer: str) -> Any:  # noqa: ANN401 - any JSON 
         # that matches "there is no value here".
         items = []
         for index, item in enumerate(value):
-            resolved = _resolve_value(item, f"{pointer}/{index}")
+            resolved = _resolve_value(item, f"{pointer}/{index}", depth + 1)
             if resolved is not _DROP:
                 items.append(resolved)
         return items
@@ -489,6 +511,65 @@ def _resolve_resource(resource: AuthZENResource | None, at: str) -> AuthZENResou
     )
 
 
+def _envelope(
+    *,
+    evaluation: AuthZENRequest | None = None,
+    evaluations: AuthZENBulk | None = None,
+) -> AuthZENEnvelope:
+    """Construct the envelope, reporting a caller mistake as a TYPED refusal.
+
+    The generated model raises pydantic's ``ValidationError`` for the rules no
+    annotation can carry - exactly one member, the singular member's own
+    required set. That is the right exception at the point a caller builds a
+    model by hand, and the wrong one coming out of ``evaluate``: the method
+    documents ``AuthZENRefusal``, ``AuthZENProtocolError`` and
+    ``AuthenticationError``, and an enforcement point that catches those would
+    not catch a ``ValidationError`` -- so a mistyped request would escape a
+    fail-closed handler as an exception nothing on the path expects.
+
+    It also keeps the two SDKs saying the same thing. TypeScript has no
+    construction-time validation at all, so it reports the same mistakes as a
+    client-side refusal; without this, the identical bad envelope produced a
+    refusal in one SDK and a framework exception in the other.
+    """
+    try:
+        return AuthZENEnvelope(evaluation=evaluation, evaluations=evaluations)
+    except ValidationError as exc:
+        raise AuthZENRefusal(
+            AUTHZEN_ERROR_CODE_MALFORMED_ENVELOPE,
+            f"the envelope does not satisfy the AuthZEN contract: {exc}",
+            refused_by="client",
+            pointer="",
+        ) from exc
+
+
+def build_envelope(
+    *,
+    evaluation: AuthZENRequest | None = None,
+    evaluations: AuthZENBulk | None = None,
+) -> AuthZENEnvelope:
+    """Build an envelope, checking COMPLETENESS before the schema.
+
+    The order matters and is the same in every SDK. A merged entry that names
+    no action is an INCOMPLETE evaluation whichever envelope shape carried it;
+    letting the generated validator reach the singular member's own required
+    set first would report the same mistake under ``malformed_envelope`` for a
+    singular request and ``incomplete_evaluation`` for a plural one.
+    """
+    if evaluation is not None:
+        _check_complete(evaluation, None, "/evaluation")
+    elif evaluations is not None:
+        base = AuthZENRequest(
+            subject=evaluations.subject,
+            action=evaluations.action,
+            resource=evaluations.resource,
+            context=evaluations.context,
+        )
+        for index, entry in enumerate(evaluations.evaluations):
+            _check_complete(entry, base, f"/evaluations/evaluations/{index}")
+    return _envelope(evaluation=evaluation, evaluations=evaluations)
+
+
 def resolve_envelope(envelope: AuthZENEnvelope) -> AuthZENEnvelope:
     """Return the envelope with every tri-state attribute resolved to the wire.
 
@@ -502,10 +583,10 @@ def resolve_envelope(envelope: AuthZENEnvelope) -> AuthZENEnvelope:
     """
     try:
         if envelope.evaluation is not None:
-            return AuthZENEnvelope(evaluation=_resolve_request(envelope.evaluation, "/evaluation"))
+            return _envelope(evaluation=_resolve_request(envelope.evaluation, "/evaluation"))
         if envelope.evaluations is not None:
             bulk = envelope.evaluations
-            return AuthZENEnvelope(
+            return _envelope(
                 evaluations=AuthZENBulk(
                     subject=_resolve_subject(bulk.subject, "/evaluations"),
                     action=_resolve_action(bulk.action, "/evaluations"),
@@ -534,10 +615,13 @@ def resolve_envelope(envelope: AuthZENEnvelope) -> AuthZENEnvelope:
         ) from unresolvable
     # Unreachable: the generated envelope validator refuses an envelope with
     # neither member set. Stated rather than assumed, because returning the
-    # input unchanged here would send an envelope no resolver had walked.
+    # input unchanged here would send an envelope no resolver had walked. The
+    # code is MALFORMED_ENVELOPE, matching what the gateway's own mapEnvelope
+    # answers for an envelope it cannot read - and matching the sibling SDKs,
+    # which must not name the same mistake with two different codes.
     msg = "the envelope names neither an evaluation nor an evaluations member"
     raise AuthZENRefusal(
-        AUTHZEN_ERROR_CODE_INCOMPLETE_EVALUATION, msg, refused_by="client", pointer=""
+        AUTHZEN_ERROR_CODE_MALFORMED_ENVELOPE, msg, refused_by="client", pointer=""
     )
 
 
@@ -616,9 +700,32 @@ def check_envelope_complete(envelope: AuthZENEnvelope) -> None:
 
 
 def _decode_refusal(raw: bytes) -> AuthZENError | None:
-    """Decode a structured refusal document, or None if the body is not one."""
+    """Decode a structured refusal document, or None if the body is not one.
+
+    Decoded LENIENTLY, unlike the decision path, and the asymmetry is
+    deliberate. Strictness on a DECISION is a safety control: an unknown member
+    means the server is speaking a profile this build cannot fully read, and the
+    unread part may be the one that constrains an allow. A refusal constrains
+    nothing -- it says no decision exists -- so the same strictness buys no
+    safety and costs the caller the whole point of the surface: one additive
+    field on the refusal envelope would degrade every typed refusal into a bare
+    error, losing the code, the pointer, the supported set and the retryable
+    signal on the one path whose entire purpose is to be branchable.
+
+    So unknown members are dropped here, and the shape is still checked: a body
+    that carries no code or no message is not a refusal document and returns
+    None, which sends the caller down the generic-error path rather than
+    fabricating a refusal the server did not make.
+    """
     try:
-        return AuthZENError.model_validate_json(raw)
+        decoded = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    known = {"code", "pointer", "message", "supported", "request_id"}
+    try:
+        return AuthZENError.model_validate({k: v for k, v in decoded.items() if k in known})
     except (ValidationError, ValueError):
         return None
 
@@ -706,9 +813,14 @@ async def evaluate_envelope(
     """
     resolved = resolve_envelope(envelope)
     check_envelope_complete(resolved)
+    # The belt runs on the MODEL, before serialisation. Run after model_dump it
+    # could never fire: pydantic serialises AuthZENAttribute -- a dataclass --
+    # into an ordinary {"state": ..., "value": ..., "reason": ...} object, so
+    # the isinstance check was handed a plain dict and an unresolved UNKNOWN
+    # attribute went out on the wire wearing that shape. Measured, not assumed.
+    _assert_fully_resolved(resolved)
 
     body = resolved.model_dump(exclude_none=True)
-    _assert_fully_resolved(body)
 
     status, raw = await send(
         AUTHZEN_PATH,
@@ -752,40 +864,60 @@ async def evaluate_envelope(
     return AuthZENDecision.model_validate(response.model_dump())
 
 
-def _assert_fully_resolved(body: object, path: str = "") -> None:
+def _assert_fully_resolved(value: object, path: str = "") -> None:
     """Guarantee no tri-state attribute reaches the wire.
 
-    ``resolve_envelope`` walks dicts and lists, which covers every container
-    the contract declares. This is the belt: a container kind added later — or
-    an attribute smuggled in through a field the resolver does not visit —
-    would otherwise be serialised as whatever ``json`` makes of a dataclass,
-    and the failure would land as a 400 the caller cannot explain.
+    ``resolve_envelope`` walks every bag the contract declares, so on today's
+    contract this is a belt with nothing to catch. It exists for the case that
+    does not announce itself: a container kind added to the artifact later, or
+    an attribute reaching a member the resolver does not visit. Without it that
+    attribute is not a crash -- pydantic serialises the dataclass into an
+    ordinary ``{"state": ..., "value": ..., "reason": ...}`` object -- so the
+    request is SENT, carrying a resolver's internal shape where the gateway
+    expects a value, and an UNKNOWN attribute reaches the network after all.
+
+    It walks pydantic MODELS as well as plain containers, because the envelope
+    it is handed is a model tree and stopping at the first ``BaseModel`` would
+    make it inert for everything below the top level.
     """
-    if isinstance(body, AuthZENAttribute):
+    if isinstance(value, AuthZENAttribute):
         msg = (
             f"an unresolved AuthZENAttribute reached the wire at {path or '/'}. "
             f"Tri-state attributes are only supported inside the context and "
             f"properties bags; this one is somewhere the resolver does not reach."
         )
         raise AuthZENProtocolError(msg)
-    if isinstance(body, dict):
-        for key, value in body.items():
-            _assert_fully_resolved(value, f"{path}/{_escape_pointer_token(str(key))}")
-    elif isinstance(body, list):
-        for index, value in enumerate(body):
-            _assert_fully_resolved(value, f"{path}/{index}")
+    if isinstance(value, BaseModel):
+        for name in type(value).model_fields:
+            _assert_fully_resolved(getattr(value, name), f"{path}/{name}")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _assert_fully_resolved(item, f"{path}/{_escape_pointer_token(str(key))}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _assert_fully_resolved(item, f"{path}/{index}")
 
 
-def as_json(envelope: AuthZENEnvelope) -> str:
-    """The exact bytes this SDK would send for ``envelope``.
+def to_wire(envelope: AuthZENEnvelope) -> dict[str, Any]:
+    """The document this SDK would send for ``envelope``.
 
     Exported for tests and for support: "what did the SDK actually put on the
     wire" is the first question of every integration problem, and answering it
     by reading the client's source is how the answer ends up wrong.
+
+    It runs the same resolution, completeness check and belt ``evaluate`` runs,
+    and returns the same object ``evaluate`` hands the transport -- so it can be
+    compared against a packet capture member for member. It deliberately does
+    NOT return a string: serialising here with different options from the ones
+    httpx uses would produce bytes the SDK never sends, which is worse than
+    useless to somebody diffing against a capture.
     """
     resolved = resolve_envelope(envelope)
     check_envelope_complete(resolved)
-    return json.dumps(resolved.model_dump(exclude_none=True), sort_keys=True)
+    _assert_fully_resolved(resolved)
+    return resolved.model_dump(exclude_none=True)
 
 
 # Re-exported so a caller can compare against the contract version its types

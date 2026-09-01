@@ -62,12 +62,8 @@ from tenacity import (
 
 from axonflow import masfeat
 from axonflow._version import __version__ as _SDK_VERSION
-from axonflow.authzen import AuthZENDecision, evaluate_envelope
-from axonflow.authzen_types_gen import (
-    AuthZENBulk,
-    AuthZENEnvelope,
-    AuthZENRequest,
-)
+from axonflow.authzen import AuthZENDecision, build_envelope, evaluate_envelope
+from axonflow.authzen_types_gen import AuthZENBulk, AuthZENRequest  # noqa: TC001
 from axonflow.code_governance import (
     CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
@@ -3008,7 +3004,7 @@ class AxonFlow:
             AuthenticationError: 401 — the gateway refused the credentials
                 before the route ran.
         """
-        return await evaluate_envelope(self._send_authzen, AuthZENEnvelope(evaluation=request))
+        return await evaluate_envelope(self._send_authzen, build_envelope(evaluation=request))
 
     async def evaluate_all(self, bulk: AuthZENBulk) -> AuthZENDecision:
         """Ask whether ONE operation is permitted against several preconditions.
@@ -3041,7 +3037,7 @@ class AxonFlow:
             ...     )
             ... )
         """
-        return await evaluate_envelope(self._send_authzen, AuthZENEnvelope(evaluations=bulk))
+        return await evaluate_envelope(self._send_authzen, build_envelope(evaluations=bulk))
 
     # ------------------------------------------------------------------ #
     # Decision Mode PEP: decide -> fulfill -> forward (ADR-056, #2563)    #

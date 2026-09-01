@@ -18,6 +18,7 @@ import json
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from axonflow import (
     AUTHZEN_PROFILE_V1,
@@ -37,9 +38,11 @@ from axonflow import (
 from axonflow.authzen import (
     AUTHZEN_PATH,
     AUTHZEN_PROFILE_HEADER,
-    as_json,
+    _assert_fully_resolved,
+    build_envelope,
     evaluate_envelope,
     resolve_envelope,
+    to_wire,
 )
 from axonflow.exceptions import AuthenticationError, AxonFlowError
 
@@ -98,7 +101,10 @@ def singular(**overrides: Any) -> AuthZENRequest:
 
 
 async def evaluate(transport: RecordingTransport, request: AuthZENRequest) -> AuthZENDecision:
-    return await evaluate_envelope(transport, AuthZENEnvelope(evaluation=request))
+    # Through build_envelope, which is the path client.evaluate takes. Calling
+    # AuthZENEnvelope directly here would test a construction sequence no
+    # caller uses and would miss the typed refusals build_envelope produces.
+    return await evaluate_envelope(transport, build_envelope(evaluation=request))
 
 
 # --------------------------------------------------------------------------
@@ -346,8 +352,8 @@ class TestTriState:
 class TestRoundTrip:
     def test_request_round_trips_through_json(self) -> None:
         envelope = AuthZENEnvelope(evaluation=singular())
-        encoded = as_json(envelope)
-        decoded = AuthZENEnvelope.model_validate_json(encoded)
+        wire = to_wire(envelope)
+        decoded = AuthZENEnvelope.model_validate(json.loads(json.dumps(wire)))
         assert decoded == resolve_envelope(envelope)
 
     def test_response_round_trips_through_json(self) -> None:
@@ -834,3 +840,161 @@ class TestTheGeneratedModels:
         }
         with pytest.raises(AuthZENProtocolError, match="present but too short"):
             await evaluate(RecordingTransport(body=body), singular())
+
+
+# --------------------------------------------------------------------------
+# Regression cases from the R3 review
+# --------------------------------------------------------------------------
+
+
+class TestTheBeltAgainstAnUnresolvedAttribute:
+    """R3 round 1: the belt ran AFTER model_dump and could never fire.
+
+    pydantic serialises AuthZENAttribute -- a dataclass -- into an ordinary
+    ``{"state": ..., "value": ..., "reason": ...}`` object, so the isinstance
+    check was handed a plain dict, and an attribute the resolver had not
+    visited went out on the wire wearing that shape. It now runs on the MODEL,
+    before serialisation.
+    """
+
+    def test_it_fires_on_an_attribute_the_resolver_did_not_visit(self) -> None:
+        # Constructed by reaching past resolution, which is the only way to
+        # produce the state the belt exists for: on today's contract the
+        # resolver's bag coverage is total.
+        envelope = AuthZENEnvelope(evaluation=singular())
+        envelope.evaluation.context["smuggled"] = AuthZENAttribute.unknown("stale")  # type: ignore[index]
+        with pytest.raises(AuthZENProtocolError, match="unresolved AuthZENAttribute"):
+            _assert_fully_resolved(envelope)
+
+    def test_it_names_the_member_it_found(self) -> None:
+        envelope = AuthZENEnvelope(evaluation=singular())
+        envelope.evaluation.context["args"]["smuggled"] = AuthZENAttribute.absent()  # type: ignore[index]
+        with pytest.raises(AuthZENProtocolError, match=r"/evaluation/context/args/smuggled"):
+            _assert_fully_resolved(envelope)
+
+    def test_it_passes_a_fully_resolved_envelope(self) -> None:
+        """The control: a belt that raised on everything would look as green."""
+        _assert_fully_resolved(resolve_envelope(AuthZENEnvelope(evaluation=singular())))
+
+    def test_to_wire_refuses_an_unresolved_attribute(self) -> None:
+        """Named for what it asserts.
+
+        The RESOLVER catches this one, not the belt -- a smuggled attribute
+        inside ``context`` is in a bag the resolver walks. What this pins is
+        that ``to_wire`` runs the same pipeline ``evaluate`` does, so the
+        document it shows a support engineer is the document that would have
+        been sent.
+        """
+        envelope = AuthZENEnvelope(evaluation=singular())
+        envelope.evaluation.context["smuggled"] = AuthZENAttribute.unknown("stale")  # type: ignore[index]
+        with pytest.raises(AuthZENRefusal) as caught:
+            to_wire(envelope)
+        assert caught.value.pointer == "/evaluation/context/smuggled"
+
+
+class TestCyclicInput:
+    async def test_a_self_referential_bag_is_a_typed_refusal(self) -> None:
+        """Not a RecursionError.
+
+        A caller that builds a cycle gets the same typed refusal every other
+        malformed bag gets, rather than an exception type nothing documents and
+        no enforcement point catches.
+        """
+        cycle: dict[str, Any] = {"query": "q"}
+        cycle["self"] = cycle
+        transport = RecordingTransport()
+        with pytest.raises(AuthZENRefusal) as caught:
+            await evaluate(transport, singular(context={"args": cycle}))
+        assert not transport.calls
+        assert caught.value.code == "unevaluable_attribute"
+        assert "nests deeper" in str(caught.value)
+
+
+class TestRefusalDecodingIsForwardCompatible:
+    """R3 round 1: strict decoding of the REFUSAL envelope is a trap.
+
+    Strictness on a DECISION is a safety control -- an unread member may be the
+    one that constrains an allow. A refusal constrains nothing, so the same
+    strictness buys no safety and costs the caller the typed refusal itself:
+    one additive field would degrade every refusal into a bare error, losing
+    the code, the pointer, the supported set and the retryable signal.
+    """
+
+    async def test_an_additive_member_does_not_destroy_the_typed_refusal(self) -> None:
+        body = {
+            "code": "evaluation_unavailable",
+            "message": "the evaluator did not answer",
+            "pointer": "/evaluation",
+            "retry_after_seconds": 30,  # a member a future gateway might add
+        }
+        with pytest.raises(AuthZENRefusal) as caught:
+            await evaluate(RecordingTransport(status=502, body=body), singular())
+        assert caught.value.code == "evaluation_unavailable"
+        assert caught.value.pointer == "/evaluation"
+        assert caught.value.retryable is True
+
+    async def test_a_body_with_no_code_is_not_read_as_a_refusal(self) -> None:
+        """The control. Leniency must not invent a refusal the server never made."""
+        with pytest.raises(AxonFlowError) as caught:
+            await evaluate(RecordingTransport(status=500, body={"detail": "boom"}), singular())
+        assert not isinstance(caught.value, AuthZENRefusal)
+
+
+class TestTheTwoSDKsNameMistakesTheSameWay:
+    """Cross-SDK parity cases. Each has a byte-for-byte sibling in
+    ``tests/authzen.test.ts``; a divergence here is a divergence there.
+    """
+
+    async def test_an_incomplete_singular_envelope_is_a_typed_refusal(self) -> None:
+        """Not a pydantic ValidationError.
+
+        ``client.evaluate`` documents AuthZENRefusal, AuthZENProtocolError and
+        AuthenticationError. An enforcement point that catches those would not
+        catch pydantic's exception, so a mistyped request escaped a fail-closed
+        handler as an error nothing on the path expects.
+        """
+        transport = RecordingTransport()
+        with pytest.raises(AuthZENRefusal) as caught:
+            await evaluate_envelope(
+                transport,
+                build_envelope(
+                    evaluation=AuthZENRequest(subject=AuthZENSubject(type="gateway", id="g1"))
+                ),
+            )
+        assert not transport.calls
+        assert caught.value.code == "incomplete_evaluation"
+        assert caught.value.pointer == "/evaluation"
+        assert caught.value.refused_by == "client"
+
+    async def test_an_envelope_naming_neither_member_is_a_malformed_envelope(self) -> None:
+        transport = RecordingTransport()
+        with pytest.raises(AuthZENRefusal) as caught:
+            await evaluate_envelope(transport, build_envelope())
+        assert not transport.calls
+        assert caught.value.code == "malformed_envelope"
+
+    def test_a_bulk_with_no_entries_is_refused_at_construction(self) -> None:
+        """The one place the two SDKs cannot be made to agree, pinned so the
+        difference is a decision rather than a surprise.
+
+        A pydantic model validates when it is BUILT, so an empty bulk is
+        refused at ``AuthZENBulk(...)`` -- before this SDK is called at all --
+        with a message naming the rule. TypeScript has no equivalent moment: an
+        object literal is inert until ``evaluateAll`` validates it, where the
+        same mistake surfaces as ``AuthZENRefusal(malformed_envelope)``.
+
+        Deferring here to match would mean giving up request models altogether,
+        which is a worse surface for a worse reason. Both refuse; only the
+        moment differs, and both READMEs say so.
+        """
+        with pytest.raises(ValidationError, match="at least 1 entry"):
+            AuthZENBulk(evaluations=[])
+
+    async def test_an_extra_member_on_a_subject_is_refused_not_dropped(self) -> None:
+        """The whole surface's rule, applied client-side: mapped or refused,
+        never silently ignored.
+        """
+        transport = RecordingTransport()
+        with pytest.raises(Exception, match=r"extra_forbidden|Extra inputs"):
+            AuthZENSubject(type="gateway", id="g1", department="finance")  # type: ignore[call-arg]
+        assert not transport.calls

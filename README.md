@@ -25,7 +25,7 @@ Enterprise AI Governance in 3 Lines of Code.
 
 This SDK is a client library for interacting with a running AxonFlow control plane. It is used from application or agent code to send execution context, policies, and requests at runtime.
 
-A deployed AxonFlow platform (self-hosted or cloud) is required for end-to-end AI governance. SDKs alone are not sufficient-the platform and SDKs are designed to be used together.
+A deployed AxonFlow platform (self-hosted or cloud) is required for end-to-end AI governance. SDKs alone are not sufficient—the platform and SDKs are designed to be used together.
 
 ### See AxonFlow in Action
 
@@ -59,18 +59,18 @@ Need more capacity than Community without moving to Enterprise? Evaluation uses 
 | Audit retention | 3 days | 14 days | 3650 days |
 | Concurrent executions | 5 | 25 | Unlimited |
 | Pending execution approvals | 5 | 25 | Unlimited |
-| Evidence export (CSV / JSON) | - | 5,000 records · 14d window · 3/day | Unlimited |
-| Policy simulation | - | 300 / day | Unlimited |
+| Evidence export (CSV / JSON) | — | 5,000 records · 14d window · 3/day | Unlimited |
+| Policy simulation | — | 300 / day | Unlimited |
 
 Concurrent executions applies to MAP and WCP executions per tenant. Pending execution approvals applies to MAP confirm/step mode and WCP approval queues.
 
-> **Note:** Evidence export and policy simulation are licensed AxonFlow platform capabilities available alongside the SDK on your deployed platform - not language-specific SDK helpers. Access them via the platform API or customer portal. The SDK row is included to show what your licensed deployment unlocks at each tier.
+> **Note:** Evidence export and policy simulation are licensed AxonFlow platform capabilities available alongside the SDK on your deployed platform — not language-specific SDK helpers. Access them via the platform API or customer portal. The SDK row is included to show what your licensed deployment unlocks at each tier.
 
 [Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Run a paid production program](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
 
 ## Try Without Installing
 
-Skip local setup entirely - try AxonFlow instantly at [**try.getaxonflow.com**](https://docs.getaxonflow.com/docs/deployment/community-saas):
+Skip local setup entirely — try AxonFlow instantly at [**try.getaxonflow.com**](https://docs.getaxonflow.com/docs/deployment/community-saas):
 
 ```bash
 # 1. Register (30 seconds)
@@ -514,13 +514,13 @@ No email required. Optional contact if you want a response.
 ## Sandbox Mode
 
 ```python
-# Quick sandbox client for local testing - defaults to http://localhost:8080.
+# Quick sandbox client for local testing — defaults to http://localhost:8080.
 from axonflow import AxonFlow
 
 client = AxonFlow.sandbox()
 ```
 
-> Sandbox-mode clients fire telemetry like every other client - anonymous SDK
+> Sandbox-mode clients fire telemetry like every other client — anonymous SDK
 > heartbeat, classification-only payload, opt-out via `AXONFLOW_TELEMETRY=off`.
 > Pings are tagged `stream="sandbox"` server-side so dev/test usage is
 > distinguishable from production heartbeat. (Pre-v8.0 sandbox-mode pings
@@ -541,7 +541,7 @@ they're distinguishable from production heartbeat).
 
 ### Scope of `AXONFLOW_TELEMETRY=off`
 
-`AXONFLOW_TELEMETRY=off` disables the anonymous SDK heartbeat (version, OS, architecture). On **self-hosted** and **in-VPC** deployments, that heartbeat is the only data the SDK sends to AxonFlow, so setting `=off` means we receive nothing. On **Community SaaS** (`try.getaxonflow.com`) the hosted service also processes operational data - registrations, audit logs, policy enforcement records, workflow state, plan data, and request-header metadata aggregated for usage analytics - as part of running the platform; that operational data flow is governed by the [Privacy Policy](https://getaxonflow.com/privacy/), not by `AXONFLOW_TELEMETRY`.
+`AXONFLOW_TELEMETRY=off` disables the anonymous SDK heartbeat (version, OS, architecture). On **self-hosted** and **in-VPC** deployments, that heartbeat is the only data the SDK sends to AxonFlow, so setting `=off` means we receive nothing. On **Community SaaS** (`try.getaxonflow.com`) the hosted service also processes operational data — registrations, audit logs, policy enforcement records, workflow state, plan data, and request-header metadata aggregated for usage analytics — as part of running the platform; that operational data flow is governed by the [Privacy Policy](https://getaxonflow.com/privacy/), not by `AXONFLOW_TELEMETRY`.
 
 `DO_NOT_TRACK` is **not** honored as an opt-out for AxonFlow telemetry. It is commonly inherited from host tools and developer environments, which makes it an unreliable expression of user intent.
 

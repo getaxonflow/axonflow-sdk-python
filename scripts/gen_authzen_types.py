@@ -30,7 +30,9 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import keyword
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,6 +48,23 @@ OUTPUT_PATH = REPO_ROOT / "axonflow" / "authzen_types_gen.py"
 SUPPORTED_ARTIFACT = "axonflow-authzen-surface"
 SUPPORTED_ARTIFACT_VERSION = 1
 
+# The sha256 of the vendored artifact FILE, verified byte-for-byte against
+# `platform/decision/surface/authzen-surface.json` on axonflow-enterprise main
+# (commit afff5d1a0) and against the copy in axonflow-sdk-go.
+#
+# This is the only control that pins FIDELITY. The regeneration gate answers
+# "is the committed module the output of the committed artifact"; it says
+# nothing about whether the committed artifact is the platform's, and an edit
+# to the vendored file plus a regeneration satisfies it completely. The
+# artifact's own `source_schema_sha256` cannot close that gap either: it is a
+# string inside the file, so it moves with any edit that bothers to change it.
+# Only a digest recorded OUTSIDE the file does, which is what this is.
+#
+# Bumping it is the deliberate act of re-vendoring: re-copy from the platform,
+# put the new digest here, regenerate, and say in the PR which platform commit
+# it came from.
+VENDORED_ARTIFACT_SHA256 = "7f768b8ad0d6278d3531e1410decad172459808ebda627da44dca5bb4c9f36f8"
+
 # Kinds the emitter can render. Anything else is refused rather than defaulted
 # to ``Any`` — a silently permissive field compiles, ships, and accepts values
 # the server refuses.
@@ -54,6 +73,60 @@ SCALAR_KINDS = {"string": "str", "bool": "bool", "int": "int"}
 
 class SurfaceError(Exception):
     """The artifact is not something this emitter can generate from."""
+
+
+# Python keywords plus the names pydantic reserves on a model. A field called
+# `class` is a SyntaxError; one called `model_config` generates "successfully"
+# and ships a package that raises on import.
+_RESERVED_FIELD_NAMES = frozenset(keyword.kwlist) | {
+    "model_config",
+    "model_fields",
+    "model_computed_fields",
+    "model_extra",
+    "model_fields_set",
+}
+
+# What a doc string may contain before it stops being safe to paste into a
+# docstring or a comment. The artifact is first-party, so this is
+# defence-in-depth rather than a live threat -- but "the emitter refuses what it
+# cannot render" is this file's own claim, and a stray `"""` in a platform doc
+# comment would otherwise emit a module that does not parse, or worse, one that
+# parses into something nobody wrote.
+_UNSAFE_IN_DOC = ('"""', "\\")
+
+
+def _check_identifier(where: str, name: str) -> None:
+    """Refuse a name that cannot become a Python attribute."""
+    if not name.isidentifier():
+        msg = f"{where}: {name!r} is not a valid Python identifier, so it cannot become a field"
+        raise SurfaceError(msg)
+    if name in _RESERVED_FIELD_NAMES:
+        msg = (
+            f"{where}: {name!r} is reserved by Python or by pydantic; a model declaring it "
+            f"would fail to import rather than fail to generate"
+        )
+        raise SurfaceError(msg)
+
+
+def _check_doc(where: str, doc: str) -> None:
+    """Refuse doc text this emitter cannot safely place in a docstring."""
+    for token in _UNSAFE_IN_DOC:
+        if token in doc:
+            msg = (
+                f"{where}: the doc text contains {token!r}, which cannot be rendered into a "
+                f"Python docstring without changing what the emitted module means"
+            )
+            raise SurfaceError(msg)
+
+
+def _check_literal(where: str, value: str) -> None:
+    """Refuse a value this emitter cannot safely place in a string literal."""
+    if any(ch in value for ch in ("'", '"', "\\", "\n", "\r")):
+        msg = (
+            f"{where}: the value {value!r} carries a quote, a backslash or a newline, which "
+            f"this emitter will not put inside a generated string literal"
+        )
+        raise SurfaceError(msg)
 
 
 @dataclass(frozen=True)
@@ -190,16 +263,71 @@ def _parse_field(where: str, raw: object) -> Field:
     if not isinstance(name, str) or not name:
         msg = f"{where}: a field must be named"
         raise SurfaceError(msg)
+    _check_identifier(f"{where}.{name}", name)
+    doc = str(raw.get("doc", ""))
+    _check_doc(f"{where}.{name}", doc)
+    const = str(raw.get("const", ""))
+    if const:
+        _check_literal(f"{where}.{name}.const", const)
+    # `required` is read STRICTLY. `bool("false")` is True, so a coerced read
+    # makes the string "false" mean required here and optional in the sibling
+    # SDK, which reads `=== true`. One artifact, two opposite answers, and the
+    # regeneration gate is green in both.
+    required = raw.get("required", False)
+    if not isinstance(required, bool):
+        msg = f"{where}.{name}: `required` must be a JSON boolean, got {required!r}"
+        raise SurfaceError(msg)
+    field_type = _parse_typeref(f"{where}.{name}", raw.get("type"))
+    min_items = _parse_bound(f"{where}.{name}", "min_items", raw)
+    min_length = _parse_bound(f"{where}.{name}", "min_length", raw)
+    # A bound the emitter would silently drop is worse than one it cannot
+    # render: a `min_length` on a bool looks like a live constraint in the
+    # artifact and enforces nothing in the SDK.
+    if min_items and field_type.kind != "array":
+        msg = (
+            f"{where}.{name}: `min_items` is declared on a {field_type.kind} field; it is "
+            f"only meaningful on an array, and emitting nothing for it would leave a "
+            f"constraint the artifact declares and no SDK enforces"
+        )
+        raise SurfaceError(msg)
+    if min_length and field_type.kind not in {"string", "enum"}:
+        msg = (
+            f"{where}.{name}: `min_length` is declared on a {field_type.kind} field; it is "
+            f"only meaningful on a string, and emitting nothing for it would leave a "
+            f"constraint the artifact declares and no SDK enforces"
+        )
+        raise SurfaceError(msg)
+    requires_members = tuple(str(m) for m in raw.get("requires_members", ()) or ())
+    if len(set(requires_members)) != len(requires_members):
+        msg = f"{where}.{name}: `requires_members` names the same member twice"
+        raise SurfaceError(msg)
     return Field(
         name=name,
-        required=bool(raw.get("required", False)),
-        type=_parse_typeref(f"{where}.{name}", raw.get("type")),
-        doc=str(raw.get("doc", "")),
-        min_items=int(raw.get("min_items", 0) or 0),
-        min_length=int(raw.get("min_length", 0) or 0),
-        requires_members=tuple(str(m) for m in raw.get("requires_members", ()) or ()),
-        const=str(raw.get("const", "")),
+        required=required,
+        type=field_type,
+        doc=doc,
+        min_items=min_items,
+        min_length=min_length,
+        requires_members=requires_members,
+        const=const,
     )
+
+
+def _parse_bound(where: str, member: str, raw: dict[str, object]) -> int:
+    """Read a numeric bound, refusing one that would silently do nothing."""
+    if member not in raw:
+        return 0
+    value = raw[member]
+    if not isinstance(value, int) or isinstance(value, bool):
+        msg = f"{where}: `{member}` must be a JSON integer, got {value!r}"
+        raise SurfaceError(msg)
+    if value < 0:
+        msg = (
+            f"{where}: `{member}` is {value}; a negative bound reads as a constraint and "
+            f"disables one"
+        )
+        raise SurfaceError(msg)
+    return value
 
 
 def _parse_enum(raw: object, seen: set[str]) -> Enum:
@@ -222,13 +350,20 @@ def _parse_enum(raw: object, seen: set[str]) -> Enum:
         msg = f"enum {name!r} repeats a value"
         raise SurfaceError(msg)
     seen.add(name)
-    return Enum(name=name, values=values, doc=str(raw.get("doc", "")))
+    doc = str(raw.get("doc", ""))
+    _check_doc(f"enum {name}", doc)
+    for value in values:
+        _check_literal(f"enum {name}", value)
+    return Enum(name=name, values=values, doc=doc)
 
 
 def _parse_exactly_one_of(type_name_: str, raw: object, field_names: list[str]) -> tuple[str, ...]:
     members = tuple(str(m) for m in raw)  # type: ignore[union-attr]
     if len(members) < 2:  # noqa: PLR2004
         msg = f"type {type_name_!r} has an exactly-one-of group with {len(members)} members"
+        raise SurfaceError(msg)
+    if len(set(members)) != len(members):
+        msg = f"type {type_name_!r} names the same member twice in an exactly-one-of group"
         raise SurfaceError(msg)
     for member in members:
         if member not in field_names:
@@ -265,7 +400,9 @@ def _parse_type(raw: object, seen: set[str]) -> Type:
         _parse_exactly_one_of(name, group, field_names)
         for group in raw.get("exactly_one_of", ()) or ()
     )
-    return Type(name=name, fields=fields, doc=str(raw.get("doc", "")), exactly_one_of=groups)
+    doc = str(raw.get("doc", ""))
+    _check_doc(f"type {name}", doc)
+    return Type(name=name, fields=fields, doc=doc, exactly_one_of=groups)
 
 
 def parse_surface(raw_bytes: bytes) -> Surface:
@@ -326,6 +463,23 @@ def _check_references(surface: Surface, types: set[str], enums: set[str]) -> Non
                     raise SurfaceError(msg)
 
 
+def _check_container_item(where: str, item: TypeRef) -> None:
+    """Refuse a container nested inside a container.
+
+    The artifact declares none today. Refusing rather than rendering keeps the
+    two SDKs in step: the sibling emitter cannot render a nested container
+    either, and a construct one SDK generates for and the other refuses is a
+    release where four SDKs ship and one does not build.
+    """
+    if item.kind in {"array", "map"}:
+        msg = (
+            f"{where} nests a {item.kind} inside a container; no SDK emitter renders that "
+            f"yet, and generating for it in one language and not another is how a "
+            f"five-SDK release becomes a four-SDK release"
+        )
+        raise SurfaceError(msg)
+
+
 def _check_ref(where: str, ref: TypeRef, types: set[str], enums: set[str]) -> None:
     if ref.kind == "ref":
         if ref.ref not in types:
@@ -339,11 +493,13 @@ def _check_ref(where: str, ref: TypeRef, types: set[str], enums: set[str]) -> No
         if ref.items is None:
             msg = f"{where} is an array with no item type"
             raise SurfaceError(msg)
+        _check_container_item(f"{where}[]", ref.items)
         _check_ref(f"{where}[]", ref.items, types, enums)
     elif ref.kind == "map":
         if ref.value is None:
             msg = f"{where} is a map with no value type"
             raise SurfaceError(msg)
+        _check_container_item(f"{where}{{}}", ref.value)
         _check_ref(f"{where}{{}}", ref.value, types, enums)
     elif ref.kind == "object":
         pass
@@ -649,7 +805,9 @@ def _emit_validate(out: list[str], type_: Type) -> None:
 
     for field_ in type_.fields:
         attr = field_name(field_.name)
-        if field_.min_items > 0:
+        # Guaranteed to be an array: the parser refuses `min_items` anywhere
+        # else, so this branch cannot silently apply a list bound to a string.
+        if field_.min_items > 0 and field_.type.kind == "array":
             plural = "entry" if field_.min_items == 1 else "entries"
             checks.append(
                 f"        if self.{attr} is not None and len(self.{attr}) < {field_.min_items}:"
@@ -841,7 +999,47 @@ def emit(surface: Surface) -> str:
     # that the -check gate could not reproduce.
     while "\n\n\n\n" in rendered:
         rendered = rendered.replace("\n\n\n\n", "\n\n\n")
-    return rendered.rstrip("\n") + "\n"
+    rendered = rendered.rstrip("\n") + "\n"
+
+    # The emitter is the authority on its own layout, and it fails rather than
+    # emit a line the linter would reject. A generated file that fails
+    # `ruff check` cannot be fixed by hand -- the header forbids it -- so the
+    # only repair is here, and a loud failure at generation time is where a
+    # maintainer can act on it. The sibling emitter carries the same guard.
+    over = [
+        (index + 1, line)
+        for index, line in enumerate(rendered.split("\n"))
+        if len(line) > _MAX_COLUMNS
+    ]
+    if over:
+        first_line, first_text = over[0]
+        msg = (
+            f"the emitter produced {len(over)} line(s) over {_MAX_COLUMNS} columns, starting "
+            f"at line {first_line}: {first_text.strip()[:60]}..."
+        )
+        raise SurfaceError(msg)
+    return rendered
+
+
+def verify_vendored_digest(raw_bytes: bytes) -> None:
+    """Refuse a vendored artifact that is not the one this SDK was pinned to.
+
+    Without this the regeneration gate is a closed loop: edit the artifact,
+    regenerate, and both the CI check and the byte-comparison test are green
+    while the SDK now describes a contract the platform never published. This
+    is the only check that looks OUTSIDE the file.
+    """
+    digest = hashlib.sha256(raw_bytes).hexdigest()
+    if digest != VENDORED_ARTIFACT_SHA256:
+        msg = (
+            f"{SURFACE_PATH.name} has sha256 {digest}, not the pinned "
+            f"{VENDORED_ARTIFACT_SHA256}. The vendored artifact is a COPY of the "
+            f"platform's canonical surface, so editing it here silently forks the "
+            f"contract this SDK describes. If you are re-vendoring on purpose: copy the "
+            f"file from the platform again, update VENDORED_ARTIFACT_SHA256 in this "
+            f"script, regenerate, and name the platform commit in the pull request."
+        )
+        raise SurfaceError(msg)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -853,7 +1051,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    surface = parse_surface(SURFACE_PATH.read_bytes())
+    raw_bytes = SURFACE_PATH.read_bytes()
+    verify_vendored_digest(raw_bytes)
+    surface = parse_surface(raw_bytes)
     rendered = emit(surface)
 
     if args.check:
@@ -878,5 +1078,19 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def _cli(argv: list[str] | None = None) -> int:
+    """Run ``main`` and report a refusal as a message, not a traceback.
+
+    The value of these gates is telling a maintainer what to do about the
+    failure. A stack trace in a CI log buries the one sentence that matters
+    under frames from this script.
+    """
+    try:
+        return main(argv)
+    except SurfaceError as exc:
+        print(f"gen_authzen_types: {exc}", file=sys.stderr)
+        return 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_cli())
