@@ -14,9 +14,11 @@ that a real gateway actually behaves this way — is
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from typing import Any
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -34,7 +36,9 @@ from axonflow import (
     AuthZENResource,
     AuthZENResponse,
     AuthZENSubject,
+    AxonFlow,
 )
+from axonflow import authzen as authzen_module
 from axonflow.authzen import (
     AUTHZEN_PATH,
     AUTHZEN_PROFILE_HEADER,
@@ -998,3 +1002,228 @@ class TestTheTwoSDKsNameMistakesTheSameWay:
         with pytest.raises(Exception, match=r"extra_forbidden|Extra inputs"):
             AuthZENSubject(type="gateway", id="g1", department="finance")  # type: ignore[call-arg]
         assert not transport.calls
+
+
+class TestAnAttributeSurvivesBeingCopied:
+    """R3 round 2 found this in the TypeScript sibling and it is the same class
+    here.
+
+    Recognising an attribute by its CLASS alone fails in the dangerous
+    direction: a copy is no longer an instance, so an UNKNOWN attribute becomes
+    ordinary data and is SENT. Recognising it by SHAPE alone fails the other
+    way: a caller's own bag carrying state/value/reason is read as an attribute
+    and a legitimate request is refused. The marker closes both.
+    """
+
+    async def test_a_copied_unknown_attribute_is_still_refused(self) -> None:
+        copied = dataclasses.asdict(AuthZENAttribute.unknown("could not resolve"))
+        transport = RecordingTransport()
+        with pytest.raises(AuthZENRefusal) as caught:
+            await evaluate(
+                transport,
+                singular(context={"args": {"query": "q"}, "correlation": {"dept": copied}}),
+            )
+        assert not transport.calls, "a copied UNKNOWN attribute must never reach the network"
+        assert caught.value.pointer == "/evaluation/context/correlation/dept"
+
+    async def test_a_copied_absent_attribute_still_drops_its_member(self) -> None:
+        copied = dataclasses.asdict(AuthZENAttribute.absent())
+        transport = RecordingTransport()
+        await evaluate(
+            transport,
+            singular(context={"args": {"query": "q"}, "correlation": {"gone": copied}}),
+        )
+        assert transport.sent["evaluation"]["context"]["correlation"] == {}
+
+    async def test_a_json_round_trip_survives(self) -> None:
+        copied = json.loads(json.dumps(dataclasses.asdict(AuthZENAttribute.unknown("stale"))))
+        transport = RecordingTransport()
+        with pytest.raises(AuthZENRefusal):
+            await evaluate(
+                transport, singular(context={"args": {"query": "q"}, "correlation": {"x": copied}})
+            )
+        assert not transport.calls
+
+    async def test_a_lookalike_bag_is_NOT_read_as_an_attribute(self) -> None:
+        """The other direction, which the marker also has to close.
+
+        Without it, a caller's ordinary data carrying these three keys made the
+        SDK refuse a legitimate request with a message asserting the caller
+        could not establish a value it had established.
+        """
+        lookalike = {"state": "unknown", "value": None, "reason": "n/a"}
+        transport = RecordingTransport()
+        await evaluate(
+            transport,
+            singular(context={"args": {"query": "q"}, "correlation": {"trace": lookalike}}),
+        )
+        assert transport.calls
+        assert transport.sent["evaluation"]["context"]["correlation"]["trace"] == lookalike
+
+
+class TestTheBeltIsWiredNotMerelyPresent:
+    """R3 round 2: the belt's own tests called it directly, so deleting every
+    call site left the whole suite green - the round-1 state restored with a
+    green CI.
+
+    These drive the public entry points. The seam that makes the call site
+    observable is an attribute reaching a member the RESOLVER does not visit:
+    the belt catches it, and nothing else in the pipeline would.
+    """
+
+    @staticmethod
+    def _smuggled() -> AuthZENEnvelope:
+        envelope = AuthZENEnvelope(evaluation=singular())
+        # Placed after construction, in a bag the resolver has already walked -
+        # the only way to reach the belt's case on today's contract.
+        envelope.evaluation.context["smuggled"] = AuthZENAttribute.unknown("never resolved")  # type: ignore[index]
+        return envelope
+
+    async def test_evaluate_envelope_calls_it(self) -> None:
+        transport = RecordingTransport()
+        envelope = self._smuggled()
+        # Resolution runs first and catches this one, so the belt is reached
+        # only for a member the resolver skips - patched here, because the
+        # resolver's bag coverage is total on today's contract.
+        with pytest.raises((AuthZENRefusal, AuthZENProtocolError)):
+            await evaluate_envelope(transport, envelope)
+        assert not transport.calls
+
+    async def test_the_belt_is_reached_when_resolution_misses_a_bag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The call-site test proper.
+
+        With the resolver stubbed to a pass-through, ONLY the belt stands
+        between an unresolved attribute and the transport. Remove the belt call
+        and this test sends the request.
+        """
+        monkeypatch.setattr(authzen_module, "_resolve_bag", lambda bag, pointer: bag)
+        transport = RecordingTransport()
+        with pytest.raises(AuthZENProtocolError, match="unresolved AuthZENAttribute"):
+            await evaluate_envelope(
+                transport,
+                AuthZENEnvelope(
+                    evaluation=singular(
+                        context={"args": {"query": "q"}, "t": AuthZENAttribute.unknown("stale")}
+                    )
+                ),
+            )
+        assert not transport.calls
+
+    def test_to_wire_calls_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(authzen_module, "_resolve_bag", lambda bag, pointer: bag)
+        with pytest.raises(AuthZENProtocolError, match="unresolved AuthZENAttribute"):
+            to_wire(
+                AuthZENEnvelope(
+                    evaluation=singular(
+                        context={"args": {"query": "q"}, "t": AuthZENAttribute.unknown("stale")}
+                    )
+                )
+            )
+
+    def test_build_envelope_calls_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(authzen_module, "_resolve_bag", lambda bag, pointer: bag)
+        with pytest.raises(AuthZENProtocolError, match="unresolved AuthZENAttribute"):
+            build_envelope(
+                evaluation=singular(
+                    context={"args": {"query": "q"}, "t": AuthZENAttribute.unknown("stale")}
+                )
+            )
+
+    async def test_the_control_a_clean_envelope_passes(self) -> None:
+        """Without this, a belt that raised on everything would look as green."""
+        transport = RecordingTransport()
+        await evaluate(transport, singular())
+        assert transport.calls
+
+
+class TestTheClientRefusesWithoutSending:
+    """R3 round 2: the AuthZEN unit tests drove a MIRROR of the client's path
+    rather than the client, so reverting ``client.evaluate`` to build its
+    envelope inline - reinstating the round-1 defect exactly - left the suite
+    green.
+
+    These drive ``AxonFlow.evaluate`` itself, with the transport stubbed at
+    ``_send_raw`` so nothing leaves the process.
+    """
+
+    @staticmethod
+    def _client(
+        monkeypatch: pytest.MonkeyPatch,
+        status: int = 200,
+        body: bytes | None = None,
+    ) -> tuple[AxonFlow, list[bytes]]:
+        """A real ``AxonFlow`` with only the transport stubbed.
+
+        Patched on the CLASS: the instance carries no writable slot for it, and
+        that is the point - the stub replaces the one method that touches the
+        network and leaves every layer above it, including the wiring under
+        test, exactly as a caller gets it.
+        """
+        sent: list[bytes] = []
+
+        async def _send_raw(self, method, path, *, json_data=None, headers=None):  # noqa: ANN001, ANN202, ARG001
+            sent.append(json.dumps(json_data).encode())
+            return httpx.Response(
+                status,
+                content=body if body is not None else b'{"decision":true}',
+                request=httpx.Request(method, "http://example.invalid" + path),
+            )
+
+        monkeypatch.setattr(AxonFlow, "_send_raw", _send_raw)
+        return AxonFlow(endpoint="http://example.invalid"), sent
+
+    async def test_an_incomplete_request_is_a_typed_refusal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client, sent = self._client(monkeypatch)
+        with pytest.raises(AuthZENRefusal) as caught:
+            await client.evaluate(AuthZENRequest(subject=AuthZENSubject(type="gateway", id="g1")))
+        assert not sent
+        assert caught.value.code == "incomplete_evaluation"
+        assert caught.value.refused_by == "client"
+        await client.close()
+
+    async def test_an_unresolvable_attribute_is_a_typed_refusal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client, sent = self._client(monkeypatch)
+        with pytest.raises(AuthZENRefusal) as caught:
+            await client.evaluate(
+                singular(context={"args": {"query": "q"}, "t": AuthZENAttribute.unknown("stale")})
+            )
+        assert not sent
+        assert caught.value.code == "unevaluable_attribute"
+        await client.close()
+
+    async def test_a_good_request_is_sent_and_the_decision_is_read(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The control. Without it the two refusals above would pass over a
+        client that refused everything.
+        """
+        body = json.dumps({"decision": True, "context": ALLOW_CONTEXT}).encode()
+        client, sent = self._client(monkeypatch, body=body)
+        decision = await client.evaluate(singular())
+        assert decision.allowed is True
+        assert json.loads(sent[0])["evaluation"]["subject"]["id"] == "llm-gateway-01"
+        await client.close()
+
+    async def test_an_incomplete_plural_entry_is_a_typed_refusal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client, sent = self._client(monkeypatch)
+        with pytest.raises(AuthZENRefusal) as caught:
+            await client.evaluate_all(
+                AuthZENBulk(
+                    subject=AuthZENSubject(type="gateway", id="g1"),
+                    context={"args": {"query": "q"}},
+                    evaluations=[
+                        AuthZENRequest(resource=AuthZENResource(type="tool", id="jira/a"))
+                    ],
+                )
+            )
+        assert not sent
+        assert caught.value.code == "incomplete_evaluation"
+        await client.close()

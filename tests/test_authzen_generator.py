@@ -568,6 +568,58 @@ class TestTheEmitterRefusesWhatItCannotRender:
         with pytest.raises(gen.SurfaceError, match="same member twice"):
             gen.parse_surface(self._mutated(plant))
 
+    @pytest.mark.parametrize(
+        "member", ["artifact", "profile", "contract_schema_version", "source_schema_sha256"]
+    )
+    def test_an_unsafe_artifact_level_string_is_refused(self, member: str) -> None:
+        """R3 round 2: the first pass swept type, field and enum strings and
+        left the artifact's own top-level ones unchecked - so a quote in
+        ``profile`` still emitted a module that does not parse. Answering the
+        enumerated sites is not answering the class.
+        """
+
+        def plant(doc: dict) -> None:
+            doc[member] = 'ends the docstring """ here'
+
+        with pytest.raises(gen.SurfaceError, match="carries a quote"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_leading_underscore_field_name_is_refused(self) -> None:
+        """The fail-open inside the identifier check itself.
+
+        ``__init__`` IS a valid identifier and is not a keyword, so it passed -
+        and pydantic treats a leading-underscore attribute as private, so the
+        member vanished from the model with no error anywhere.
+        """
+
+        def plant(doc: dict) -> None:
+            doc["types"][0]["fields"][0]["name"] = "__init__"
+
+        with pytest.raises(gen.SurfaceError, match="starts with an underscore"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_a_const_no_enforcement_site_covers_is_refused(self) -> None:
+        """By the emitter's own rule for bounds: a constraint the artifact
+        declares and no SDK enforces is worse than one the emitter cannot
+        render, because it looks enforced.
+
+        The profile const passes through, because the client refuses an
+        unreadable profile by name. Any other fails here.
+        """
+
+        def plant(doc: dict) -> None:
+            action = next(t for t in doc["types"] if t["name"] == "authzen_action")
+            next(f for f in action["fields"] if f["name"] == "name")["const"] = "llm.completion"
+
+        with pytest.raises(gen.SurfaceError, match="no enforcement site covers"):
+            gen.parse_surface(self._mutated(plant))
+
+    def test_the_profile_const_the_contract_declares_still_passes(self) -> None:
+        """The control: a rule that refused every const would refuse today's
+        artifact, and this test would be the only thing to say so.
+        """
+        assert gen.parse_surface(gen.SURFACE_PATH.read_bytes()) is not None
+
     def test_an_over_long_line_is_refused_rather_than_emitted(self) -> None:
         """A generated file that fails `ruff check` cannot be fixed by hand -
         the header forbids it - so the emitter fails at generation time, where

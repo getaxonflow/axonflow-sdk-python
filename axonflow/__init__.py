@@ -491,8 +491,6 @@ __all__ = [
     "AuthZENRefusal",
     "build_envelope",
     "to_wire",
-    "build_envelope",
-    "to_wire",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",

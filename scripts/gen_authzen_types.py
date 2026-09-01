@@ -106,6 +106,20 @@ def _check_identifier(where: str, name: str) -> None:
             f"would fail to import rather than fail to generate"
         )
         raise SurfaceError(msg)
+    if name.startswith("_"):
+        # The fail-open the identifier check was written to prevent, hiding
+        # inside it: `__init__` IS a valid identifier and is not a keyword, so
+        # it passed - and pydantic treats a leading-underscore attribute as
+        # private, so the member VANISHED from the model with no error
+        # anywhere. No wire member starts with an underscore, so refusing the
+        # whole shape is both correct and the only version of this check that
+        # cannot be walked around.
+        msg = (
+            f"{where}: {name!r} starts with an underscore; pydantic treats such an "
+            f"attribute as private, so the member would be silently dropped from the "
+            f"generated model rather than generated wrongly"
+        )
+        raise SurfaceError(msg)
 
 
 def _check_doc(where: str, doc: str) -> None:
@@ -428,6 +442,18 @@ def parse_surface(raw_bytes: bytes) -> Surface:
     seen_types: set[str] = set()
     types = tuple(_parse_type(raw, seen_types) for raw in doc.get("types", ()) or ())
 
+    for member in (
+        "artifact",
+        "profile",
+        "contract_schema_version",
+        "source_schema_id",
+        "source_schema_sha256",
+    ):
+        # The class, not the enumerated sites. The first pass swept type, field
+        # and enum docs and enum values; these five are copied into code by the
+        # header emitter and were left unchecked, so a quote in `profile` still
+        # emitted a module that does not parse.
+        _check_literal(f"artifact.{member}", str(doc.get(member, "")))
     surface = Surface(
         artifact=str(doc.get("artifact", "")),
         artifact_version=int(doc.get("artifact_version", 0) or 0),
@@ -439,7 +465,38 @@ def parse_surface(raw_bytes: bytes) -> Surface:
         types=types,
     )
     _check_references(surface, seen_types, seen_enums)
+    _check_consts_are_enforced(surface)
     return surface
+
+
+def _check_consts_are_enforced(surface: Surface) -> None:
+    """Refuse a ``const`` no enforcement site covers.
+
+    The emitter deliberately renders no check for ``const``: the only one the
+    contract declares is the response context's profile, and the hand-written
+    client refuses an unreadable profile with a message that names the version
+    it does speak. Two checks put the generated one in front of the actionable
+    one and made the actionable one dead code.
+
+    That is right for the profile and wrong for anything else, and the emitter's
+    own rule for bounds says why: a constraint the artifact declares and no SDK
+    enforces is worse than one the emitter cannot render, because it looks
+    enforced. So a ``const`` whose value is the profile is allowed through to
+    the client's check, and any OTHER const fails here - loudly, at the moment
+    the platform adds it, rather than silently in five SDKs.
+    """
+    for type_ in surface.types:
+        for field_ in type_.fields:
+            if field_.const and field_.const != surface.profile:
+                msg = (
+                    f"{type_.name}.{field_.name} declares const {field_.const!r}, which no "
+                    f"enforcement site covers. The one const this emitter generates through "
+                    f"is the negotiated profile, which the client refuses by name; any other "
+                    f"would be a constraint the artifact declares and no SDK enforces. Teach "
+                    f"the emitter to render it, or teach the client to check it, before "
+                    f"adding it to the contract."
+                )
+                raise SurfaceError(msg)
 
 
 def _check_references(surface: Surface, types: set[str], enums: set[str]) -> None:

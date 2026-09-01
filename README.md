@@ -257,7 +257,11 @@ print(f"Result: {result.result}")
 
 ```python
 from axonflow import (
-    AuthZENAction, AuthZENRequest, AuthZENResource, AuthZENSubject, AuthZENRefusal,
+    AuthZENAction,
+    AuthZENRequest,
+    AuthZENResource,
+    AuthZENSubject,
+    AuthZENRefusal,
 )
 
 decision = await client.evaluate(
@@ -301,10 +305,10 @@ decision = await client.evaluate_all(
 try:
     decision = await client.evaluate(request)
 except AuthZENRefusal as refusal:
-    refusal.code        # e.g. "unevaluable_attribute" - a closed, generated set
-    refusal.pointer     # "/evaluation/subject/properties" - the member to fix
+    refusal.code  # e.g. "unevaluable_attribute" - a closed, generated set
+    refusal.pointer  # "/evaluation/subject/properties" - the member to fix
     refusal.refused_by  # "client" (this SDK) or "gateway"
-    refusal.retryable   # only a gateway dependency failure is
+    refusal.retryable  # only a gateway dependency failure is
 ```
 
 `AuthZENProtocolError` is separate and means something else: the gateway answered `200` with a body this build cannot safely act on - no profile context, a profile it cannot read, or a decision boolean that disagrees with its operational state. It is always fail-closed, and the fix is an upgrade or an operator, not a corrected request. A `401` surfaces as the SDK's ordinary `AuthenticationError`, because the gateway answers authentication before this route runs.
@@ -319,9 +323,9 @@ from axonflow import AuthZENAttribute, AUTHZEN_UNKNOWN_RESOLUTION_FAILED
 context = {
     "args": {"query": user_prompt},
     "correlation": {
-        "session_id": AuthZENAttribute.absent(),   # a fact: omitted, request sent
-        "trace_id": AuthZENAttribute.unknown(       # not a fact: refused locally,
-            AUTHZEN_UNKNOWN_RESOLUTION_FAILED       # nothing is sent
+        "session_id": AuthZENAttribute.absent(),  # a fact: omitted, request sent
+        "trace_id": AuthZENAttribute.unknown(  # not a fact: refused locally,
+            AUTHZEN_UNKNOWN_RESOLUTION_FAILED  # nothing is sent
         ),
     },
 }

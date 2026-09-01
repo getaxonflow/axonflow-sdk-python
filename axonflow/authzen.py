@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -67,7 +67,7 @@ from axonflow.authzen_types_gen import (
 from axonflow.exceptions import AuthenticationError, AxonFlowError
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
 __all__ = [
     "AUTHZEN_PATH",
@@ -214,6 +214,49 @@ class AuthZENProtocolError(AxonFlowError):
     """
 
 
+# The marker every tri-state attribute carries, and the ONLY thing
+# :func:`_is_attribute` looks for besides the class itself.
+#
+# It exists because recognising an attribute by its class alone has a silent
+# failure mode in the dangerous direction: an attribute that has been copied -
+# ``dataclasses.asdict``, a cache that round-trips through JSON, a worker
+# boundary - is no longer an instance, so an UNKNOWN one would be resolved as
+# ordinary data and SENT. Recognising it by SHAPE alone has the mirror failure:
+# a caller's own bag carrying ``state``/``value``/``reason`` is read as an
+# attribute, and a legitimate request is refused with a message asserting the
+# caller could not establish a value it did establish.
+#
+# A marker closes both. It survives every ordinary copy (it is an ordinary
+# field), and no caller's data carries it by accident. The sibling SDK uses the
+# same key for the same reason.
+AUTHZEN_ATTRIBUTE_MARKER: Final = "__axonflow_authzen_attribute__"
+
+
+def _attribute_parts(value: object) -> tuple[str, Any, str]:
+    """The (state, value, reason) of an attribute, instance or copied dict.
+
+    Only ever called behind :func:`_is_attribute`, which has already
+    established that the value is one of those two shapes.
+    """
+    if isinstance(value, AuthZENAttribute):
+        return value.state, value.value, value.reason
+    mapping: dict[str, Any] = value  # type: ignore[assignment]
+    return str(mapping.get("state", "")), mapping.get("value"), str(mapping.get("reason", ""))
+
+
+def _is_attribute(value: object) -> bool:
+    """Whether ``value`` is a tri-state attribute, however it was copied."""
+    if isinstance(value, AuthZENAttribute):
+        return True
+    if isinstance(value, dict):
+        return value.get(AUTHZEN_ATTRIBUTE_MARKER) is True and value.get("state") in {
+            "known",
+            "absent",
+            "unknown",
+        }
+    return False
+
+
 @dataclass(frozen=True)
 class AuthZENAttribute:
     """One policy-visible attribute in exactly one of three states.
@@ -254,6 +297,9 @@ class AuthZENAttribute:
     state: Literal["known", "absent", "unknown"]
     value: Any = None
     reason: str = ""
+    # Carried as an ordinary field so it survives dataclasses.asdict, a JSON
+    # round trip and a worker boundary. See AUTHZEN_ATTRIBUTE_MARKER.
+    __axonflow_authzen_attribute__: bool = True
 
     @classmethod
     def known(cls, value: Any) -> AuthZENAttribute:  # noqa: ANN401 - any JSON value
@@ -420,15 +466,16 @@ def _resolve_value(value: Any, pointer: str, depth: int = 0) -> Any:  # noqa: AN
             f"a bag that refers to itself would otherwise recurse until the interpreter stopped"
         )
         raise _Unresolvable(pointer, msg)
-    if isinstance(value, AuthZENAttribute):
-        if value.state == "known":
+    if _is_attribute(value):
+        state, payload, reason = _attribute_parts(value)
+        if state == "known":
             # A known attribute may itself hold a container carrying more
             # attributes; resolving the payload keeps the rule uniform rather
             # than depending on how deeply a caller nested its resolver output.
-            return _resolve_value(value.value, pointer, depth + 1)
-        if value.state == "absent":
+            return _resolve_value(payload, pointer, depth + 1)
+        if state == "absent":
             return _DROP
-        raise _Unresolvable(pointer, value.reason)
+        raise _Unresolvable(pointer, reason)
     if isinstance(value, dict):
         out: dict[str, Any] = {}
         for key, item in value.items():
@@ -438,11 +485,18 @@ def _resolve_value(value: Any, pointer: str, depth: int = 0) -> Any:  # noqa: AN
             if resolved is not _DROP:
                 out[key] = resolved
         return out
-    if isinstance(value, list):
-        # An ABSENT element is dropped from the list rather than left as a
-        # hole. A list with a gap in it is a different list, and the index a
-        # policy reads would shift under it either way; dropping is the reading
-        # that matches "there is no value here".
+    if isinstance(value, (list, tuple)):
+        # Tuples are walked too, and returned as lists. The belt walks them, so
+        # a resolver that did not would leave an attribute inside a tuple
+        # unresolved: the belt then refused a request the resolver should simply
+        # have resolved, and a CYCLE routed through a tuple escaped the depth
+        # bound entirely and came back as a RecursionError. Two walkers with
+        # different container sets is the shape of that whole class of bug.
+        #
+        # An ABSENT element is dropped rather than left as a hole. A list with a
+        # gap in it is a different list, and the index a policy reads would
+        # shift under it either way; dropping is the reading that matches "there
+        # is no value here".
         items = []
         for index, item in enumerate(value):
             resolved = _resolve_value(item, f"{pointer}/{index}", depth + 1)
@@ -545,17 +599,31 @@ def _envelope(
 
 def build_envelope(
     *,
-    evaluation: AuthZENRequest | None = None,
-    evaluations: AuthZENBulk | None = None,
+    evaluation: AuthZENRequest | Mapping[str, Any] | None = None,
+    evaluations: AuthZENBulk | Mapping[str, Any] | None = None,
 ) -> AuthZENEnvelope:
-    """Build an envelope, checking COMPLETENESS before the schema.
+    """Build an envelope: coerce, RESOLVE, check completeness, then construct.
 
-    The order matters and is the same in every SDK. A merged entry that names
-    no action is an INCOMPLETE evaluation whichever envelope shape carried it;
-    letting the generated validator reach the singular member's own required
-    set first would report the same mistake under ``malformed_envelope`` for a
-    singular request and ``incomplete_evaluation`` for a plural one.
+    That order is the same in every SDK, and it has to be: an envelope with two
+    problems - an unresolvable attribute AND a missing action - must be reported
+    the same way in each, or a customer comparing two languages is told two
+    different things about one request.
+
+    Coercion comes first because a caller may pass a plain mapping. Reading
+    ``request.subject`` off a dict raises ``AttributeError``, which is neither
+    documented nor typed - the exception this function exists to stop escaping.
     """
+    evaluation = _coerce(AuthZENRequest, evaluation, "/evaluation")
+    evaluations = _coerce(AuthZENBulk, evaluations, "/evaluations")
+
+    try:
+        if evaluation is not None:
+            evaluation = _resolve_request(evaluation, "/evaluation")
+        if evaluations is not None:
+            evaluations = _resolve_bulk(evaluations)
+    except _Unresolvable as unresolvable:
+        raise _unresolvable_refusal(unresolvable) from unresolvable
+
     if evaluation is not None:
         _check_complete(evaluation, None, "/evaluation")
     elif evaluations is not None:
@@ -567,7 +635,76 @@ def build_envelope(
         )
         for index, entry in enumerate(evaluations.evaluations):
             _check_complete(entry, base, f"/evaluations/evaluations/{index}")
-    return _envelope(evaluation=evaluation, evaluations=evaluations)
+    envelope = _envelope(evaluation=evaluation, evaluations=evaluations)
+    # The belt runs here as well as on the send path, because this function's
+    # whole job is to hand back an envelope that is ready to send. The sibling
+    # SDK's buildEnvelope does the same, so a caller that builds ahead of time
+    # gets the same answer in both languages.
+    _assert_fully_resolved(envelope)
+    return envelope
+
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+
+def _coerce(model: type[_ModelT], value: object, at: str) -> _ModelT | None:
+    """Accept a model or a plain mapping, reporting a mistake as a refusal.
+
+    A caller handing ``evaluate`` a dict is doing an ordinary thing, and it used
+    to work: the envelope model coerced it. Reaching for ``.subject`` on it
+    instead raises ``AttributeError`` - no code, no pointer, and outside the
+    documented raise set, which is the whole class of exception this path exists
+    to keep in.
+    """
+    if value is None or isinstance(value, model):
+        return value
+    try:
+        return model.model_validate(value)
+    except ValidationError as exc:
+        raise AuthZENRefusal(
+            AUTHZEN_ERROR_CODE_MALFORMED_ENVELOPE,
+            f"the {at.lstrip('/')} member does not satisfy the AuthZEN contract: {exc}",
+            refused_by="client",
+            pointer=at,
+        ) from exc
+
+
+def _unresolvable_refusal(unresolvable: _Unresolvable) -> AuthZENRefusal:
+    """The one refusal an UNKNOWN attribute produces, wherever it is found.
+
+    Built in one place because two entry points resolve - ``build_envelope`` on
+    the client's path and ``resolve_envelope`` for an envelope a caller already
+    holds - and two copies of this message would drift into two explanations of
+    the same event.
+    """
+    msg = (
+        f"the attribute at {unresolvable.pointer} could not be established "
+        f"({unresolvable.reason}), so this request was not sent. The gateway would "
+        f"have evaluated as though the attribute had no value, and the decision - "
+        f"and every audit of it - would record that it was considered when nothing "
+        f"read it. Establish the value, or send it as an explicitly ABSENT "
+        f"attribute if the source proved there is none."
+    )
+    return AuthZENRefusal(
+        AUTHZEN_ERROR_CODE_UNEVALUABLE_ATTRIBUTE,
+        msg,
+        refused_by="client",
+        pointer=unresolvable.pointer,
+    )
+
+
+def _resolve_bulk(bulk: AuthZENBulk) -> AuthZENBulk:
+    """Resolve a plural envelope's shared base and each of its entries."""
+    return AuthZENBulk(
+        subject=_resolve_subject(bulk.subject, "/evaluations"),
+        action=_resolve_action(bulk.action, "/evaluations"),
+        resource=_resolve_resource(bulk.resource, "/evaluations"),
+        context=_resolve_bag(bulk.context, "/evaluations/context"),
+        evaluations=[
+            _resolve_request(entry, f"/evaluations/evaluations/{index}")
+            for index, entry in enumerate(bulk.evaluations)
+        ],
+    )
 
 
 def resolve_envelope(envelope: AuthZENEnvelope) -> AuthZENEnvelope:
@@ -585,34 +722,9 @@ def resolve_envelope(envelope: AuthZENEnvelope) -> AuthZENEnvelope:
         if envelope.evaluation is not None:
             return _envelope(evaluation=_resolve_request(envelope.evaluation, "/evaluation"))
         if envelope.evaluations is not None:
-            bulk = envelope.evaluations
-            return _envelope(
-                evaluations=AuthZENBulk(
-                    subject=_resolve_subject(bulk.subject, "/evaluations"),
-                    action=_resolve_action(bulk.action, "/evaluations"),
-                    resource=_resolve_resource(bulk.resource, "/evaluations"),
-                    context=_resolve_bag(bulk.context, "/evaluations/context"),
-                    evaluations=[
-                        _resolve_request(entry, f"/evaluations/evaluations/{i}")
-                        for i, entry in enumerate(bulk.evaluations)
-                    ],
-                )
-            )
+            return _envelope(evaluations=_resolve_bulk(envelope.evaluations))
     except _Unresolvable as unresolvable:
-        msg = (
-            f"the attribute at {unresolvable.pointer} could not be established "
-            f"({unresolvable.reason}), so this request was not sent. The gateway would "
-            f"have evaluated as though the attribute had no value, and the decision — "
-            f"and every audit of it — would record that it was considered when nothing "
-            f"read it. Establish the value, or send it as an explicitly ABSENT "
-            f"attribute if the source proved there is none."
-        )
-        raise AuthZENRefusal(
-            AUTHZEN_ERROR_CODE_UNEVALUABLE_ATTRIBUTE,
-            msg,
-            refused_by="client",
-            pointer=unresolvable.pointer,
-        ) from unresolvable
+        raise _unresolvable_refusal(unresolvable) from unresolvable
     # Unreachable: the generated envelope validator refuses an envelope with
     # neither member set. Stated rather than assumed, because returning the
     # input unchanged here would send an envelope no resolver had walked. The
@@ -725,9 +837,17 @@ def _decode_refusal(raw: bytes) -> AuthZENError | None:
         return None
     known = {"code", "pointer", "message", "supported", "request_id"}
     try:
-        return AuthZENError.model_validate({k: v for k, v in decoded.items() if k in known})
+        body = AuthZENError.model_validate({k: v for k, v in decoded.items() if k in known})
     except (ValidationError, ValueError):
         return None
+    # An EMPTY code is not a refusal document either, and the artifact does not
+    # give `code` a min_length - so nothing else refuses it. A refusal whose
+    # code matches no constant falls through every caller's branch table and
+    # reports `retryable=False`, which is the shape of an answer rather than an
+    # answer. The generic-error path at least says what the status was.
+    if not body.code.strip():
+        return None
+    return body
 
 
 def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
@@ -864,7 +984,7 @@ async def evaluate_envelope(
     return AuthZENDecision.model_validate(response.model_dump())
 
 
-def _assert_fully_resolved(value: object, path: str = "") -> None:
+def _assert_fully_resolved(value: object, path: str = "", depth: int = 0) -> None:
     """Guarantee no tri-state attribute reaches the wire.
 
     ``resolve_envelope`` walks every bag the contract declares, so on today's
@@ -880,7 +1000,18 @@ def _assert_fully_resolved(value: object, path: str = "") -> None:
     it is handed is a model tree and stopping at the first ``BaseModel`` would
     make it inert for everything below the top level.
     """
-    if isinstance(value, AuthZENAttribute):
+    if depth > _MAX_ATTRIBUTE_DEPTH:
+        # Bounded for the same reason the resolver is, and by the same number.
+        # The two walkers used to disagree - one bounded, one not - so a cycle
+        # routed through a container only the unbounded one visited came back as
+        # a RecursionError, which is the error type this bound exists to remove.
+        msg = (
+            f"the structure at {path or '/'} nests deeper than {_MAX_ATTRIBUTE_DEPTH} "
+            f"levels; this SDK will not walk it, and a structure that refers to itself "
+            f"would otherwise recurse until the interpreter stopped"
+        )
+        raise AuthZENProtocolError(msg)
+    if _is_attribute(value):
         msg = (
             f"an unresolved AuthZENAttribute reached the wire at {path or '/'}. "
             f"Tri-state attributes are only supported inside the context and "
@@ -889,15 +1020,15 @@ def _assert_fully_resolved(value: object, path: str = "") -> None:
         raise AuthZENProtocolError(msg)
     if isinstance(value, BaseModel):
         for name in type(value).model_fields:
-            _assert_fully_resolved(getattr(value, name), f"{path}/{name}")
+            _assert_fully_resolved(getattr(value, name), f"{path}/{name}", depth + 1)
         return
     if isinstance(value, dict):
         for key, item in value.items():
-            _assert_fully_resolved(item, f"{path}/{_escape_pointer_token(str(key))}")
+            _assert_fully_resolved(item, f"{path}/{_escape_pointer_token(str(key))}", depth + 1)
         return
     if isinstance(value, (list, tuple)):
         for index, item in enumerate(value):
-            _assert_fully_resolved(item, f"{path}/{index}")
+            _assert_fully_resolved(item, f"{path}/{index}", depth + 1)
 
 
 def to_wire(envelope: AuthZENEnvelope) -> dict[str, Any]:
