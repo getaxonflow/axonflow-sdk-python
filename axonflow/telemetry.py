@@ -127,6 +127,11 @@ def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealt
             return _EMPTY_HEALTH_PROBE
         body = resp.json()
         if not isinstance(body, dict):
+            # Belt-and-braces. The broad except below already covers this
+            # shape (a list would raise AttributeError on .get), so no test
+            # can distinguish this guard's presence — it is here to make the
+            # not-an-object case an explicit cheap return rather than an
+            # exception, not because a test pins it.
             return _EMPTY_HEALTH_PROBE
 
         # Each field is promoted independently and only when it is a
@@ -143,7 +148,19 @@ def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealt
             # client-side.
             license_tier=tier if isinstance(tier, str) and tier else None,
         )
-    except (httpx.HTTPError, OSError, ValueError, KeyError, TypeError, AttributeError):
+    except Exception:  # noqa: BLE001 — see below; a probe must never raise
+        # Deliberately broad. This is a best-effort probe on the telemetry
+        # path, whose overriding constraint is that telemetry never disrupts
+        # the caller — there is no exception from it worth propagating.
+        #
+        # An explicit tuple was a fail-CLOSED trap here: httpx.InvalidURL does
+        # NOT subclass httpx.HTTPError, so a malformed endpoint (e.g. the
+        # unclosed-bracket typo "http://[::1") escaped the old explicit
+        # tuple of HTTPError, OSError, ValueError, KeyError, TypeError and
+        # AttributeError, and raised out of _send_telemetry_ping_now, which documents
+        # that it returns False on any failure. Enumerating exception types
+        # here is whack-a-mole against a third-party hierarchy; catching
+        # everything is the property we actually want.
         return _EMPTY_HEALTH_PROBE
 
 
@@ -410,7 +427,12 @@ def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) ->
         if debug:
             logger.debug("Telemetry ping successful: %s", body)
         return True  # noqa: TRY300 — restructuring as else: would force splitting the try block; the linear flow here is more readable
-    except (httpx.HTTPError, OSError, ValueError, TypeError, AttributeError):
+    except Exception:  # noqa: BLE001 — telemetry must never disrupt the caller
+        # Deliberately broad, same reasoning as _probe_platform_health: this
+        # function documents "False on any failure", and an explicit tuple
+        # could not honour that. httpx.InvalidURL does not subclass
+        # httpx.HTTPError, so a malformed AXONFLOW_CHECKPOINT_URL raised
+        # straight through the previous tuple.
         # Silent failure -- never disrupt the caller.
         if debug:
             logger.debug("Telemetry ping failed (non-fatal)", exc_info=True)

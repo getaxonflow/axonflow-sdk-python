@@ -31,18 +31,22 @@ confirmation, not a CI gate.
 
 from __future__ import annotations
 
+import contextlib
 import http.server
 import json
 import os
 import socketserver
+import subprocess
 import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import httpx
 
-from axonflow.telemetry import _send_telemetry_ping_now
+from axonflow import AxonFlow
+from axonflow.heartbeat import _resolve_stamp_path
 
 FAILURES = 0
 
@@ -85,9 +89,40 @@ def stand_in_platform(status: int, body: str) -> Iterator[str]:
             srv.shutdown()
 
 
+CHILD_ENV_VAR = "AXONFLOW_E2E_TIER_CHILD"
+
+
+def clear_stamp() -> None:
+    """Remove the 7-day heartbeat stamp so the ping actually fires."""
+    stamp = _resolve_stamp_path()
+    if stamp is not None:
+        with contextlib.suppress(OSError):
+            stamp.unlink()
+
+
+def run_child() -> None:
+    """The re-executed half: construct ONE real client and let the SDK ping.
+
+    This is the whole point of a runtime proof — it goes through the public
+    constructor, the heartbeat gate, the daemon thread and the atexit flush,
+    rather than calling the private ping function the unit tests already
+    cover. A fresh PROCESS per case is required because the heartbeat state
+    is a module-level singleton: one process delivers at most one ping no
+    matter how many clients it builds.
+    """
+    clear_stamp()
+    AxonFlow(
+        endpoint=os.environ.get("AXONFLOW_E2E_PLATFORM_ENDPOINT", ""),
+        client_id="rt-e2e",
+        client_secret="rt-e2e",
+    )
+    # The atexit flush handler joins the telemetry thread on interpreter exit.
+
+
 def capture_one_ping(platform_endpoint: str) -> bytes:
-    """Run one real ping against ``platform_endpoint``; return the wire body."""
+    """Run one REAL client — in a fresh child process — and return the wire body."""
     captured: dict[str, bytes] = {}
+    delivered = threading.Event()
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
@@ -99,16 +134,27 @@ def capture_one_ping(platform_endpoint: str) -> bytes:
             self.send_header("Content-Length", str(len(resp)))
             self.end_headers()
             self.wfile.write(resp)
+            delivered.set()
 
         def log_message(self, *_args: object) -> None:
             return
 
-    os.environ["AXONFLOW_TELEMETRY"] = ""
     with socketserver.TCPServer(("127.0.0.1", 0), Handler) as srv:
         threading.Thread(target=srv.serve_forever, daemon=True).start()
-        url = f"http://127.0.0.1:{srv.server_address[1]}/v1/ping"
+        env = dict(os.environ)
+        env[CHILD_ENV_VAR] = "1"
+        env["AXONFLOW_E2E_PLATFORM_ENDPOINT"] = platform_endpoint
+        env["AXONFLOW_CHECKPOINT_URL"] = f"http://127.0.0.1:{srv.server_address[1]}/v1/ping"
+        env["AXONFLOW_TELEMETRY"] = ""
         try:
-            _send_telemetry_ping_now(url, "production", platform_endpoint, debug=False)
+            subprocess.run(  # noqa: S603
+                [sys.executable, str(Path(__file__).resolve())],
+                env=env,
+                check=False,
+                capture_output=True,
+                timeout=30,
+            )
+            delivered.wait(timeout=5)
         finally:
             srv.shutdown()
     return captured.get("body", b"")
@@ -191,8 +237,14 @@ def run_matrix() -> None:
     with stand_in_platform(200, "{}") as dead_endpoint:
         dead = dead_endpoint
 
+    # NOTE: "endpoint not configured" is deliberately absent here. The public
+    # AxonFlow(...) constructor REJECTS an empty endpoint ("endpoint is
+    # required"), so that case is unreachable through the real client and can
+    # only be driven against the private ping function — which is what the
+    # unit suite does (test_endpoint_not_configured). A runtime proof that
+    # reached for the private function to keep a row would stop being a
+    # runtime proof.
     cases: list[tuple[str, str, object]] = [
-        ("endpoint not configured", "", None),
         ("platform unreachable", dead, None),
     ]
     specs = [
@@ -239,6 +291,10 @@ def run_matrix() -> None:
 
 
 def main() -> int:
+    if os.environ.get(CHILD_ENV_VAR):
+        run_child()
+        return 0
+
     real = os.environ.get("AXONFLOW_E2E_PLATFORM_ENDPOINT")
     if real:
         run_against_real_platform(real)

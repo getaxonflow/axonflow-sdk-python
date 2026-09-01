@@ -36,6 +36,17 @@ from axonflow.telemetry import (
 _REAL_HTTPX_GET = httpx.get
 _REAL_HTTPX_POST = httpx.post
 
+# Endpoints that raise from inside httpx rather than returning a response.
+# "http://[::1" (an unclosed IPv6 bracket) is the one that matters: it raises
+# httpx.InvalidURL, which does NOT subclass httpx.HTTPError.
+MALFORMED_ENDPOINTS = [
+    "http://[::1",
+    "http://\x7f",  # control character in host
+    "http://",  # no host
+    "not a url",
+    "",
+]
+
 # Exactly the values platform/agent/run.go currentLicenseTier() can return,
 # plus the csaas "Plus" alias its health serializer emits.
 PLATFORM_EMITTED_TIERS = ["community", "evaluation", "Enterprise", "Plus", "starting"]
@@ -261,6 +272,101 @@ class TestProbeSharesTheTelemetryDeadline:
         assert probe.license_tier is None
         # Bounded by the supplied budget, not an independent per-probe timeout.
         assert elapsed < 0.4 + 1.0, f"probe took {elapsed}s — a second timeout is stacking"
+
+
+class TestTheProbeNeverRaisesIntoTheCaller:
+    """Telemetry must never disrupt the caller — including on a malformed endpoint.
+
+    ``httpx.InvalidURL`` does NOT subclass ``httpx.HTTPError``, so the explicit
+    exception tuple these functions used to carry let it escape: an endpoint
+    with an unclosed IPv6 bracket raised straight out of
+    ``_send_telemetry_ping_now``, which documents that it returns ``False`` on
+    any failure. Both functions now catch broadly.
+    """
+
+    @pytest.mark.parametrize("endpoint", MALFORMED_ENDPOINTS)
+    def test_probe_returns_empty_instead_of_raising(
+        self, monkeypatch: pytest.MonkeyPatch, endpoint: str
+    ) -> None:
+        monkeypatch.setattr(httpx, "get", _REAL_HTTPX_GET)
+
+        probe = _probe_platform_health(endpoint, timeout=0.5)
+
+        assert probe.platform_version is None
+        assert probe.license_tier is None
+
+    @pytest.mark.parametrize("endpoint", MALFORMED_ENDPOINTS)
+    def test_the_whole_ping_returns_false_instead_of_raising(
+        self, monkeypatch: pytest.MonkeyPatch, endpoint: str
+    ) -> None:
+        monkeypatch.setattr(httpx, "get", _REAL_HTTPX_GET)
+        monkeypatch.setattr(httpx, "post", _REAL_HTTPX_POST)
+        monkeypatch.setenv("AXONFLOW_TELEMETRY", "")
+
+        # Nothing is listening on the checkpoint URL either; the point is that
+        # the call RETURNS rather than propagating an exception.
+        assert (
+            _send_telemetry_ping_now(
+                "http://127.0.0.1:1/v1/ping", "production", endpoint, debug=False
+            )
+            is False
+        )
+
+    def test_a_malformed_checkpoint_url_also_returns_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The POST leg has the same exposure as the probe leg.
+        monkeypatch.setattr(httpx, "get", _REAL_HTTPX_GET)
+        monkeypatch.setattr(httpx, "post", _REAL_HTTPX_POST)
+        monkeypatch.setenv("AXONFLOW_TELEMETRY", "")
+
+        assert _send_telemetry_ping_now("http://[::1", "production", "", debug=False) is False
+
+
+class TestTheWholePingHonoursOneDeadline:
+    """Exercises the CALL SITE, not just the probe.
+
+    ``test_a_stalled_health_does_not_stack_a_second_timeout`` hands
+    ``_probe_platform_health`` a budget directly, so it stays green even if
+    ``_send_telemetry_ping_now`` stops passing ``timeout=health_budget`` — the
+    exact mutation that restores issue #1692's ~5s worst case. Testing the
+    predicate is not testing the wiring.
+    """
+
+    def test_a_stalled_health_does_not_blow_the_shared_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(httpx, "get", _REAL_HTTPX_GET)
+        monkeypatch.setattr(httpx, "post", _REAL_HTTPX_POST)
+        monkeypatch.setenv("AXONFLOW_TELEMETRY", "")
+
+        class _Stalling(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                time.sleep(10)
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        with socketserver.TCPServer(("127.0.0.1", 0), _Stalling) as platform_srv:
+            threading.Thread(target=platform_srv.serve_forever, daemon=True).start()
+            endpoint = f"http://127.0.0.1:{platform_srv.server_address[1]}"
+            try:
+                with _checkpoint() as cap:
+                    started = time.monotonic()
+                    _send_telemetry_ping_now(
+                        cap["url"].decode(), "production", endpoint, debug=False
+                    )
+                    elapsed = time.monotonic() - started
+            finally:
+                platform_srv.shutdown()
+
+        # The health probe is capped at 1s out of the shared _TIMEOUT_SECONDS
+        # budget. A call site that dropped the derived timeout would fall back
+        # to the 2.0s default and push the total well past this bound.
+        assert elapsed < 2.0, (
+            f"the whole ping took {elapsed:.2f}s — the call site is not passing "
+            f"the derived health budget (issue #1692)"
+        )
 
 
 class TestDeploymentModeIsUnaffected:
