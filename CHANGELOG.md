@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.2.0] - 2026-09-01: AuthZEN-native authorization surface
+
 ### Added
 
 - **AuthZEN-native authorization surface (ADR-065, #3615).** `client.evaluate`
@@ -45,6 +47,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artifact, vendored byte-identically at `tests/fixtures/authzen-surface.json`.
   `scripts/gen_authzen_types.py` emits `axonflow/authzen_types_gen.py`; CI
   fails if the committed module is not what the artifact produces.
+
+- **Documentation.** `README.md` gains an AuthZEN section covering the call
+  shape, the refusal contract, bulk semantics, obligations and the table of
+  what is evaluable today. `docs/AUTHZEN_MIGRATION_DRAFT.md` carries the
+  legacy-to-AuthZEN mapping table and the v10.3.0 / v11.0.0 / v12.0.0 timeline;
+  it is a DRAFT held out of the README on purpose, because nothing is
+  deprecated today. The legacy surface is deprecated at v11.0.0 and removed
+  only at v12.0.0.
+- **Runnable proofs**: `examples/authzen_evaluation.py` and
+  `runtime-e2e/authzen_evaluation/` (the latter runs against a live agent).
+
+### Migration notes
+
+- **No migration is required.** A 9.1.0 integration behaves identically on
+  9.2.0. `client.decide` and the gateway/proxy methods are unchanged, still
+  supported, and wire-stable through all of v11. The notes below apply only if
+  you choose to move an integration onto the new surface.
+- The mapping is mechanical: `stage="llm"` becomes
+  `AuthZENAction(name="llm.completion")` plus `AuthZENResource(type="llm")`,
+  `stage="tool"` becomes `tool.call` plus
+  `AuthZENResource(type="tool", id="<server>/<tool>")`, and `stage="agent"`
+  becomes `agent.invoke`. `caller_identity.gateway_id` becomes
+  `AuthZENSubject(type="gateway", id=...)`, `query` moves to
+  `context={"args": {"query": ...}}`, and `verdict` becomes
+  `decision.allowed` plus `decision.state`.
+- **The one behavioural difference to plan for**: the legacy surface silently
+  dropped context members it did not recognise; the AuthZEN surface refuses
+  them and names the member by JSON Pointer. Code that was quietly sending
+  fields nothing read will start receiving refusals naming those fields, which
+  is the surface reporting something true that was previously hidden. A
+  refusal is NOT a denial: branch on `AuthZENRefusal` rather than treating
+  every error as a deny.
+- **An end-user subject is not yet expressible.** `AuthZENSubject.type` must be
+  `"gateway"`. Integrations that authorize per end user should stay on the
+  legacy `user_token` path until the identity plane arrives at v11.
+- The full table and timeline live in `docs/AUTHZEN_MIGRATION_DRAFT.md`.
 
 ## [9.1.0] - 2026-08-04
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axonflow"
-version = "9.1.0"
+version = "9.2.0"
 description = "AxonFlow Python SDK - Enterprise AI Governance in 3 Lines of Code"
 readme = "README.md"
 license = {text = "MIT"}
