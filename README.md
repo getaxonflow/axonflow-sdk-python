@@ -311,7 +311,7 @@ except AuthZENRefusal as refusal:
     refusal.retryable  # only a gateway dependency failure is
 ```
 
-`AuthZENProtocolError` is separate and means something else: the gateway answered `200` with a body this build cannot safely act on - no profile context, a profile it cannot read, or a decision boolean that disagrees with its operational state. It is always fail-closed, and the fix is an upgrade or an operator, not a corrected request. A `401` surfaces as the SDK's ordinary `AuthenticationError`, because the gateway answers authentication before this route runs.
+`AuthZENProtocolError` is separate and means something else: the gateway answered `200` with a body this build cannot safely act on - no profile context, a profile it cannot read, or a decision boolean that disagrees with its operational state. It is always fail-closed, and the fix is an upgrade or an operator, not a corrected request. Read `.kind` to tell those apart without matching on the message: `unsupported_profile` and `unknown_operational_state` mean upgrade the SDK, while `missing_profile_context`, `decision_state_disagreement`, `obligations_on_refusal` and `undecodable_body` mean go and look at the deployment. A `401` surfaces as the SDK's ordinary `AuthenticationError`, because the gateway answers authentication before this route runs.
 
 **`decision.allowed`, never `decision.decision`.** The bare boolean is AuthZEN 1.0's collapsed rendering; `allowed` additionally requires the operational state to be `ALLOW`, so a `CHALLENGE` or an `ERROR` can never be read as permission.
 

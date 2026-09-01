@@ -32,7 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refused, and whether a retry could help) and `AuthZENProtocolError` (a 200
   whose body this build cannot safely act on - no profile context, an unknown
   profile, or a decision boolean that disagrees with its operational state).
-  A `401` continues to surface as the SDK's existing `AuthenticationError`.
+  `AuthZENProtocolError.kind` names which of those it is, so a caller can tell
+  "upgrade the SDK" from "go and look at the deployment" without matching on the
+  message. A `401` continues to surface as the SDK's existing
+  `AuthenticationError`.
+- `AUTHZEN_ATTRIBUTE_MARKER` is exported from the package root, along with the
+  `AuthZENRefusedBy`, `AuthZENAttributeState` and `AuthZENTransport` type
+  aliases. The marker is what a caller needs to hand-build an attribute on the
+  far side of a boundary the objects cannot cross - a queue, a worker, a cache
+  that round-trips through JSON - which is the case the marker exists for.
 - The AuthZEN wire types are GENERATED from the platform's canonical surface
   artifact, vendored byte-identically at `tests/fixtures/authzen-surface.json`.
   `scripts/gen_authzen_types.py` emits `axonflow/authzen_types_gen.py`; CI

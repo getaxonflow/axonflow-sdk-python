@@ -23,6 +23,16 @@ It asserts what only a live agent can answer:
      — the release constraint is that this route is an ADAPTER over the same
      evaluation, and agreement is the only way to observe that from outside.
 
+Every check catches BROADLY and reports the failure through ``check()``. The
+narrow ``(AuthZENRefusal, AuthZENProtocolError)`` this file used to catch is not
+the raise set of the code under test: a 500, or any non-2xx whose body is not a
+refusal document, comes out of ``evaluate`` as a base ``AxonFlowError``, and an
+uncaught one aborted the run at the FIRST check and printed a traceback instead
+of a named failing line -- so a broken deployment reported less than a working
+one, and the seven checks after it were never attempted. A driver whose job is
+to say which assertions hold must survive every one of them. The sibling
+TypeScript driver catches broadly at all eight sites for the same reason.
+
 Run locally against a community-SaaS stack (which enforces authentication, so
 part 4 is meaningful; plain community mode accepts anonymous callers):
 
@@ -41,7 +51,6 @@ import base64
 import json
 import os
 import sys
-import urllib.error
 import urllib.request
 
 from axonflow import (
@@ -57,7 +66,7 @@ from axonflow import (
     AuthZENSubject,
     AxonFlow,
 )
-from axonflow.authzen import AuthZENProtocolError, AuthZENRefusal
+from axonflow.authzen import AuthZENRefusal
 from axonflow.exceptions import AuthenticationError
 
 ENDPOINT = os.environ.get("AXONFLOW_AGENT_URL", "http://localhost:8080")
@@ -127,7 +136,7 @@ def decide_verdict(query: str) -> str:
 async def check_route_answers(client: AxonFlow) -> None:
     try:
         decision = await client.evaluate(request(BENIGN))
-    except (AuthZENRefusal, AuthZENProtocolError) as exc:
+    except Exception as exc:
         check("the AuthZEN route answers a well-formed evaluation", str(exc))
         return
     check("the AuthZEN route answers a well-formed evaluation", None)
@@ -154,7 +163,7 @@ async def check_route_answers(client: AxonFlow) -> None:
 async def check_denial_is_a_decision(client: AxonFlow) -> None:
     try:
         decision = await client.evaluate(request(BLOCKED))
-    except (AuthZENRefusal, AuthZENProtocolError) as exc:
+    except Exception as exc:
         check("a blocked query returns a decision rather than an error", str(exc))
         return
     check("a blocked query returns a decision rather than an error", None)
@@ -218,8 +227,8 @@ async def check_refusals(client: AxonFlow) -> None:
             elif refusal.pointer != want_pointer:
                 problem = f"pointer={refusal.pointer!r} want {want_pointer!r}"
             check(name, problem)
-        except AuthZENProtocolError as exc:
-            check(name, f"protocol error: {exc}")
+        except Exception as exc:
+            check(name, f"not a typed refusal: {type(exc).__name__}: {exc}")
         else:
             check(name, "the server returned a decision; the attribute was evaluated around")
 
@@ -254,8 +263,11 @@ async def check_plural_pointer(client: AxonFlow) -> None:
             "a plural entry's refusal names the entry, not the envelope",
             None if refusal.pointer == want else f"pointer={refusal.pointer!r} want {want!r}",
         )
-    except AuthZENProtocolError as exc:
-        check("a plural entry's refusal names the entry, not the envelope", f"protocol: {exc}")
+    except Exception as exc:
+        check(
+            "a plural entry's refusal names the entry, not the envelope",
+            f"not a typed refusal: {type(exc).__name__}: {exc}",
+        )
     else:
         check(
             "a plural entry's refusal names the entry, not the envelope",
@@ -277,7 +289,7 @@ async def check_bulk_meets_to_one_decision(client: AxonFlow) -> None:
                 ],
             )
         )
-    except (AuthZENRefusal, AuthZENProtocolError) as exc:
+    except Exception as exc:
         check("a bulk envelope meets its entries into one decision", str(exc))
         return
     check(
@@ -306,7 +318,7 @@ async def check_auth_failures_are_observable(bad_secret: str) -> None:
                 await client.evaluate(request(BENIGN))
             except AuthenticationError:
                 check(f"{name} surfaces as an authentication failure", None)
-            except (AuthZENRefusal, AuthZENProtocolError) as exc:
+            except Exception as exc:
                 check(
                     f"{name} surfaces as an authentication failure",
                     f"surfaced as {type(exc).__name__}, which a caller reads as a policy outcome",
@@ -325,12 +337,12 @@ async def check_agreement_with_decide(client: AxonFlow) -> None:
         label = "benign" if query == BENIGN else "blocked"
         try:
             decision = await client.evaluate(request(query))
-        except (AuthZENRefusal, AuthZENProtocolError) as exc:
+        except Exception as exc:
             check(f"agreement with /api/v1/decide ({label})", str(exc))
             continue
         try:
             verdict = decide_verdict(query)
-        except (urllib.error.URLError, RuntimeError, ValueError) as exc:
+        except Exception as exc:
             check(f"agreement with /api/v1/decide ({label})", str(exc))
             continue
         legacy_allowed = verdict == "allow"

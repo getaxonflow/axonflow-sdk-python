@@ -30,8 +30,13 @@ So treat an :class:`AuthZENRefusal` as "fix the request", and retry only when
 from __future__ import annotations
 
 import json
+
+# Imported at RUNTIME rather than under TYPE_CHECKING: the public type aliases
+# below are ordinary assignments, so the names they are built from have to exist
+# when the module is imported, not only when a checker reads it.
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Literal, TypeAlias, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -67,11 +72,21 @@ from axonflow.authzen_types_gen import (
 from axonflow.exceptions import AuthenticationError, AxonFlowError
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Mapping
 
 __all__ = [
+    "AUTHZEN_ATTRIBUTE_MARKER",
     "AUTHZEN_PATH",
     "AUTHZEN_PROFILE_HEADER",
+    "AUTHZEN_PROTOCOL_DECISION_STATE_DISAGREEMENT",
+    "AUTHZEN_PROTOCOL_MISSING_PROFILE_CONTEXT",
+    "AUTHZEN_PROTOCOL_OBLIGATIONS_ON_REFUSAL",
+    "AUTHZEN_PROTOCOL_STRUCTURE_TOO_DEEP",
+    "AUTHZEN_PROTOCOL_UNDECODABLE_BODY",
+    "AUTHZEN_PROTOCOL_UNKNOWN_OPERATIONAL_STATE",
+    "AUTHZEN_PROTOCOL_UNRESOLVED_ATTRIBUTE",
+    "AUTHZEN_PROTOCOL_UNSPECIFIED",
+    "AUTHZEN_PROTOCOL_UNSUPPORTED_PROFILE",
     "AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED",
     "AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE",
     "AUTHZEN_UNKNOWN_MALFORMED_VALUE",
@@ -81,9 +96,13 @@ __all__ = [
     "AUTHZEN_UNKNOWN_SCHEMA_MISMATCH",
     "AUTHZEN_UNKNOWN_STALE",
     "AuthZENAttribute",
+    "AuthZENAttributeState",
     "AuthZENDecision",
     "AuthZENProtocolError",
+    "AuthZENProtocolErrorKind",
     "AuthZENRefusal",
+    "AuthZENRefusedBy",
+    "AuthZENTransport",
     "build_envelope",
     "to_wire",
 ]
@@ -122,6 +141,29 @@ AUTHZEN_UNKNOWN_MALFORMED_VALUE: Final = "malformed_value"
 AUTHZEN_UNKNOWN_REQUIRED_ABSENT: Final = "required_attribute_absent"
 
 
+# --------------------------------------------------------------------------
+# The public type aliases.
+# --------------------------------------------------------------------------
+#
+# Named rather than left inline so a caller can annotate its own handler with
+# the same vocabulary the SDK uses, and so the surface matches the sibling
+# TypeScript SDK, which exports these three names from its package root.
+
+# Who declined to evaluate: this SDK before sending, or the gateway.
+AuthZENRefusedBy: TypeAlias = Literal["client", "gateway"]
+
+# The three states of a tri-state attribute.
+AuthZENAttributeState: TypeAlias = Literal["known", "absent", "unknown"]
+
+# The transport ``evaluate_envelope`` runs an envelope through: it is handed a
+# path, a JSON body and the profile headers, and answers with the status and the
+# raw bytes. The status is left UNINTERPRETED on purpose - on this route a 4xx
+# body is a typed refusal document rather than an error string.
+AuthZENTransport: TypeAlias = Callable[
+    [str, "dict[str, Any]", "dict[str, str]"], Awaitable["tuple[int, bytes]"]
+]
+
+
 class AuthZENRefusal(AxonFlowError):
     """The request was NOT evaluated, and here is the typed reason why.
 
@@ -143,7 +185,7 @@ class AuthZENRefusal(AxonFlowError):
         code: AuthZENErrorCode,
         message: str,
         *,
-        refused_by: Literal["client", "gateway"],
+        refused_by: AuthZENRefusedBy,
         pointer: str | None = None,
         supported: list[str] | None = None,
         request_id: str | None = None,
@@ -199,6 +241,54 @@ class AuthZENRefusal(AxonFlowError):
         return f"axonflow: {self.code}{where}: {self.message}"
 
 
+# --------------------------------------------------------------------------
+# Which protocol failure this is.
+# --------------------------------------------------------------------------
+#
+# The message already says; the point of a code is that it says it in a form a
+# caller can branch on. Without one, the eight causes below collapse into one
+# string, and an operator wanting the class's own advice -- "upgrade the SDK OR
+# go and look at the deployment" -- has to regex the message to learn which of
+# those two things to do. They are different actions, and only the cause
+# distinguishes them.
+#
+# The grouping, which is why the discriminant is worth carrying:
+#   UPGRADE THE SDK - the deployment is ahead of this build:
+#       unsupported_profile, unknown_operational_state
+#   LOOK AT THE DEPLOYMENT - something in the path is wrong or in the way:
+#       missing_profile_context (a proxy dropped the negotiation header, or an
+#       older gateway), decision_state_disagreement, obligations_on_refusal,
+#       undecodable_body
+#   LOOK AT THE CALLING CODE - the SDK's own belt tripped on the request:
+#       unresolved_attribute, structure_too_deep
+AUTHZEN_PROTOCOL_MISSING_PROFILE_CONTEXT: Final = "missing_profile_context"
+AUTHZEN_PROTOCOL_UNSUPPORTED_PROFILE: Final = "unsupported_profile"
+AUTHZEN_PROTOCOL_UNKNOWN_OPERATIONAL_STATE: Final = "unknown_operational_state"
+AUTHZEN_PROTOCOL_DECISION_STATE_DISAGREEMENT: Final = "decision_state_disagreement"
+AUTHZEN_PROTOCOL_OBLIGATIONS_ON_REFUSAL: Final = "obligations_on_refusal"
+AUTHZEN_PROTOCOL_UNDECODABLE_BODY: Final = "undecodable_body"
+AUTHZEN_PROTOCOL_UNRESOLVED_ATTRIBUTE: Final = "unresolved_attribute"
+AUTHZEN_PROTOCOL_STRUCTURE_TOO_DEEP: Final = "structure_too_deep"
+
+# The default, for a protocol error constructed by hand. Never emitted by this
+# module: every site inside it names its cause. It exists so `kind` is additive
+# -- `AuthZENProtocolError(msg)` keeps working -- and so an unset kind reads as
+# "nobody said", which is honest, rather than borrowing some other cause's name.
+AUTHZEN_PROTOCOL_UNSPECIFIED: Final = "unspecified"
+
+AuthZENProtocolErrorKind: TypeAlias = Literal[
+    "missing_profile_context",
+    "unsupported_profile",
+    "unknown_operational_state",
+    "decision_state_disagreement",
+    "obligations_on_refusal",
+    "undecodable_body",
+    "unresolved_attribute",
+    "structure_too_deep",
+    "unspecified",
+]
+
+
 class AuthZENProtocolError(AxonFlowError):
     """A 200 whose body this build cannot safely interpret.
 
@@ -209,9 +299,24 @@ class AuthZENProtocolError(AxonFlowError):
     two also demand different actions: a refusal means fix the request, a
     protocol error means upgrade the SDK or go and look at the deployment.
 
+    :attr:`kind` says WHICH of those, from the closed set above. It is additive
+    -- the message is unchanged and the one-argument constructor still works --
+    and it exists because the advice in the paragraph above names two different
+    actions, and until there was a discriminant a caller had to match on the
+    message text to tell them apart. Message text is not an interface.
+
     It is always fail-closed: no decision is returned, so a caller that lets it
     propagate blocks the operation.
     """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: AuthZENProtocolErrorKind = AUTHZEN_PROTOCOL_UNSPECIFIED,
+    ) -> None:
+        super().__init__(message, details={"kind": kind})
+        self.kind = kind
 
 
 # The marker every tri-state attribute carries, and the ONLY thing
@@ -294,7 +399,7 @@ class AuthZENAttribute:
     >>> AuthZENAttribute.unknown(AUTHZEN_UNKNOWN_RESOLUTION_FAILED)
     """
 
-    state: Literal["known", "absent", "unknown"]
+    state: AuthZENAttributeState
     value: Any = None
     reason: str = ""
     # Carried as an ordinary field so it survives dataclasses.asdict, a JSON
@@ -520,10 +625,35 @@ def _resolve_bag(bag: dict[str, Any] | None, pointer: str) -> dict[str, Any] | N
     drops ``correlation`` and keeps everything else. Omitting the bag itself is
     ordinary Python — do not pass it — because a bag that is not part of the
     question is not an attribute whose absence anything could evaluate.
+
+    A BAG THAT IS ITSELF ATTRIBUTE-SHAPED IS REFUSED, not resolved. Nothing
+    stops a caller putting an attribute where the bag goes -- a copied
+    ``AuthZENAttribute`` is an ordinary dict, so pydantic accepts it as the
+    ``dict[str, Any]`` the member is annotated as -- and the resolver then hands
+    back whatever that attribute held: the drop sentinel for an ABSENT one, a
+    bare scalar for a ``known("x")``. Neither is a bag, and constructing the
+    model around one raised pydantic's ``ValidationError`` straight out of
+    ``evaluate``, which documents ``AuthZENRefusal``, ``AuthZENProtocolError``
+    and ``AuthenticationError`` and nothing else. A fail-closed handler catching
+    those three did not catch it.
+
+    So the annotation this line used to carry was not merely optimistic, it was
+    the bug: ``_resolve_value`` returns ``Any``, and calling it ``dict`` is what
+    let a non-dict through to the constructor unexamined. It is checked now, and
+    reported as the same typed refusal the sibling TypeScript SDK gives for the
+    identical input -- code ``malformed_envelope``, the bag's own pointer, and
+    the message ``"<pointer> must be an object"``.
     """
     if bag is None:
         return None
-    resolved: dict[str, Any] = _resolve_value(bag, pointer)
+    resolved: Any = _resolve_value(bag, pointer)
+    if not isinstance(resolved, dict):
+        raise AuthZENRefusal(
+            AUTHZEN_ERROR_CODE_MALFORMED_ENVELOPE,
+            f"{pointer or '/'} must be an object",
+            refused_by="client",
+            pointer=pointer,
+        )
     return resolved
 
 
@@ -879,7 +1009,7 @@ def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
             f"that payload, so an allow without it is an allow whose mandatory "
             f"conditions cannot be read. body={body}"
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_MISSING_PROFILE_CONTEXT)
 
     context = response.context
     if context.profile != AUTHZEN_PROFILE_V1:
@@ -889,7 +1019,7 @@ def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
             f"challenge that constrain an allow are carried in that payload, so the "
             f"decision cannot be acted on safely. Upgrade the SDK."
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_UNSUPPORTED_PROFILE)
 
     if context.state not in AUTHZEN_OPERATIONAL_STATE_VALUES:
         msg = (
@@ -899,7 +1029,7 @@ def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
             f"SDK cannot interpret — and a state whose meaning is unknown must not be "
             f"resolved into permission. body={body}"
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_UNKNOWN_OPERATIONAL_STATE)
 
     executable = context.state == AUTHZEN_OPERATIONAL_STATE_ALLOW
     if response.decision != executable:
@@ -909,7 +1039,7 @@ def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
             f"of the two renderings of this outcome is wrong and there is no safe way "
             f"to choose between them. body={body}"
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_DECISION_STATE_DISAGREEMENT)
 
     if not executable and context.obligations:
         msg = (
@@ -917,7 +1047,7 @@ def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
             f"ride only on an executable decision: instructions on a refusal invite an "
             f"enforcement point to discharge them and proceed. body={body}"
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_OBLIGATIONS_ON_REFUSAL)
 
     # `schema_version` is deliberately NOT enforced. The PROFILE is the
     # negotiated contract and is checked above; schema_version is carried so a
@@ -928,7 +1058,7 @@ def _validate_decision(response: AuthZENResponse, raw: bytes) -> None:
 
 
 async def evaluate_envelope(
-    send: Callable[[str, dict[str, Any], dict[str, str]], Awaitable[tuple[int, bytes]]],
+    send: AuthZENTransport,
     envelope: AuthZENEnvelope,
 ) -> AuthZENDecision:
     """Run one envelope through ``send`` and interpret the answer.
@@ -987,7 +1117,7 @@ async def evaluate_envelope(
             f"the decision could not be decoded: {exc}. "
             f"body={raw.decode('utf-8', errors='replace')}"
         )
-        raise AuthZENProtocolError(msg) from exc
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_UNDECODABLE_BODY) from exc
 
     _validate_decision(response, raw)
     return AuthZENDecision.model_validate(response.model_dump())
@@ -1019,14 +1149,14 @@ def _assert_fully_resolved(value: object, path: str = "", depth: int = 0) -> Non
             f"levels; this SDK will not walk it, and a structure that refers to itself "
             f"would otherwise recurse until the interpreter stopped"
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_STRUCTURE_TOO_DEEP)
     if _is_attribute(value):
         msg = (
             f"an unresolved AuthZENAttribute reached the wire at {path or '/'}. "
             f"Tri-state attributes are only supported inside the context and "
             f"properties bags; this one is somewhere the resolver does not reach."
         )
-        raise AuthZENProtocolError(msg)
+        raise AuthZENProtocolError(msg, kind=AUTHZEN_PROTOCOL_UNRESOLVED_ATTRIBUTE)
     if isinstance(value, BaseModel):
         for name in type(value).model_fields:
             _assert_fully_resolved(getattr(value, name), f"{path}/{name}", depth + 1)

@@ -1227,3 +1227,411 @@ class TestTheClientRefusesWithoutSending:
         assert not sent
         assert caught.value.code == "incomplete_evaluation"
         await client.close()
+
+
+class TestAnAttributeShapedBagIsRefused:
+    """R3 round 2, B1: a bag that IS an attribute escaped as a ValidationError.
+
+    Nothing stops a caller putting an attribute where a BAG goes. A copied
+    attribute - ``dataclasses.asdict``, a JSON round trip, a queue hop - is an
+    ordinary dict, so pydantic accepts it as the ``dict[str, Any]`` the member
+    is annotated as, and ``_resolve_value`` then hands back what the attribute
+    HELD: the drop sentinel for an ABSENT one, a bare scalar for a known one.
+    Neither is a bag, and ``_resolve_bag`` asserted otherwise in its annotation
+    rather than checking, so the model constructor raised pydantic's
+    ``ValidationError`` straight out of ``client.evaluate`` - outside the three
+    exceptions that method documents, so a fail-closed handler catching
+    ``AuthZENRefusal``/``AuthZENProtocolError``/``AuthenticationError`` did not
+    catch it.
+
+    Every bag the resolver walks is covered, not only the one the review probed:
+    the construction is identical on all six, and the reviewer found it on one.
+
+    These drive ``AxonFlow.evaluate`` / ``evaluate_all`` with the transport
+    stubbed, so what they pin is the exception a CALLER sees.
+    """
+
+    @staticmethod
+    def _client(monkeypatch: pytest.MonkeyPatch) -> tuple[AxonFlow, list[bytes]]:
+        return TestTheClientRefusesWithoutSending._client(monkeypatch)
+
+    @staticmethod
+    def _copied(attribute: AuthZENAttribute) -> dict[str, Any]:
+        """The attribute as a caller's worker boundary hands it back."""
+        return dataclasses.asdict(attribute)
+
+    def _bags(self) -> list[tuple[str, AuthZENRequest, str]]:
+        absent = self._copied(AuthZENAttribute.absent())
+        scalar = self._copied(AuthZENAttribute.known("acme-corp"))
+        return [
+            ("context, absent", singular(context=absent), "/evaluation/context"),
+            ("context, known scalar", singular(context=scalar), "/evaluation/context"),
+            (
+                "subject.properties, absent",
+                singular(
+                    subject=AuthZENSubject(type="gateway", id="g1", properties=absent),
+                ),
+                "/evaluation/subject/properties",
+            ),
+            (
+                "action.properties, absent",
+                singular(action=AuthZENAction(name="llm.completion", properties=absent)),
+                "/evaluation/action/properties",
+            ),
+            (
+                "resource.properties, absent",
+                singular(resource=AuthZENResource(type="llm", id="llm", properties=absent)),
+                "/evaluation/resource/properties",
+            ),
+        ]
+
+    @pytest.mark.parametrize("index", range(5))
+    async def test_a_singular_bag_that_is_an_attribute_is_a_typed_refusal(
+        self, monkeypatch: pytest.MonkeyPatch, index: int
+    ) -> None:
+        label, request, pointer = self._bags()[index]
+        client, sent = self._client(monkeypatch)
+        with pytest.raises(AuthZENRefusal) as caught:
+            await client.evaluate(request)
+        assert not sent, label
+        assert caught.value.code == "malformed_envelope", label
+        assert caught.value.refused_by == "client", label
+        assert caught.value.pointer == pointer, label
+        # The message matches the merged TypeScript SDK's byte for byte, so the
+        # same bad input is described the same way in both languages.
+        assert caught.value.message == f"{pointer} must be an object", label
+        await client.close()
+
+    async def test_a_plural_base_bag_that_is_an_attribute_is_a_typed_refusal(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The bulk base's own context reaches the same resolver by another route."""
+        client, sent = self._client(monkeypatch)
+        with pytest.raises(AuthZENRefusal) as caught:
+            await client.evaluate_all(
+                AuthZENBulk(
+                    subject=AuthZENSubject(type="gateway", id="g1"),
+                    action=AuthZENAction(name="llm.completion"),
+                    resource=AuthZENResource(type="llm", id="llm"),
+                    context=self._copied(AuthZENAttribute.absent()),
+                    evaluations=[AuthZENRequest(context={"args": {"query": "q"}})],
+                )
+            )
+        assert not sent
+        assert caught.value.code == "malformed_envelope"
+        assert caught.value.pointer == "/evaluations/context"
+        assert caught.value.message == "/evaluations/context must be an object"
+        await client.close()
+
+    async def test_a_plural_entry_bag_that_is_an_attribute_names_the_entry(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client, sent = self._client(monkeypatch)
+        with pytest.raises(AuthZENRefusal) as caught:
+            await client.evaluate_all(
+                AuthZENBulk(
+                    subject=AuthZENSubject(type="gateway", id="g1"),
+                    action=AuthZENAction(name="llm.completion"),
+                    resource=AuthZENResource(type="llm", id="llm"),
+                    evaluations=[
+                        AuthZENRequest(context={"args": {"query": "q"}}),
+                        AuthZENRequest(context=self._copied(AuthZENAttribute.absent())),
+                    ],
+                )
+            )
+        assert not sent
+        assert caught.value.pointer == "/evaluations/evaluations/1/context"
+        await client.close()
+
+    async def test_resolve_envelope_refuses_the_same_shape(self) -> None:
+        """The other entry point onto the same resolver.
+
+        ``resolve_envelope`` is public and takes an envelope a caller already
+        holds; it must not answer the same input with a different exception
+        from the one ``evaluate`` gives.
+        """
+        envelope = AuthZENEnvelope(
+            evaluation=singular(context=self._copied(AuthZENAttribute.absent()))
+        )
+        with pytest.raises(AuthZENRefusal) as caught:
+            resolve_envelope(envelope)
+        assert caught.value.code == "malformed_envelope"
+        assert caught.value.pointer == "/evaluation/context"
+
+    async def test_to_wire_refuses_the_same_shape(self) -> None:
+        with pytest.raises(AuthZENRefusal):
+            to_wire(
+                AuthZENEnvelope(
+                    evaluation=singular(context=self._copied(AuthZENAttribute.absent()))
+                )
+            )
+
+    async def test_the_control_an_attribute_INSIDE_a_bag_still_resolves(self) -> None:
+        """Without this the fix could refuse every bag and look as green.
+
+        An attribute one level IN is the supported case and must keep working:
+        an absent member is dropped and the request is SENT, which is exactly
+        the behaviour a check on the bag itself could have broken.
+        """
+        transport = RecordingTransport()
+        await evaluate(
+            transport,
+            singular(
+                context={
+                    "args": {"query": "q"},
+                    "correlation": AuthZENAttribute.absent(),
+                }
+            ),
+        )
+        assert transport.sent["evaluation"]["context"] == {"args": {"query": "q"}}
+
+    async def test_the_control_a_bag_that_is_a_known_object_is_unwrapped_not_refused(
+        self,
+    ) -> None:
+        """A ``known`` attribute holding an OBJECT resolves to that object.
+
+        It is a bag after resolution, so it is not refused - the check is on the
+        RESOLVED value, not on the shape the caller passed. The sibling SDK
+        behaves identically, and pinning it stops the fix being tightened into
+        "any attribute-shaped bag is refused", which would diverge.
+        """
+        transport = RecordingTransport()
+        await evaluate(
+            transport,
+            singular(context=dataclasses.asdict(AuthZENAttribute.known({"args": {"query": "q"}}))),
+        )
+        assert transport.sent["evaluation"]["context"] == {"args": {"query": "q"}}
+
+
+class TestProtocolErrorsCarryADiscriminant:
+    """R3 round 2, M1: eight causes shared one message string and nothing else.
+
+    The class's own docstring says a protocol error means "upgrade the SDK OR go
+    and look at the deployment" - two different operator actions - and until
+    ``kind`` existed the only way to tell them apart was to match on the
+    message. Message text is not an interface.
+
+    The assertion that matters is that the kinds are DISTINCT: a discriminant
+    that returned one value for every cause would pass a per-case check written
+    as "the kind is a string".
+    """
+
+    @staticmethod
+    async def _protocol_error(body: Any) -> AuthZENProtocolError:
+        transport = RecordingTransport(body=body)
+        with pytest.raises(AuthZENProtocolError) as caught:
+            await evaluate(transport, singular())
+        return caught.value
+
+    async def test_each_cause_reports_its_own_kind(self) -> None:
+        seen: dict[str, str] = {}
+
+        no_context = await self._protocol_error({"decision": True})
+        seen["missing_profile_context"] = no_context.kind
+
+        wrong_profile = await self._protocol_error(
+            {"decision": True, "context": {**ALLOW_CONTEXT, "profile": "axonflow-authzen/v9"}}
+        )
+        seen["unsupported_profile"] = wrong_profile.kind
+
+        unknown_state = await self._protocol_error(
+            {"decision": True, "context": {**ALLOW_CONTEXT, "state": "MAYBE"}}
+        )
+        seen["unknown_operational_state"] = unknown_state.kind
+
+        disagreement = await self._protocol_error({"decision": False, "context": ALLOW_CONTEXT})
+        seen["decision_state_disagreement"] = disagreement.kind
+
+        obligations_on_deny = await self._protocol_error(
+            {
+                "decision": False,
+                "context": {
+                    **DENY_CONTEXT,
+                    "obligations": [
+                        {
+                            "type": "field_redact",
+                            "target": "args.query",
+                            "mandatory": True,
+                            "source_policy": "legacy:redact_pii",
+                            "schema_version": 1,
+                        }
+                    ],
+                },
+            }
+        )
+        seen["obligations_on_refusal"] = obligations_on_deny.kind
+
+        undecodable = await self._protocol_error(b"{not json")
+        seen["undecodable_body"] = undecodable.kind
+
+        assert seen == {
+            "missing_profile_context": "missing_profile_context",
+            "unsupported_profile": "unsupported_profile",
+            "unknown_operational_state": "unknown_operational_state",
+            "decision_state_disagreement": "decision_state_disagreement",
+            "obligations_on_refusal": "obligations_on_refusal",
+            "undecodable_body": "undecodable_body",
+        }
+        # Distinctness stated separately: the dict above would still be a pass
+        # if two causes shared a kind and the expectation had been copied from
+        # the output.
+        assert len(set(seen.values())) == len(seen)
+
+    async def test_the_belt_reports_its_own_two_kinds(self) -> None:
+        """The two client-side trips, which name the CALLING code rather than
+        the deployment - a third action, and the reason the kinds are not a
+        two-valued flag.
+        """
+        deep: Any = {}
+        node = deep
+        for _ in range(70):
+            node["n"] = {}
+            node = node["n"]
+        with pytest.raises(AuthZENProtocolError) as too_deep:
+            _assert_fully_resolved(deep)
+        assert too_deep.value.kind == "structure_too_deep"
+
+        with pytest.raises(AuthZENProtocolError) as unresolved:
+            _assert_fully_resolved({"stray": AuthZENAttribute.unknown("stale")})
+        assert unresolved.value.kind == "unresolved_attribute"
+
+    async def test_kind_is_additive_and_reaches_details(self) -> None:
+        """The one-argument constructor still works, and reports honestly."""
+        bare = AuthZENProtocolError("something this build cannot read")
+        assert bare.kind == "unspecified"
+        assert bare.details["kind"] == "unspecified"
+        assert str(bare) == "something this build cannot read"
+
+
+class TestTheRootExportsMatchTheSiblingSDK:
+    """R3 round 2, M3: the marker and the refusal-source type were unreachable.
+
+    ``AUTHZEN_ATTRIBUTE_MARKER`` is precisely what a caller needs to hand-build
+    an attribute on the far side of a boundary the objects cannot cross - a
+    queue, a worker, a cache that round-trips through JSON. That is the case the
+    marker exists for, so a marker the caller cannot import is a documented
+    mechanism with no way to use it.
+    """
+
+    def test_the_marker_and_the_type_aliases_are_importable_from_the_root(self) -> None:
+        import axonflow
+
+        for name in (
+            "AUTHZEN_ATTRIBUTE_MARKER",
+            "AuthZENRefusedBy",
+            "AuthZENAttributeState",
+            "AuthZENTransport",
+        ):
+            assert name in axonflow.__all__, name
+            assert hasattr(axonflow, name), name
+
+    async def test_a_hand_built_attribute_using_the_exported_marker_resolves(self) -> None:
+        """The marker is exported to be USED; this is the use."""
+        from axonflow import AUTHZEN_ATTRIBUTE_MARKER
+
+        transport = RecordingTransport()
+        await evaluate(
+            transport,
+            singular(
+                context={
+                    "args": {"query": "q"},
+                    "correlation": {
+                        AUTHZEN_ATTRIBUTE_MARKER: True,
+                        "state": "known",
+                        "value": "t-1",
+                        "reason": "",
+                    },
+                }
+            ),
+        )
+        assert transport.sent["evaluation"]["context"]["correlation"] == "t-1"
+
+
+class TestTheRuntimeDriverReportsEveryFailureByName:
+    """R3 round 2, M4: a base ``AxonFlowError`` aborted the whole driver.
+
+    ``runtime-e2e/authzen_evaluation/test.py`` caught only
+    ``(AuthZENRefusal, AuthZENProtocolError)``. Neither covers what a 500 - or
+    any non-2xx whose body is not a refusal document - actually raises: a base
+    ``AxonFlowError``. One of those escaped the first check, aborted the run and
+    printed a traceback, so the seven checks after it were never attempted and a
+    broken deployment reported LESS than a working one.
+
+    This is a unit test of the driver's error handling, not a substitute for the
+    driver: what it pins is that a failing call becomes a named ``check()``
+    line. That the agent really behaves this way is what the driver itself
+    answers, against a live stack.
+    """
+
+    @staticmethod
+    def _driver() -> Any:
+        import importlib.util
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parent.parent / "runtime-e2e" / "authzen_evaluation"
+        spec = importlib.util.spec_from_file_location("authzen_e2e_driver", path / "test.py")
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    class _Exploding:
+        """A client whose every AuthZEN call raises what a 500 raises."""
+
+        def __init__(self, error: BaseException) -> None:
+            self._error = error
+
+        async def evaluate(self, request: Any) -> Any:
+            raise self._error
+
+        async def evaluate_all(self, bulk: Any) -> Any:
+            raise self._error
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            AxonFlowError("HTTP 500 from /api/v1/access/evaluation: upstream unavailable"),
+            RuntimeError("the transport gave up"),
+        ],
+    )
+    async def test_an_untyped_failure_is_a_named_check_not_a_traceback(
+        self, error: BaseException
+    ) -> None:
+        driver = self._driver()
+        client = self._Exploding(error)
+
+        # Every check that takes a client. If any of them let the error escape,
+        # this call raises and the test fails - which is exactly what the
+        # narrow catch did before.
+        await driver.check_route_answers(client)
+        await driver.check_denial_is_a_decision(client)
+        await driver.check_refusals(client)
+        await driver.check_plural_pointer(client)
+        await driver.check_bulk_meets_to_one_decision(client)
+        await driver.check_agreement_with_decide(client)
+
+        # And each one REPORTED, rather than passing silently.
+        assert len(driver.failures) >= 6, driver.failures
+        assert len(set(driver.failures)) >= 6, driver.failures
+
+    async def test_the_control_a_typed_refusal_still_takes_the_typed_branch(self) -> None:
+        """Without this, catching Exception everywhere would look as green.
+
+        The refusal branches assert on ``.code`` and ``.pointer``; a broad catch
+        placed BEFORE them would swallow the refusal and report "not a typed
+        refusal" for the very cases the driver exists to check.
+        """
+        driver = self._driver()
+        want = "/evaluations/evaluations/1/subject/properties"
+        client = self._Exploding(
+            AuthZENRefusal(
+                "unevaluable_attribute",
+                "a caller-supplied property",
+                refused_by="gateway",
+                pointer=want,
+            )
+        )
+        before = len(driver.failures)
+        await driver.check_plural_pointer(client)
+        assert len(driver.failures) == before, driver.failures
