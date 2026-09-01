@@ -29,6 +29,7 @@ from axonflow.telemetry import (
     _probe_platform_health,
     _send_telemetry_ping_now,
 )
+from tests.conftest import _EgressBlocked
 
 # Snapshot the real callables before the conftest autouse fixture swaps in the
 # egress-blocking stub. These tests are a legitimate exception: they bind a
@@ -384,11 +385,48 @@ class TestTheWholePingHonoursOneDeadline:
         )
 
 
+class TestTheEgressGuardEscapesTheCodeItGuards:
+    """The conftest egress guard must not be swallowed by the telemetry path.
+
+    ``_probe_platform_health`` and ``_send_telemetry_ping_now`` both catch
+    ``Exception`` broadly, and both MUST: an explicit tuple there was a
+    fail-CLOSED trap, because ``httpx.InvalidURL`` does not subclass
+    ``httpx.HTTPError``. That breadth is the reason the conftest guard derives
+    from ``BaseException`` rather than ``Exception``.
+
+    Nothing pinned that. Narrowing ``_EgressBlocked`` back to ``Exception``, or
+    widening either catch to ``except BaseException``, would silently disarm
+    the guard: a future test that deletes AXONFLOW_TELEMETRY and forgets a
+    transport would then pass VACUOUSLY against an empty probe and an
+    undelivered ping, with every test in the suite still green. These two
+    assertions are that pin, one per broad catch.
+    """
+
+    def test_the_probes_broad_catch_does_not_swallow_it(self) -> None:
+        # The autouse fixture has already replaced httpx.get with the guard,
+        # so this reaches the guard through the probe's own try/except.
+        with pytest.raises(_EgressBlocked):
+            _probe_platform_health("http://127.0.0.1:9", timeout=1.0)
+
+    def test_the_pings_broad_catch_does_not_swallow_it(self) -> None:
+        # endpoint="" skips the health probe (``if endpoint and ...``), so the
+        # guard is raised by httpx.post inside the PING's try/except rather
+        # than the probe's. Without this, one test would cover both catches
+        # and a mutation of the second would survive.
+        with pytest.raises(_EgressBlocked):
+            _send_telemetry_ping_now(
+                "http://127.0.0.1:9/v1/ping",
+                mode="production",
+                endpoint="",
+                debug=False,
+            )
+
+
 class TestDeploymentModeIsUnaffected:
     """The three similarly-named concepts stay separate.
 
     The SDK's endpoint-derived TOPOLOGY dimension must be identical whether or
-    not the platform reported an edition.
+    not the platform reported a tier.
     """
 
     @pytest.mark.parametrize(

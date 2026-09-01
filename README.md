@@ -558,6 +558,8 @@ What is and is not collected:
 
 The value is read from the `tier` field of the platform's own `/health` response — the same response the heartbeat already fetches to report the platform version, and an endpoint that returns this field to any caller without authentication. **No additional network request is made, and the SDK gains no access to anything `/health` does not already return.**
 
+**This is an adoption-analytics signal, not an entitlement one.** The value is whatever the platform at your configured endpoint reported about itself, relayed unchanged: the SDK derives nothing and verifies nothing, and the receiver cannot verify the relay either. Whoever operates that endpoint controls the value completely, so it must never gate entitlement, unlock a feature, or enter any authorization or billing decision. It is used only for aggregate adoption figures.
+
 The field is **omitted entirely** whenever the tier could not be determined — the platform is unreachable, returns an error, returns an unparseable body, or returns no `tier` field. It is never defaulted to a guessed value, so an absent field means "not known", never "community".
 
 `AXONFLOW_TELEMETRY=off` suppresses this field along with the rest of the heartbeat.

@@ -315,8 +315,14 @@ def _build_payload(
     2. The platform's own ``DEPLOYMENT_MODE`` env var — a server-side
        setting deciding which schema/tables the binary uses. Never read by
        this SDK and never sent on this field.
-    3. ``license_tier`` — the platform's EDITION/entitlement. Says WHAT the
-       platform is licensed for.
+    3. ``license_tier`` — what the platform REPORTED about its own
+       licensing, for adoption analytics.
+
+    ITEM 3 IS NOT AN ENTITLEMENT FACT. This SDK relays whatever ``/health``
+    returned, and the receiver cannot verify the relay: whoever operates the
+    endpoint the client was pointed at controls the value completely. It must
+    never gate entitlement, unlock a feature, or enter any authorization or
+    billing decision. See axonflow-enterprise#3619.
 
     A community-mode binary can run on any topology and vice versa, so
     neither field is derivable from the other.
@@ -386,7 +392,7 @@ def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) ->
         # Re-read on every heartbeat rather than cached for the process
         # lifetime: a licence can be applied to, or expire on, a running
         # platform, and a cached tier would keep reporting the pre-change
-        # edition for as long as the client lives.
+        # tier for as long as the client lives.
         probe = _EMPTY_HEALTH_PROBE
         if endpoint and health_budget > _MIN_BUDGET_SECONDS:
             probe = _probe_platform_health(endpoint, timeout=health_budget)
