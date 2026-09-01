@@ -58,6 +58,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Runnable proofs**: `examples/authzen_evaluation.py` and
   `runtime-e2e/authzen_evaluation/` (the latter runs against a live agent).
 
+- **Telemetry: platform licence tier.** The anonymous heartbeat now reports the
+  licence tier of the platform the SDK is configured to talk to
+  (`license_tier`), read from the `tier` field of that platform's own `/health`
+  response - the same response already fetched for `platform_version`, so no
+  additional network request is made. Only the coarse tier string is collected:
+  the licence key, its expiry, its seat count and the organisation name are
+  never read or sent.
+
+  The field is omitted entirely when the tier cannot be determined (platform
+  unreachable, error, unparseable body, or no `tier` field) and is never
+  defaulted, so an absent field means "not known" rather than `Community`. It
+  is an adoption-analytics signal only: the platform reports its own tier, the
+  SDK relays it unchanged and the receiver cannot verify the relay, so it must
+  never gate entitlement, unlock a feature, or enter any authorization or
+  billing decision. Suppressed by `AXONFLOW_TELEMETRY=off` along with the rest
+  of the heartbeat; see the README's Telemetry section.
+  (getaxonflow/axonflow-enterprise#3619)
+
 ### Migration notes
 
 - **No migration is required.** A 9.1.0 integration behaves identically on
