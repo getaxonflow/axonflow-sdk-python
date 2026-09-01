@@ -742,6 +742,11 @@ def resolve_envelope(envelope: AuthZENEnvelope) -> AuthZENEnvelope:
 # --------------------------------------------------------------------------
 
 
+def _base_member(base: AuthZENRequest | None, name: str) -> Any:  # noqa: ANN401 - any member
+    """The shared base's member, or None when there is no base."""
+    return getattr(base, name) if base is not None else None
+
+
 def _check_complete(request: AuthZENRequest, base: AuthZENRequest | None, at: str) -> None:
     """Check the one invariant the artifact says it cannot express.
 
@@ -778,7 +783,11 @@ def _check_complete(request: AuthZENRequest, base: AuthZENRequest | None, at: st
             AUTHZEN_ERROR_CODE_INCOMPLETE_EVALUATION, msg, refused_by="client", pointer=at
         )
 
-    subject = request.subject or (base.subject if base else None)
+    # `is not None`, not `or`. A pydantic model is truthy today, so the two
+    # behave identically - which is exactly the assumption this repo's
+    # falsey-clobber lint exists to stop code resting on. The TypeScript
+    # sibling uses `??` here, which is null-only for the same reason.
+    subject = request.subject if request.subject is not None else _base_member(base, "subject")
     if subject is not None and not subject.id.strip():
         msg = "the subject id must not be blank; a decision has to name the caller it was made for"
         raise AuthZENRefusal(
