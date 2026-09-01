@@ -62,6 +62,8 @@ from tenacity import (
 
 from axonflow import masfeat
 from axonflow._version import __version__ as _SDK_VERSION
+from axonflow.authzen import AuthZENDecision, build_envelope, evaluate_envelope
+from axonflow.authzen_types_gen import AuthZENBulk, AuthZENRequest  # noqa: TC001
 from axonflow.code_governance import (
     CodeGovernanceMetrics,
     ConfigureGitProviderRequest,
@@ -794,6 +796,42 @@ class AxonFlow:
             debug=self._config.debug,
         )
 
+    async def _send_raw(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        """Transport only: send the request and hand back whatever came out.
+
+        This is the half of ``_request`` that has nothing to do with what a
+        status code MEANS — the heartbeat gate, the URL, the retry policy and
+        the transport-level failure mapping. It is extracted rather than copied
+        because a caller that needs the raw status (the AuthZEN surface, whose
+        refusals are typed documents on 4xx) would otherwise stand up a second
+        HTTP path, and a second path is a second place for credentials,
+        timeouts, proxy configuration and telemetry to drift out of step with
+        the client the user configured.
+
+        ``_request`` keeps every status-code behaviour it had; only the send
+        moved.
+        """
+        self._pre_request_hook()
+        url = f"{self._config.endpoint}{path}"
+
+        try:
+            if self._config.retry.enabled:
+                return await self._request_with_retry(method, url, json_data, headers=headers)
+            return await self._http_client.request(method, url, json=json_data, headers=headers)
+        except httpx.ConnectError as e:
+            msg = f"Failed to connect to AxonFlow Agent: {e}"
+            raise ConnectionError(msg) from e
+        except httpx.TimeoutException as e:
+            msg = f"Request timed out: {e}"
+            raise TimeoutError(msg) from e
+
     async def _request(
         self,
         method: str,
@@ -802,27 +840,15 @@ class AxonFlow:
         json_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Make HTTP request to Agent."""
-        self._pre_request_hook()
-        url = f"{self._config.endpoint}{path}"
+        response = await self._send_raw(method, path, json_data=json_data)
 
         try:
-            if self._config.retry.enabled:
-                response = await self._request_with_retry(method, url, json_data)
-            else:
-                response = await self._http_client.request(method, url, json=json_data)
-
             response.raise_for_status()
             # Handle 204 No Content (e.g., DELETE responses)
             if response.status_code == 204:  # noqa: PLR2004
                 return None  # type: ignore[return-value]
             return response.json()  # type: ignore[no-any-return]
 
-        except httpx.ConnectError as e:
-            msg = f"Failed to connect to AxonFlow Agent: {e}"
-            raise ConnectionError(msg) from e
-        except httpx.TimeoutException as e:
-            msg = f"Request timed out: {e}"
-            raise TimeoutError(msg) from e
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
@@ -859,8 +885,16 @@ class AxonFlow:
         method: str,
         url: str,
         json_data: dict[str, Any] | None,
+        *,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
-        """Make request with retry logic."""
+        """Make request with retry logic.
+
+        ``headers`` are merged over the client's own by httpx. It is
+        keyword-only with a default so every existing call site is unchanged;
+        it exists because the AuthZEN surface has to negotiate a profile on a
+        per-request header and must not do so through a second HTTP client.
+        """
 
         @retry(
             stop=stop_after_attempt(self._config.retry.max_attempts),
@@ -873,7 +907,7 @@ class AxonFlow:
             reraise=True,
         )
         async def _do_request() -> httpx.Response:
-            return await self._http_client.request(method, url, json=json_data)
+            return await self._http_client.request(method, url, json=json_data, headers=headers)
 
         return await _do_request()
 
@@ -2916,6 +2950,94 @@ class AxonFlow:
         if not isinstance(rows, list):
             return []
         return [DecisionSummary.model_validate(r) for r in rows]
+
+    # ------------------------------------------------------------------ #
+    # AuthZEN-native authorization (ADR-065)                              #
+    # ------------------------------------------------------------------ #
+
+    async def _send_authzen(
+        self,
+        path: str,
+        body: dict[str, Any],
+        headers: dict[str, str],
+    ) -> tuple[int, bytes]:
+        """The transport :mod:`axonflow.authzen` runs its envelopes through.
+
+        It is this client's own authenticated HTTP path — same credentials,
+        same retry policy, same ``X-Axonflow-Client`` attribution — with the
+        status left uninterpreted, because on this route a 4xx body is a typed
+        refusal document rather than an error string.
+        """
+        response = await self._send_raw("POST", path, json_data=body, headers=headers)
+        return response.status_code, response.content
+
+    async def evaluate(self, request: AuthZENRequest) -> AuthZENDecision:
+        """Ask whether one subject may perform one action on one resource.
+
+        The AuthZEN-native surface (``POST /api/v1/access/evaluation``). New
+        integrations should be written against this rather than
+        :meth:`decide`: at v11 the engine behind it becomes the ADR-065 Policy
+        Decision Point with no wire change, so an integration written here
+        migrates once instead of twice.
+
+        Example:
+            >>> from axonflow import (
+            ...     AuthZENAction, AuthZENRequest, AuthZENResource, AuthZENSubject,
+            ... )
+            >>> decision = await client.evaluate(
+            ...     AuthZENRequest(
+            ...         subject=AuthZENSubject(type="gateway", id="llm-gateway-01"),
+            ...         action=AuthZENAction(name="llm.completion"),
+            ...         resource=AuthZENResource(type="llm", id="llm"),
+            ...         context={"args": {"query": user_prompt}},
+            ...     )
+            ... )
+            >>> if not decision.allowed:
+            ...     raise RuntimeError(f"blocked: {decision.state}")
+
+        Raises:
+            AuthZENRefusal: the request was not evaluated. This is NOT a
+                denial — ``.pointer`` names the member to fix, and only
+                ``.retryable`` is worth sending again.
+            AuthZENProtocolError: the server answered 200 with a body this
+                build cannot safely act on.
+            AuthenticationError: 401 — the gateway refused the credentials
+                before the route ran.
+        """
+        return await evaluate_envelope(self._send_authzen, build_envelope(evaluation=request))
+
+    async def evaluate_all(self, bulk: AuthZENBulk) -> AuthZENDecision:
+        """Ask whether ONE operation is permitted against several preconditions.
+
+        It returns ONE decision, not one per entry. The entries of a bulk
+        request are preconditions of a single operation — moving a ticket must
+        be authorized against the destination project as well as against the
+        ticket — so they combine to the least permissive outcome: one denied
+        entry denies the operation. An API returning a list would invite a
+        caller to act on the entry it liked.
+
+        Any member an entry omits is inherited from the envelope's shared base,
+        so the common case is a shared subject and action with one resource per
+        entry.
+
+        Example:
+            >>> decision = await client.evaluate_all(
+            ...     AuthZENBulk(
+            ...         subject=AuthZENSubject(type="gateway", id="llm-gateway-01"),
+            ...         action=AuthZENAction(name="tool.call"),
+            ...         context={"args": {"query": user_prompt}},
+            ...         evaluations=[
+            ...             AuthZENRequest(
+            ...                 resource=AuthZENResource(type="tool", id="jira/move_issue"),
+            ...             ),
+            ...             AuthZENRequest(
+            ...                 resource=AuthZENResource(type="tool", id="jira/update_project"),
+            ...             ),
+            ...         ],
+            ...     )
+            ... )
+        """
+        return await evaluate_envelope(self._send_authzen, build_envelope(evaluations=bulk))
 
     # ------------------------------------------------------------------ #
     # Decision Mode PEP: decide -> fulfill -> forward (ADR-056, #2563)    #
@@ -7601,6 +7723,22 @@ class SyncAxonFlow:
                 content_type=content_type,
             )
         )
+
+    def evaluate(self, request: AuthZENRequest) -> AuthZENDecision:
+        """Ask whether one subject may perform one action on one resource.
+
+        Synchronous wrapper for :meth:`AxonFlow.evaluate`. See that method for
+        the AuthZEN-native contract (ADR-065) and the refusal semantics.
+        """
+        return self._run_sync(self._async_client.evaluate(request))
+
+    def evaluate_all(self, bulk: AuthZENBulk) -> AuthZENDecision:
+        """Ask whether ONE operation is permitted against several preconditions.
+
+        Synchronous wrapper for :meth:`AxonFlow.evaluate_all`. Returns one
+        decision, not one per entry: a denied entry denies the operation.
+        """
+        return self._run_sync(self._async_client.evaluate_all(bulk))
 
     def decide(self, request: DecideRequest) -> DecideResponse:
         """Ask the PDP for a verdict on a request (``POST /api/v1/decide``).

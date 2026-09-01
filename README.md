@@ -251,6 +251,92 @@ result = await client.execute_plan(plan.plan_id)
 print(f"Result: {result.result}")
 ```
 
+### AuthZEN-native authorization
+
+`client.evaluate` asks the gateway an AuthZEN question - may this subject perform this action on this resource? - over `POST /api/v1/access/evaluation`. It is the surface to write **new** integrations against: at v11 the engine behind it becomes AxonFlow's new Policy Decision Point with no wire change, so an integration written here migrates once rather than twice. Nothing is deprecated by it today; `client.decide` and the gateway/proxy methods are wire-stable through all of v11.
+
+```python
+from axonflow import (
+    AuthZENAction,
+    AuthZENRequest,
+    AuthZENResource,
+    AuthZENSubject,
+    AuthZENRefusal,
+)
+
+decision = await client.evaluate(
+    AuthZENRequest(
+        subject=AuthZENSubject(type="gateway", id="llm-gateway-01"),
+        action=AuthZENAction(name="llm.completion"),
+        resource=AuthZENResource(type="llm", id="llm"),
+        context={"args": {"query": user_prompt}},
+    )
+)
+
+if not decision.allowed:
+    raise RuntimeError(f"blocked: {decision.state} ({decision.reason})")
+for obligation in decision.mandatory_obligations:
+    ...  # an allow you cannot discharge is not an allow
+```
+
+Several preconditions of **one** operation go in a bulk envelope, which returns **one** decision - a denied entry denies the operation, so a caller cannot act on the entry it liked:
+
+```python
+from axonflow import AuthZENBulk
+
+decision = await client.evaluate_all(
+    AuthZENBulk(
+        subject=AuthZENSubject(type="gateway", id="llm-gateway-01"),
+        action=AuthZENAction(name="tool.call"),
+        context={"args": {"query": user_prompt}},
+        evaluations=[
+            AuthZENRequest(resource=AuthZENResource(type="tool", id="jira/move_issue")),
+            AuthZENRequest(resource=AuthZENResource(type="tool", id="jira/update_project")),
+        ],
+    )
+)
+```
+
+#### Known gotchas
+
+**A refusal is not a denial.** This surface refuses anything it cannot evaluate rather than evaluating around it - send a subject property or an unrecognised context member and you get an `AuthZENRefusal` naming the exact member, not a decision computed without it. Treating every error as a deny fails closed, which is safe, but blocks traffic that would be allowed once the request is corrected.
+
+```python
+try:
+    decision = await client.evaluate(request)
+except AuthZENRefusal as refusal:
+    refusal.code  # e.g. "unevaluable_attribute" - a closed, generated set
+    refusal.pointer  # "/evaluation/subject/properties" - the member to fix
+    refusal.refused_by  # "client" (this SDK) or "gateway"
+    refusal.retryable  # only a gateway dependency failure is
+```
+
+`AuthZENProtocolError` is separate and means something else: the gateway answered `200` with a body this build cannot safely act on - no profile context, a profile it cannot read, or a decision boolean that disagrees with its operational state. It is always fail-closed, and the fix is an upgrade or an operator, not a corrected request. Read `.kind` to tell those apart without matching on the message: `unsupported_profile` and `unknown_operational_state` mean upgrade the SDK, while `missing_profile_context`, `decision_state_disagreement`, `obligations_on_refusal` and `undecodable_body` mean go and look at the deployment. A `401` surfaces as the SDK's ordinary `AuthenticationError`, because the gateway answers authentication before this route runs.
+
+**`decision.allowed`, never `decision.decision`.** The bare boolean is AuthZEN 1.0's collapsed rendering; `allowed` additionally requires the operational state to be `ALLOW`, so a `CHALLENGE` or an `ERROR` can never be read as permission.
+
+**Three states, not two.** `None` cannot express the difference between "the source established there is no value" and "the source could not be reached", and collapsing them is how an attribute nobody resolved gets recorded as one that was weighed. Attributes inside the `context` and `properties` bags may be explicit:
+
+```python
+from axonflow import AuthZENAttribute, AUTHZEN_UNKNOWN_RESOLUTION_FAILED
+
+context = {
+    "args": {"query": user_prompt},
+    "correlation": {
+        "session_id": AuthZENAttribute.absent(),  # a fact: omitted, request sent
+        "trace_id": AuthZENAttribute.unknown(  # not a fact: refused locally,
+            AUTHZEN_UNKNOWN_RESOLUTION_FAILED  # nothing is sent
+        ),
+    },
+}
+```
+
+The tri-state applies to attribute **data**, not to the structural members (`subject.id`, `action.name`, …): those are the identity of the question being asked, and an identity you cannot resolve is not an attribute whose absence a policy could evaluate - there is no request to make.
+
+**Today's mapping is deliberately narrow.** `subject.type` must be `"gateway"` (an end-user subject needs the identity plane, which activates at v11); an `llm` or `agent` resource id must be the stage name itself, not a provider/model pair, because nothing on the serving path reads a provider or a model; a `tool` resource id is `"server/tool"`, because both halves ARE read. Everything else is refused by name.
+
+The wire types are **generated** from the platform's canonical contract artifact (`scripts/gen_authzen_types.py`); CI fails if the committed module is not what the artifact produces. Runnable example: [`examples/authzen_evaluation.py`](examples/authzen_evaluation.py). Migration notes: [`docs/AUTHZEN_MIGRATION_DRAFT.md`](docs/AUTHZEN_MIGRATION_DRAFT.md).
+
 ## Configuration
 
 ```python

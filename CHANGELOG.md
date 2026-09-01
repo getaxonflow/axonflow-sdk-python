@@ -11,6 +11,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **AuthZEN-native authorization surface (ADR-065, #3615).** `client.evaluate`
+  and `client.evaluate_all` talk to `POST /api/v1/access/evaluation`. A bulk
+  envelope returns ONE decision, not one per entry: its entries are
+  preconditions of a single operation, so a denied entry denies the operation.
+  Nothing is deprecated by this - `client.decide` and the gateway/proxy methods
+  stay wire-stable through all of v11 - but new integrations should be written
+  against it, because at v11 the engine behind it becomes the ADR-065 Policy
+  Decision Point with no wire change.
+- `AuthZENAttribute`, an explicit three-valued type for policy-visible
+  attributes. `known` is sent, `absent` is omitted (the source established
+  there is no value), and `unknown` REFUSES the request locally rather than
+  letting the gateway evaluate as though the attribute were missing. `None`
+  cannot express that difference, and collapsing it is how an attribute nobody
+  resolved is recorded as one that was weighed.
+- `AuthZENRefusal` (the request was not evaluated; carries the server's typed
+  code, the JSON Pointer of the member to fix, whether the SDK or the gateway
+  refused, and whether a retry could help) and `AuthZENProtocolError` (a 200
+  whose body this build cannot safely act on - no profile context, an unknown
+  profile, or a decision boolean that disagrees with its operational state).
+  `AuthZENProtocolError.kind` names which of those it is, so a caller can tell
+  "upgrade the SDK" from "go and look at the deployment" without matching on the
+  message. A `401` continues to surface as the SDK's existing
+  `AuthenticationError`.
+- `AUTHZEN_ATTRIBUTE_MARKER` is exported from the package root, along with the
+  `AuthZENRefusedBy`, `AuthZENAttributeState` and `AuthZENTransport` type
+  aliases. The marker is what a caller needs to hand-build an attribute on the
+  far side of a boundary the objects cannot cross - a queue, a worker, a cache
+  that round-trips through JSON - which is the case the marker exists for.
+- The AuthZEN wire types are GENERATED from the platform's canonical surface
+  artifact, vendored byte-identically at `tests/fixtures/authzen-surface.json`.
+  `scripts/gen_authzen_types.py` emits `axonflow/authzen_types_gen.py`; CI
+  fails if the committed module is not what the artifact produces.
+
 ## [9.1.0] - 2026-08-04
 
 ### Added

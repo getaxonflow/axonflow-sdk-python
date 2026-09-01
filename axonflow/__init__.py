@@ -26,6 +26,40 @@ Example:
 """
 
 from axonflow._version import __version__
+from axonflow.authzen import (
+    AUTHZEN_ATTRIBUTE_MARKER,
+    AUTHZEN_PATH,
+    AUTHZEN_PROFILE_HEADER,
+    AUTHZEN_PROTOCOL_DECISION_STATE_DISAGREEMENT,
+    AUTHZEN_PROTOCOL_MISSING_PROFILE_CONTEXT,
+    AUTHZEN_PROTOCOL_OBLIGATIONS_ON_REFUSAL,
+    AUTHZEN_PROTOCOL_STRUCTURE_TOO_DEEP,
+    AUTHZEN_PROTOCOL_UNDECODABLE_BODY,
+    AUTHZEN_PROTOCOL_UNKNOWN_OPERATIONAL_STATE,
+    AUTHZEN_PROTOCOL_UNRESOLVED_ATTRIBUTE,
+    AUTHZEN_PROTOCOL_UNSPECIFIED,
+    AUTHZEN_PROTOCOL_UNSUPPORTED_PROFILE,
+    AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED,
+    AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE,
+    AUTHZEN_UNKNOWN_MALFORMED_VALUE,
+    AUTHZEN_UNKNOWN_NOT_SUPPLIED,
+    AUTHZEN_UNKNOWN_REQUIRED_ABSENT,
+    AUTHZEN_UNKNOWN_RESOLUTION_FAILED,
+    AUTHZEN_UNKNOWN_SCHEMA_MISMATCH,
+    AUTHZEN_UNKNOWN_STALE,
+    AuthZENAttribute,
+    AuthZENAttributeState,
+    AuthZENDecision,
+    AuthZENProtocolError,
+    AuthZENProtocolErrorKind,
+    AuthZENRefusal,
+    AuthZENRefusedBy,
+    AuthZENTransport,
+    build_envelope,
+    to_wire,
+)
+from axonflow.authzen_types_gen import *  # noqa: F403 - see the __all__ note at the foot of this file
+from axonflow.authzen_types_gen import __all__ as _AUTHZEN_GENERATED_NAMES
 from axonflow.client import (
     AxonFlow,
     HealthResponse,
@@ -453,6 +487,43 @@ __all__ = [
     "CodeGovernanceMetrics",
     "ExportOptions",
     "ExportResponse",
+    # AuthZEN-native authorization (ADR-065) — the HAND-WRITTEN half. The wire
+    # types and enum constants are generated and appended to __all__ below.
+    # AUTHZEN_ATTRIBUTE_MARKER is exported because it is what a caller needs to
+    # hand-build an attribute on the far side of a boundary the objects cannot
+    # cross - a queue, a worker, a cache that round-trips through JSON. That is
+    # the case the marker exists for, so withholding it left the mechanism
+    # documented and unusable. The sibling TypeScript SDK exports it too.
+    "AUTHZEN_ATTRIBUTE_MARKER",
+    "AUTHZEN_PATH",
+    "AUTHZEN_PROFILE_HEADER",
+    "AUTHZEN_PROTOCOL_DECISION_STATE_DISAGREEMENT",
+    "AUTHZEN_PROTOCOL_MISSING_PROFILE_CONTEXT",
+    "AUTHZEN_PROTOCOL_OBLIGATIONS_ON_REFUSAL",
+    "AUTHZEN_PROTOCOL_STRUCTURE_TOO_DEEP",
+    "AUTHZEN_PROTOCOL_UNDECODABLE_BODY",
+    "AUTHZEN_PROTOCOL_UNKNOWN_OPERATIONAL_STATE",
+    "AUTHZEN_PROTOCOL_UNRESOLVED_ATTRIBUTE",
+    "AUTHZEN_PROTOCOL_UNSPECIFIED",
+    "AUTHZEN_PROTOCOL_UNSUPPORTED_PROFILE",
+    "AUTHZEN_UNKNOWN_CLOSURE_TRUNCATED",
+    "AUTHZEN_UNKNOWN_CLOSURE_UNAVAILABLE",
+    "AUTHZEN_UNKNOWN_MALFORMED_VALUE",
+    "AUTHZEN_UNKNOWN_NOT_SUPPLIED",
+    "AUTHZEN_UNKNOWN_REQUIRED_ABSENT",
+    "AUTHZEN_UNKNOWN_RESOLUTION_FAILED",
+    "AUTHZEN_UNKNOWN_SCHEMA_MISMATCH",
+    "AUTHZEN_UNKNOWN_STALE",
+    "AuthZENAttribute",
+    "AuthZENAttributeState",
+    "AuthZENDecision",
+    "AuthZENProtocolError",
+    "AuthZENProtocolErrorKind",
+    "AuthZENRefusal",
+    "AuthZENRefusedBy",
+    "AuthZENTransport",
+    "build_envelope",
+    "to_wire",
     # Exceptions
     "AxonFlowError",
     "ConfigurationError",
@@ -558,3 +629,12 @@ __all__ = [
     "UnifiedListExecutionsRequest",
     "UnifiedListExecutionsResponse",
 ]
+
+# The AuthZEN wire types, enum constants and profile identifiers are GENERATED
+# from the platform's canonical surface artifact (scripts/gen_authzen_types.py),
+# and are appended here rather than transcribed into the literal above. A
+# hand-maintained list would be a second transcription of the artifact — the
+# exact drift the generator exists to prevent — and it would silently leave a
+# newly-added error code unreachable from `axonflow` while four other SDKs had
+# it. Regenerating the types is all it takes for the public surface to follow.
+__all__ += list(_AUTHZEN_GENERATED_NAMES)
