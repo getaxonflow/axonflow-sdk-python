@@ -17,6 +17,28 @@ import pytest_asyncio
 from axonflow import AxonFlow
 
 
+class _EgressBlocked(BaseException):
+    """Raised by the egress guard below. Deliberately a BaseException.
+
+    The telemetry path catches ``Exception`` broadly and MUST — an explicit
+    tuple there was a fail-CLOSED trap, because ``httpx.InvalidURL`` does not
+    subclass ``httpx.HTTPError`` and a malformed endpoint raised straight out
+    of ``_send_telemetry_ping_now`` (see axonflow/telemetry.py).
+
+    But a guard the code under test can swallow is not a guard. When this was
+    a ``RuntimeError``, the broad catch turned it into
+    ``PlatformHealthProbe(None, None)`` and ``False`` — so a test that deleted
+    AXONFLOW_TELEMETRY and forgot a transport would pass VACUOUSLY against an
+    empty probe and an undelivered ping, which is precisely the scenario this
+    fixture's own docstring says it exists to catch.
+
+    Deriving from BaseException puts it in the same class as KeyboardInterrupt
+    and SystemExit: production code's ``except Exception`` cannot catch it, so
+    the guard reaches the test runner as a loud failure however broadly the
+    code under test catches.
+    """
+
+
 @pytest.fixture(autouse=True)
 def _disable_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable telemetry in all tests AND block real HTTP egress from the
@@ -33,7 +55,7 @@ def _disable_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AXONFLOW_TELEMETRY", "off")
 
     def _blocked_http(*_args, **_kwargs):
-        raise RuntimeError(
+        raise _EgressBlocked(
             "Real HTTP egress is blocked in unit tests. "
             "Use httpx.MockTransport or a recorded fixture for tests that "
             "exercise the telemetry path."

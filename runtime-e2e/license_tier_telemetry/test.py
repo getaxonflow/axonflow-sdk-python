@@ -147,7 +147,13 @@ def capture_one_ping(platform_endpoint: str) -> bytes:
         env["AXONFLOW_CHECKPOINT_URL"] = f"http://127.0.0.1:{srv.server_address[1]}/v1/ping"
         env["AXONFLOW_TELEMETRY"] = ""
         try:
-            subprocess.run(  # noqa: S603
+            # The child's exit status and stderr are INSPECTED, not discarded.
+            # A child that dies at construction produces no ping, which the
+            # callers below would otherwise report as "the ping was SUPPRESSED
+            # — telemetry must degrade, not stop": a fail-open accusation
+            # against the SDK for what is actually a harness failure. Name the
+            # real cause instead.
+            proc = subprocess.run(  # noqa: S603
                 [sys.executable, str(Path(__file__).resolve())],
                 env=env,
                 check=False,
@@ -155,6 +161,14 @@ def capture_one_ping(platform_endpoint: str) -> bytes:
                 timeout=30,
             )
             delivered.wait(timeout=5)
+            if proc.returncode != 0:
+                fail(
+                    f"the child process died (exit {proc.returncode}) — this is a HARNESS "
+                    f"failure, not SDK fail-open behaviour.\nstderr:\n"
+                    f"{proc.stderr.decode(errors='replace')}"
+                )
+        except subprocess.TimeoutExpired:
+            fail("the child process did not exit within 30s — harness failure, not SDK behaviour")
         finally:
             srv.shutdown()
     return captured.get("body", b"")
@@ -281,6 +295,12 @@ def run_matrix() -> None:
     ]:
         with stand_in_platform(200, spec_body) as endpoint:
             wire = capture_one_ping(endpoint)
+        if not wire:
+            # Same guard sections 1 and 2 carry. Without it a broken child
+            # raises JSONDecodeError here, killing the run mid-way so the
+            # remaining rows never execute and no failure summary prints.
+            fail(f"{name}: no ping captured")
+            continue
         mode = json.loads(wire)["deployment_mode"]
         if mode != "self_hosted":
             fail(

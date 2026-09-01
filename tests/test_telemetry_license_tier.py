@@ -39,9 +39,17 @@ _REAL_HTTPX_POST = httpx.post
 # Endpoints that raise from inside httpx rather than returning a response.
 # "http://[::1" (an unclosed IPv6 bracket) is the one that matters: it raises
 # httpx.InvalidURL, which does NOT subclass httpx.HTTPError.
-MALFORMED_ENDPOINTS = [
-    "http://[::1",
+# Only the first two actually raise httpx.InvalidURL and therefore kill the
+# fail-CLOSED mutant; the rest raise UnsupportedProtocol, which the old tuple
+# already caught, and "" skips the probe entirely (`if endpoint and ...`).
+# They are kept as coverage of the surrounding contract, NOT as kill rows —
+# said here so the parametrisation is not mistaken for five independent pins.
+MALFORMED_ENDPOINTS_THAT_KILL_THE_MUTANT = [
+    "http://[::1",  # unclosed IPv6 bracket
     "http://\x7f",  # control character in host
+]
+MALFORMED_ENDPOINTS = [
+    *MALFORMED_ENDPOINTS_THAT_KILL_THE_MUTANT,
     "http://",  # no host
     "not a url",
     "",
@@ -342,12 +350,19 @@ class TestTheWholePingHonoursOneDeadline:
 
         class _Stalling(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
-                time.sleep(10)
+                # Long enough to blow both the 1s derived budget and httpx's
+                # 2.0s default (the mutant's fallback), short enough that the
+                # threading server's shutdown does not dominate the run.
+                time.sleep(4)
 
             def log_message(self, *_args: object) -> None:
                 return
 
-        with socketserver.TCPServer(("127.0.0.1", 0), _Stalling) as platform_srv:
+        # Threading, not the single-threaded TCPServer: shutdown() there
+        # blocks until the in-flight handler returns, which made this test
+        # cost ~10s of wall clock AFTER its assertion had already passed.
+        with socketserver.ThreadingTCPServer(("127.0.0.1", 0), _Stalling) as platform_srv:
+            platform_srv.daemon_threads = True
             threading.Thread(target=platform_srv.serve_forever, daemon=True).start()
             endpoint = f"http://127.0.0.1:{platform_srv.server_address[1]}"
             try:
