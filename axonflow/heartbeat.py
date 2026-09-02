@@ -71,12 +71,18 @@ def _resolve_stamp_path() -> Path | None:  # noqa: PLR0911
     Programming Guide, the XDG Base Directory Specification, and the
     Windows Known Folders documentation.
     """
-    if sys.platform == "darwin":
+    # Read through a local rather than testing sys.platform directly: mypy
+    # NARROWS sys.platform to whichever host it runs on, so every branch for a
+    # different OS is reported unreachable — the error differs by developer
+    # machine and by CI runner, and `warn_unreachable = true` turns that into a
+    # red build for portable code that is doing nothing wrong.
+    platform = sys.platform
+    if platform == "darwin":
         home = os.environ.get("HOME")
         if not home:
             return None
         return Path(home) / "Library" / "Caches" / "axonflow" / "python-telemetry-last-sent"
-    if sys.platform == "win32":
+    if platform == "win32":
         local = os.environ.get("LOCALAPPDATA")
         if not local:
             return None

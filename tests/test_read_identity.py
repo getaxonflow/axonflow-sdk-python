@@ -680,7 +680,7 @@ async def test_as_user_reaches_every_method(httpx_mock) -> None:
     # a client's own config — sharing the httpx object outright is exactly the
     # bug this test caught: as_user silently had no effect.)
     derived = admin.as_user("X")
-    assert derived._transport is admin._transport  # noqa: SLF001
+    assert derived._http_client._transport is admin._http_client._transport  # noqa: SLF001
     assert derived._http_client is not admin._http_client  # noqa: SLF001
 
 
@@ -733,3 +733,121 @@ def test_generated_authzen_models_still_refuse_unknown_members() -> None:
             }
         )
     assert "severity" in str(nested_err.value)
+
+
+def test_env_proxies_survive_on_both_the_client_and_a_derived_one(monkeypatch) -> None:
+    """httpx builds its environment proxy map ONLY when it constructs the
+    transport itself (``allow_env_proxies = trust_env and transport is None``).
+
+    Passing an explicit transport therefore leaves ``_mounts`` empty and every
+    customer behind an egress proxy loses connectivity — a total outage on
+    upgrade, caused by a change about read scoping. This asserts the map is
+    populated on the client AND carried across to a derived one, which does
+    pass a transport (to share the pool) and so has to copy the mounts by hand.
+    """
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.invalid:3128")
+
+    parent = _client(user_token=TEST_TOKEN)
+    assert parent._http_client._mounts, (  # noqa: SLF001
+        "the client built no proxy map from the environment; an explicit transport= was "
+        "almost certainly passed, which silently disables env proxies for every caller"
+    )
+    assert parent._map_http_client._mounts  # noqa: SLF001
+
+    derived = parent.as_user("ALICE")
+    assert derived._http_client._mounts == parent._http_client._mounts, (  # noqa: SLF001
+        "the derived client lost the proxy map: it passes an explicit transport to share the "
+        "pool, so the mounts have to be carried across rather than left to httpx"
+    )
+    assert derived._map_http_client._mounts == parent._map_http_client._mounts  # noqa: SLF001
+
+
+def test_as_user_resets_lazily_bound_namespaces() -> None:
+    """A derived client must not inherit a sub-namespace bound to the PARENT.
+
+    Each lazy namespace caches the client that created it, so a copied
+    reference calls through the parent — with the parent's identity. The bug
+    only appears when the parent touched the namespace BEFORE deriving, which
+    is exactly the ordering a long-lived gateway has, so the test does that
+    deliberately.
+    """
+    parent = _client(user_token="ADMIN-TOKEN")
+    parent_namespace = parent.masfeat  # bind it on the PARENT first
+
+    derived = parent.as_user("ALICE-TOKEN")
+    assert derived.masfeat is not parent_namespace, (
+        "the derived client inherited the parent's lazily-bound namespace, which still calls "
+        "through the parent and therefore under the PARENT's identity"
+    )
+
+    # And the namespace it does get is bound to the DERIVED client, so its
+    # requests carry Alice — the property the identity check is really about.
+    assert derived.masfeat._client is derived  # noqa: SLF001
+    assert parent.masfeat._client is parent  # noqa: SLF001
+
+
+def test_credentials_do_not_appear_in_the_config_repr() -> None:
+    """A config object reaches log lines, exception ``__repr__``s, debugger
+    frames and crash reporters; a credential that rides along has left the
+    process in every one of those.
+
+    Both credentials are asserted together on purpose — the read-path identity
+    is a per-user credential of the same class as ``client_secret``, and marking
+    one while forgetting the other is the likely failure.
+    """
+    from axonflow.types import AxonFlowConfig
+
+    config = AxonFlowConfig(
+        endpoint="http://localhost:8080",
+        client_id="org",
+        client_secret="SECRET-VALUE",
+        user_token="TOKEN-VALUE",
+    )
+    assert "SECRET-VALUE" not in repr(config)
+    assert "TOKEN-VALUE" not in repr(config)
+    # The non-secret fields must still be there, or this passes by rendering
+    # nothing at all.
+    assert "localhost:8080" in repr(config)
+
+
+@pytest.mark.parametrize(
+    ("payload", "member"),
+    [
+        # A DECISION arriving as the string "false" was read as the boolean
+        # False; an obligation whose `mandatory` arrived as 1 was read as True.
+        # Those are type errors on the wire being silently repaired into a
+        # reading nobody sent — on exactly the members that decide whether an
+        # unsupported obligation must DENY.
+        ({"decision": "false"}, "decision"),
+        ({"decision": 1}, "decision"),
+    ],
+)
+def test_generated_models_do_not_coerce_wire_types(payload, member) -> None:
+    from axonflow.authzen_types_gen import AuthZENResponse
+
+    with pytest.raises(Exception) as excinfo:  # noqa: PT011 - pydantic ValidationError
+        AuthZENResponse.model_validate(payload)
+    assert member in str(excinfo.value)
+
+
+def test_generated_models_do_not_coerce_an_obligations_mandatory() -> None:
+    from axonflow.authzen_types_gen import AuthZENObligation
+
+    with pytest.raises(Exception) as excinfo:  # noqa: PT011
+        AuthZENObligation.model_validate(
+            {"type": "redact", "mandatory": 1, "source_policy": "p", "schema_version": 1}
+        )
+    assert "mandatory" in str(excinfo.value)
+
+
+def test_generated_models_still_accept_the_correct_types() -> None:
+    """The other failure direction: strictness that refuses valid payloads is
+    an outage, not a guard."""
+    from axonflow.authzen_types_gen import AuthZENObligation, AuthZENResponse
+
+    assert AuthZENResponse.model_validate({"decision": False}).decision is False
+    obligation = AuthZENObligation.model_validate(
+        {"type": "redact", "mandatory": True, "source_policy": "p", "schema_version": 1}
+    )
+    assert obligation.mandatory is True
+    assert obligation.schema_version == 1

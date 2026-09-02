@@ -143,8 +143,6 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.read_identity import (
-    ReadScope,
-    ReadScopeError,
     read_scope_error_for,
     read_scope_of,
     refuse_vacuous_scoped_page,
@@ -473,6 +471,14 @@ def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
     return body
 
 
+# Sub-namespaces the client binds LAZILY, each caching a reference to the client
+# that created it. as_user() resets every one, because copying such a reference
+# hands the derived client a namespace that still calls through the PARENT —
+# with the parent's identity. Add to this list when adding a lazy namespace; the
+# guard is a list precisely so that adding one is a conscious act.
+_LAZY_NAMESPACE_SLOTS = ("_masfeat",)
+
+
 class AxonFlow:
     """Main AxonFlow client for AI governance.
 
@@ -485,7 +491,6 @@ class AxonFlow:
 
     __slots__ = (
         "_config",
-        "_transport",
         "_http_client",
         "_map_http_client",
         "_cache",
@@ -628,19 +633,20 @@ class AxonFlow:
 
         identity_hooks: dict[str, list[Any]] = {"request": [_stamp_identity]}
 
-        # The connection pool is owned explicitly rather than left implicit,
-        # so as_user() can hand a derived client the SAME pool while giving it
-        # its OWN event hook. Without that split, a derived client sharing the
-        # httpx clients would also share their hook — which closes over the
-        # ORIGINAL client's config — and as_user would silently have no effect
-        # at all. (It did; the test that caught it is
-        # test_as_user_reaches_every_method.)
-        self._transport = httpx.AsyncHTTPTransport(verify=verify_ssl)
-
-        # Initialize HTTP client
+        # NO explicit `transport=` here, deliberately. httpx only builds its
+        # environment proxy map when it constructs the transport itself
+        # (`allow_env_proxies = trust_env and transport is None`), so passing
+        # one leaves `_mounts` EMPTY and every customer behind an egress proxy
+        # loses connectivity — a total outage on upgrade, caused by a change
+        # about read scoping. Measured: with HTTPS_PROXY set, `_mounts` is a
+        # one-entry map without an explicit transport and `{}` with one.
+        #
+        # as_user() therefore borrows this client's transport AND its mounts
+        # rather than the whole client, which keeps both the pool and the proxy
+        # behaviour while letting the derived client own its identity hook.
         self._http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout),
-            transport=self._transport,
+            verify=verify_ssl,
             headers=headers,
             event_hooks=identity_hooks,
         )
@@ -648,7 +654,7 @@ class AxonFlow:
         # Initialize MAP HTTP client with longer timeout
         self._map_http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(map_timeout),
-            transport=self._transport,
+            verify=verify_ssl,
             headers=headers,
             event_hooks=identity_hooks,
         )
@@ -2896,37 +2902,41 @@ class AxonFlow:
         )
         object.__setattr__(derived, "_config", derived_config)
 
-        # New httpx clients over the SAME transport: the connection pool is
-        # shared (so deriving one per request stays cheap) but the identity
-        # hook is not, because the hook closes over a client's own config.
-        # Reusing this client's httpx objects wholesale would silently give the
-        # derived client the ORIGINAL identity.
+        # Every LAZILY-BOUND sub-object is reset, not copied. Each caches a
+        # reference to the client that created it, so copying one would hand the
+        # derived client a namespace that still calls through the PARENT — with
+        # the parent's identity. The bug only appears if the parent touched the
+        # namespace before deriving, which is exactly the ordering a long-lived
+        # gateway has.
+        for slot in _LAZY_NAMESPACE_SLOTS:
+            object.__setattr__(derived, slot, None)
+
+        # New httpx clients that BORROW this one's transport and mounts: the
+        # connection pool is shared (so deriving one per request stays cheap)
+        # and the environment proxy map survives, but the identity hook is not
+        # shared — it closes over a client's own config, so reusing the httpx
+        # objects wholesale would silently give the derived client the ORIGINAL
+        # identity. (It did; test_as_user_reaches_every_method caught it.)
         async def _stamp_derived(request: httpx.Request) -> None:
             stamp_read_identity(
                 derived_config.user_token, request, endpoint=derived_config.endpoint
             )
 
         hooks: dict[str, list[Any]] = {"request": [_stamp_derived]}
-        object.__setattr__(
-            derived,
-            "_http_client",
-            httpx.AsyncClient(
-                timeout=self._http_client.timeout,
-                transport=self._transport,
-                headers=self._http_client.headers,
+        for slot, parent_client in (
+            ("_http_client", self._http_client),
+            ("_map_http_client", self._map_http_client),
+        ):
+            borrowed = httpx.AsyncClient(
+                timeout=parent_client.timeout,
+                transport=parent_client._transport,  # noqa: SLF001 - see above
+                headers=parent_client.headers,
                 event_hooks=hooks,
-            ),
-        )
-        object.__setattr__(
-            derived,
-            "_map_http_client",
-            httpx.AsyncClient(
-                timeout=self._map_http_client.timeout,
-                transport=self._transport,
-                headers=self._map_http_client.headers,
-                event_hooks=hooks,
-            ),
-        )
+            )
+            # httpx only populates _mounts when it builds the transport itself,
+            # so the proxy map is carried across explicitly rather than lost.
+            borrowed._mounts = dict(parent_client._mounts)  # noqa: SLF001
+            object.__setattr__(derived, slot, borrowed)
         return derived
 
     async def explain_decision(
@@ -3136,12 +3146,9 @@ class AxonFlow:
         # Only NONE refuses. OWN_ROWS with zero rows is a real answer ("you
         # have made no decisions matching this filter"), and turning it into an
         # error would replace one wrong report with another.
-        if not decisions and read_scope_of(response) == ReadScope.NONE:
-            raise ReadScopeError(
-                scope=ReadScope.NONE,
-                status_code=response.status_code,
-                resource="decisions",
-            )
+        scoped = refuse_vacuous_scoped_page(response, "decisions", len(decisions))
+        if scoped is not None:
+            raise scoped
         return decisions
 
     # ------------------------------------------------------------------ #
@@ -4523,13 +4530,14 @@ class AxonFlow:
                 return None
             result: dict[str, Any] | list[Any] = response.json()
             if scoped_page_key is not None:
+                # The two shapes the platform sends. `result` is typed as
+                # dict | list, so there is no third arm to write — an `else:
+                # rows = 0` here is provably dead and mypy says so.
                 if isinstance(result, list):
                     rows = len(result)
-                elif isinstance(result, dict):
+                else:
                     entries = result.get(scoped_page_key)
                     rows = len(entries) if isinstance(entries, list) else 0
-                else:
-                    rows = 0
                 scoped = refuse_vacuous_scoped_page(response, scoped_resource or "read", rows)
                 if scoped is not None:
                     raise scoped

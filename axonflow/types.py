@@ -75,7 +75,15 @@ class AxonFlowConfig(BaseModel):
 
     endpoint: str = Field(..., min_length=1, description="AxonFlow endpoint URL")
     client_id: str | None = Field(default=None, description="Client ID (optional)")
-    client_secret: str | None = Field(default=None, description="Client secret (optional)")
+    # repr=False on BOTH credentials. A config object reaches a log line, an
+    # exception's __repr__, a debugger frame and a crash reporter, and a
+    # credential that rides along has left the process in every one of those.
+    # The read-path identity is a per-user credential, so it belongs to the same
+    # class as client_secret; they are marked together rather than one being
+    # remembered and the other not.
+    client_secret: str | None = Field(
+        default=None, description="Client secret (optional)", repr=False
+    )
     #: The per-user identity this client presents on the READ path, sent as the
     #: ``X-User-Token`` header on every request.
     #:
@@ -106,7 +114,9 @@ class AxonFlowConfig(BaseModel):
     #: Override per call with the ``user_token=`` keyword on a read, or derive
     #: a client bound to one person with :meth:`AxonFlow.as_user`.
     user_token: str | None = Field(
-        default=None, description="Per-user identity for role-scoped reads (X-User-Token)"
+        default=None,
+        description="Per-user identity for role-scoped reads (X-User-Token)",
+        repr=False,
     )
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
