@@ -142,6 +142,13 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
+from axonflow.read_identity import (
+    read_scope_error_for,
+    read_scope_of,
+    refuse_vacuous_scoped_page,
+    stamp_read_identity,
+    use_read_identity,
+)
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,
@@ -464,6 +471,14 @@ def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
     return body
 
 
+# Sub-namespaces the client binds LAZILY, each caching a reference to the client
+# that created it. as_user() resets every one, because copying such a reference
+# hands the derived client a namespace that still calls through the PARENT —
+# with the parent's identity. Add to this list when adding a lazy namespace; the
+# guard is a list precisely so that adding one is a conscious act.
+_LAZY_NAMESPACE_SLOTS = ("_masfeat",)
+
+
 class AxonFlow:
     """Main AxonFlow client for AI governance.
 
@@ -499,6 +514,7 @@ class AxonFlow:
         cache_enabled: bool = True,
         cache_ttl: float = 60.0,
         cache_max_size: int = 1000,
+        user_token: str | None = None,
     ) -> None:
         """Initialize AxonFlow client.
 
@@ -518,6 +534,14 @@ class AxonFlow:
             cache_enabled: Enable response caching
             cache_ttl: Cache TTL in seconds
             cache_max_size: Maximum cache entries
+            user_token: Per-user identity for the READ path, sent as
+                ``X-User-Token``. ``client_id``/``client_secret`` say which
+                ORGANIZATION is asking; this says WHO. Since platform #2922
+                ``explain_decision``, ``list_decisions`` and the audit/override
+                reads are scoped to it — an enterprise stack returns ZERO rows
+                to a caller that presents none. Override per call with the
+                ``user_token=`` keyword on the read. See
+                :mod:`axonflow.read_identity`.
 
         Note:
             For community/self-hosted deployments, client_id and client_secret can be omitted.
@@ -552,6 +576,7 @@ class AxonFlow:
             insecure_skip_verify=insecure_skip_verify,
             retry=retry_config or RetryConfig(),
             cache=CacheConfig(enabled=cache_enabled, ttl=cache_ttl, max_size=cache_max_size),
+            user_token=user_token,
         )
 
         # Configure SSL verification
@@ -588,11 +613,42 @@ class AxonFlow:
         # values are harmless (no spoofing surface).
         headers["X-Client-ID"] = effective_client_id
 
-        # Initialize HTTP client
+        # The read-path per-user identity (X-User-Token) is stamped by a
+        # request event hook rather than baked into the default headers above.
+        # That is the SDK's ONE identity site: every request either client
+        # makes passes through it, and the platform likewise reads the header
+        # once in the middleware in front of every proxied route rather than
+        # per route. It has to be a hook and not a default header because a
+        # per-call identity must be able to REMOVE the client-wide one for one
+        # read (a default header cannot be unset per request, and a
+        # present-but-empty header is a different thing to send). See
+        # axonflow.read_identity.
+        async def _stamp_identity(request: httpx.Request) -> None:
+            # The endpoint is passed so the identity is only ever sent THERE.
+            # httpx re-runs request event hooks on a redirected request, so a
+            # hook that stamped unconditionally would re-add the per-user
+            # credential to a host the caller never named — on exactly the hop
+            # where httpx drops Authorization. See stamp_read_identity.
+            stamp_read_identity(self._config.user_token, request, endpoint=self._config.endpoint)
+
+        identity_hooks: dict[str, list[Any]] = {"request": [_stamp_identity]}
+
+        # NO explicit `transport=` here, deliberately. httpx only builds its
+        # environment proxy map when it constructs the transport itself
+        # (`allow_env_proxies = trust_env and transport is None`), so passing
+        # one leaves `_mounts` EMPTY and every customer behind an egress proxy
+        # loses connectivity — a total outage on upgrade, caused by a change
+        # about read scoping. Measured: with HTTPS_PROXY set, `_mounts` is a
+        # one-entry map without an explicit transport and `{}` with one.
+        #
+        # as_user() therefore borrows this client's transport AND its mounts
+        # rather than the whole client, which keeps both the pool and the proxy
+        # behaviour while letting the derived client own its identity hook.
         self._http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout),
             verify=verify_ssl,
             headers=headers,
+            event_hooks=identity_hooks,
         )
 
         # Initialize MAP HTTP client with longer timeout
@@ -600,6 +656,7 @@ class AxonFlow:
             timeout=httpx.Timeout(map_timeout),
             verify=verify_ssl,
             headers=headers,
+            event_hooks=identity_hooks,
         )
 
         # Initialize cache
@@ -2785,6 +2842,8 @@ class AxonFlow:
         response = await self._orchestrator_request(
             "POST",
             "/api/v1/audit/search",
+            scoped_resource="audit entries",
+            scoped_page_key="entries",
             json_data=body,
         )
 
@@ -2811,25 +2870,125 @@ class AxonFlow:
             offset=response.get("offset", request.offset),
         )
 
-    async def explain_decision(self, decision_id: str) -> DecisionExplanation:
+    def as_user(self, user_token: str | None) -> AxonFlow:
+        """A client identical to this one but presenting ``user_token``.
+
+        The shape to reach for when one process acts on behalf of several
+        people — a gateway, a bot. Unlike the per-call ``user_token=`` keyword,
+        which only the read methods accept, this reaches EVERY method: there is
+        no carve-out to remember and no path on which the identity silently
+        widens back to the process's own.
+
+        ::
+
+            for_alice = client.as_user(alice_token)
+            rows = await for_alice.list_decisions()
+
+        The returned client shares this one's CONNECTION POOL and cache, so
+        deriving one per request is cheap. It gets its own thin httpx clients,
+        because the identity travels on a request event hook that closes over a
+        client's own config — sharing the httpx objects outright would give the
+        derived client this one's identity, silently. This client is not
+        modified.
+
+        An empty token returns a client presenting no identity at all, which on
+        an enterprise stack reads nothing (see :data:`ReadScope.NONE`).
+        """
+        derived = object.__new__(type(self))
+        for slot in type(self).__slots__:
+            object.__setattr__(derived, slot, getattr(self, slot))
+        derived_config = self._config.model_copy(
+            update={"user_token": (user_token or "").strip() or None}
+        )
+        object.__setattr__(derived, "_config", derived_config)
+
+        # Every LAZILY-BOUND sub-object is reset, not copied. Each caches a
+        # reference to the client that created it, so copying one would hand the
+        # derived client a namespace that still calls through the PARENT — with
+        # the parent's identity. The bug only appears if the parent touched the
+        # namespace before deriving, which is exactly the ordering a long-lived
+        # gateway has.
+        for slot in _LAZY_NAMESPACE_SLOTS:
+            object.__setattr__(derived, slot, None)
+
+        # New httpx clients that BORROW this one's transport and mounts: the
+        # connection pool is shared (so deriving one per request stays cheap)
+        # and the environment proxy map survives, but the identity hook is not
+        # shared — it closes over a client's own config, so reusing the httpx
+        # objects wholesale would silently give the derived client the ORIGINAL
+        # identity. (It did; test_as_user_reaches_every_method caught it.)
+        async def _stamp_derived(request: httpx.Request) -> None:
+            stamp_read_identity(
+                derived_config.user_token, request, endpoint=derived_config.endpoint
+            )
+
+        hooks: dict[str, list[Any]] = {"request": [_stamp_derived]}
+        for slot, parent_client in (
+            ("_http_client", self._http_client),
+            ("_map_http_client", self._map_http_client),
+        ):
+            borrowed = httpx.AsyncClient(
+                timeout=parent_client.timeout,
+                transport=parent_client._transport,  # noqa: SLF001 - see above
+                headers=parent_client.headers,
+                event_hooks=hooks,
+            )
+            # httpx only populates _mounts when it builds the transport itself,
+            # so the proxy map is carried across explicitly rather than lost.
+            borrowed._mounts = dict(parent_client._mounts)  # noqa: SLF001
+            object.__setattr__(derived, slot, borrowed)
+        return derived
+
+    async def explain_decision(
+        self,
+        decision_id: str,
+        *,
+        user_token: str | None = None,
+    ) -> DecisionExplanation:
         """Fetch the full explanation for a previously-made policy decision.
 
         Implements ADR-043. Calls ``GET /api/v1/decisions/:id/explain`` and
         returns a :class:`DecisionExplanation` with matched policies, risk
         level, override availability, and a rolling-24h session hit count.
 
-        The caller must either own the decision (user_email match) or belong
-        to the same tenant as the decision's originator.
+        **Which decisions this returns (platform #2922).** The read is scoped
+        to the per-user identity the caller presents, NOT to the tenant
+        credential. On an enterprise stack:
+
+        * a tenant-wide role (admin, owner, policy_admin) explains any decision
+          in the tenant;
+        * any other identity (developer, viewer) explains only the decisions
+          attributed to it — another user's decision answers exactly like a
+          decision that does not exist;
+        * a caller presenting NO identity explains nothing at all. Every call
+          answers not-found, whatever the decision id.
+
+        Community and Community-SaaS deployments are single-operator and read
+        tenant-wide with no identity needed.
+
+        **Telling the three misses apart.** A miss raises
+        :class:`~axonflow.read_identity.ReadScopeError` whenever the platform's
+        ``X-Axonflow-Read-Scope`` header says the caller's scope decided it, so
+        "not yours" and "you presented nothing" are distinguishable from "past
+        retention" instead of all three arriving as the same 404.
 
         Args:
             decision_id: The global decision identifier returned in the
                 original step gate or policy evaluation response.
+            user_token: Per-user identity for THIS call only, overriding the
+                client-wide ``user_token``. Use it when one process acts on
+                behalf of several people. An empty string is not an identity:
+                it makes this read explicitly unidentified rather than falling
+                back to the client-wide one.
 
         Returns:
             A DecisionExplanation (frozen shape per ADR-043).
 
         Raises:
             ValueError: If ``decision_id`` is empty.
+            ReadScopeError: The decision is not visible to the identity
+                presented, or no identity was resolved. Check
+                ``err.identity_missing`` to tell those apart.
 
         Example:
             >>> exp = await client.explain_decision("dec_wf123_step4")
@@ -2845,10 +3004,13 @@ class AxonFlow:
         # the identifier format — IDs containing "/" or "?" would break the URL.
         encoded = quote(decision_id, safe="")
 
-        response = await self._orchestrator_request(
-            "GET",
-            f"/api/v1/decisions/{encoded}/explain",
-        )
+        with use_read_identity(user_token):
+            response = await self._orchestrator_request(
+                "GET",
+                f"/api/v1/decisions/{encoded}/explain",
+                scoped_resource="decision",
+                scoped_identifier=decision_id,
+            )
 
         if not isinstance(response, dict):
             response = {}
@@ -2857,8 +3019,10 @@ class AxonFlow:
     async def list_decisions(
         self,
         opts: ListDecisionsOptions | None = None,
+        *,
+        user_token: str | None = None,
     ) -> list[DecisionSummary]:
-        """List recent policy decisions for the caller's tenant.
+        """List the recent policy decisions VISIBLE TO THE CALLER.
 
         Implements ``GET /api/v1/decisions``. Returns the slim 5-field
         :class:`DecisionSummary` page; the platform applies a tier-gated
@@ -2869,9 +3033,30 @@ class AxonFlow:
         ``upgrade.{tier,compare_url,buy_url}`` so the caller can branch on
         them without re-parsing the body.
 
+        **Whose decisions come back (platform #2922).** Not the tenant's — the
+        caller's SCOPE. On an enterprise stack a tenant-wide role (admin,
+        owner, policy_admin) lists the whole tenant, any other identity lists
+        only its own rows, and a caller presenting NO identity lists nothing
+        whatsoever.
+
+        **The empty list that was never true.** That last case used to return
+        an empty list, which reads as "your tenant has made no decisions" and
+        is a different statement from what happened. When the platform reports
+        ``X-Axonflow-Read-Scope: none`` and the result is empty, this method
+        now raises :class:`~axonflow.read_identity.ReadScopeError` instead —
+        the read could not have returned a row, so its emptiness is not
+        evidence about the data. Callers upgrading from an earlier SDK on an
+        enterprise stack will see this exactly where they were being told
+        nothing was there; the remedy is to present an identity.
+
+        A genuinely empty own-rows or tenant-wide read is NOT an error: those
+        callers could have seen rows and there were none.
+
         Args:
             opts: Filter + page-size options. ``None`` returns the
-                tier-default page from the caller's tenant.
+                tier-default page visible to the caller.
+            user_token: Per-user identity for THIS call only, overriding the
+                client-wide ``user_token``.
 
         Returns:
             A list of DecisionSummary rows ordered newest-first.
@@ -2879,6 +3064,8 @@ class AxonFlow:
         Raises:
             RateLimitError: 429 tier-cap; ``rle.upgrade`` exposes
                 tier/compare_url/buy_url.
+            ReadScopeError: The page was empty because no per-user identity
+                was resolved, so it could not have contained a row.
             AxonFlowError: Other HTTP errors (401, 5xx, etc.).
 
         Example:
@@ -2899,7 +3086,8 @@ class AxonFlow:
         self._pre_request_hook()
         url = f"{self._config.endpoint}{path}"
         try:
-            response = await self._http_client.get(url)
+            with use_read_identity(user_token):
+                response = await self._http_client.get(url)
         except httpx.ConnectError as e:
             msg = f"Failed to connect to Orchestrator: {e}"
             raise ConnectionError(msg) from e
@@ -2944,12 +3132,24 @@ class AxonFlow:
             raise AxonFlowError(msg)
 
         body = response.json()
-        if not isinstance(body, dict):
-            return []
-        rows = body.get("decisions")
-        if not isinstance(rows, list):
-            return []
-        return [DecisionSummary.model_validate(r) for r in rows]
+        rows = body.get("decisions") if isinstance(body, dict) else None
+        decisions = (
+            [DecisionSummary.model_validate(r) for r in rows] if isinstance(rows, list) else []
+        )
+
+        # An empty page under ReadScope.NONE is the fail-closed shape, not a
+        # finding: the platform returned zero rows because it had no identity
+        # to scope on, so the page says nothing about what exists. Guarded on
+        # emptiness as well as on the scope so a non-empty page is never turned
+        # into an error, whatever the header says.
+        #
+        # Only NONE refuses. OWN_ROWS with zero rows is a real answer ("you
+        # have made no decisions matching this filter"), and turning it into an
+        # error would replace one wrong report with another.
+        scoped = refuse_vacuous_scoped_page(response, "decisions", len(decisions))
+        if scoped is not None:
+            raise scoped
+        return decisions
 
     # ------------------------------------------------------------------ #
     # AuthZEN-native authorization (ADR-065)                              #
@@ -3248,7 +3448,12 @@ class AxonFlow:
             )
 
         url = f"/api/v1/audit/tenant/{tenant_id}?limit={options.limit}&offset={options.offset}"
-        response = await self._orchestrator_request("GET", url)
+        response = await self._orchestrator_request(
+            "GET",
+            url,
+            scoped_resource="audit entries",
+            scoped_page_key="entries",
+        )
 
         # API may return array directly or wrapped response
         if isinstance(response, list):
@@ -4295,8 +4500,25 @@ class AxonFlow:
         path: str,
         *,
         json_data: dict[str, Any] | None = None,
+        scoped_resource: str | None = None,
+        scoped_identifier: str | None = None,
+        scoped_page_key: str | None = None,
     ) -> dict[str, Any] | list[Any] | None:
-        """Make HTTP request to Orchestrator."""
+        """Make HTTP request to Orchestrator.
+
+        ``scoped_resource``/``scoped_identifier`` opt a route into the
+        read-scope diagnosis: a 404 on a role-scoped read is re-raised as
+        :class:`~axonflow.read_identity.ReadScopeError` when the platform's
+        ``X-Axonflow-Read-Scope`` header says the caller's scope decided it.
+        Routes that pass neither keep the plain ``AxonFlowError``.
+
+        ``scoped_page_key`` additionally opts a LIST route into the
+        empty-page refusal. The count is taken here, where the response
+        object still exists, and it handles both shapes the platform sends —
+        a bare array, or an envelope whose rows live under that key. Doing it
+        per caller would put one rule in two places per method, and the rule
+        would end up holding on whichever branch the server happened to take.
+        """
         self._pre_request_hook()
         base_url = self._config.endpoint
         url = f"{base_url}{path}"
@@ -4307,6 +4529,18 @@ class AxonFlow:
             if response.status_code == 204:  # noqa: PLR2004
                 return None
             result: dict[str, Any] | list[Any] = response.json()
+            if scoped_page_key is not None:
+                # The two shapes the platform sends. `result` is typed as
+                # dict | list, so there is no third arm to write — an `else:
+                # rows = 0` here is provably dead and mypy says so.
+                if isinstance(result, list):
+                    rows = len(result)
+                else:
+                    entries = result.get(scoped_page_key)
+                    rows = len(entries) if isinstance(entries, list) else 0
+                scoped = refuse_vacuous_scoped_page(response, scoped_resource or "read", rows)
+                if scoped is not None:
+                    raise scoped
             return result  # noqa: TRY300
 
         except httpx.ConnectError as e:
@@ -4316,6 +4550,20 @@ class AxonFlow:
             msg = f"Request timed out: {e}"
             raise TimeoutError(msg) from e
         except httpx.HTTPStatusError as e:
+            # A scoped miss reports WHY it missed. Only 404 is interpreted: the
+            # scope header is stamped before the handler writes its status, so
+            # it also rides a 500 from further down the handler, and explaining
+            # a server fault as a scoping outcome would be exactly the
+            # confidently-wrong diagnosis this type exists to prevent.
+            if scoped_resource is not None and e.response.status_code == 404:  # noqa: PLR2004
+                scoped = read_scope_error_for(
+                    resource=scoped_resource,
+                    identifier=scoped_identifier,
+                    scope=read_scope_of(e.response),
+                    status_code=e.response.status_code,
+                )
+                if scoped is not None:
+                    raise scoped from e
             msg = f"HTTP {e.response.status_code}: {e.response.text}"
             raise AxonFlowError(msg) from e
 

@@ -27,10 +27,15 @@ class _AuthZENModel(BaseModel):
     the surface's central rule: an unknown member in a decision is a server speaking a
     profile this build does not understand, and quietly dropping it would mean acting on
     a partial reading of an authorization decision. On the request side it catches a
-    member the caller invented before it becomes a 422.
+    member the caller invented before it becomes a 422. strict=True is the other half,
+    and it closes a quieter hole: without it pydantic COERCES, so a decision arriving as
+    the string "false" was read as the boolean False and an obligation whose mandatory
+    member arrived as 1 was read as True. Those are type errors on the wire being
+    silently repaired into a reading nobody sent, on exactly the members that decide
+    whether an unsupported obligation must DENY.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 # The profile a Policy Enforcement Point negotiates to receive anything beyond

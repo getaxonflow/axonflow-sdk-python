@@ -75,7 +75,49 @@ class AxonFlowConfig(BaseModel):
 
     endpoint: str = Field(..., min_length=1, description="AxonFlow endpoint URL")
     client_id: str | None = Field(default=None, description="Client ID (optional)")
-    client_secret: str | None = Field(default=None, description="Client secret (optional)")
+    # repr=False on BOTH credentials. A config object reaches a log line, an
+    # exception's __repr__, a debugger frame and a crash reporter, and a
+    # credential that rides along has left the process in every one of those.
+    # The read-path identity is a per-user credential, so it belongs to the same
+    # class as client_secret; they are marked together rather than one being
+    # remembered and the other not.
+    client_secret: str | None = Field(
+        default=None, description="Client secret (optional)", repr=False
+    )
+    #: The per-user identity this client presents on the READ path, sent as the
+    #: ``X-User-Token`` header on every request.
+    #:
+    #: ``client_id``/``client_secret`` authenticate the ORGANIZATION; this
+    #: authenticates the PERSON. Since platform #2922 the role-scoped reads
+    #: (``explain_decision``, ``list_decisions``, the audit and override reads)
+    #: are answered from this identity: an enterprise stack scopes a developer
+    #: or viewer to their own rows, gives a tenant-wide role (admin / owner /
+    #: policy_admin) the whole tenant, and returns ZERO rows to a caller that
+    #: presents no identity at all. Leaving it unset against an enterprise
+    #: stack is therefore not a neutral default — it is the configuration under
+    #: which every scoped read answers nothing, which the SDK now reports as a
+    #: ``ReadScopeError`` rather than as an empty result.
+    #:
+    #: The value is a per-user JWT: minted by the customer portal's user-token
+    #: API, or for local testing by ``scripts/generate-jwt.sh --kind user``. It
+    #: is NOT the tenant JWT and not ``client_secret``. Community deployments
+    #: are single-operator and ignore it.
+    #:
+    #: SETTING THIS AFFECTS MORE THAN READS. The header rides every request and
+    #: the agent VALIDATES it on every route it proxies — not only the scoped
+    #: reads. A stale or rotated token therefore turns ``list_connectors``,
+    #: ``install_connector`` and policy CRUD into 401s rather than merely
+    #: unscoping a read. Fail-closed is the right direction, but it puts this
+    #: value in the same rotation story as ``client_secret``. See
+    #: :func:`axonflow.read_identity.stamp_read_identity` for the route census.
+    #:
+    #: Override per call with the ``user_token=`` keyword on a read, or derive
+    #: a client bound to one person with :meth:`AxonFlow.as_user`.
+    user_token: str | None = Field(
+        default=None,
+        description="Per-user identity for role-scoped reads (X-User-Token)",
+        repr=False,
+    )
     mode: Mode = Field(default=Mode.PRODUCTION, description="Operation mode")
     debug: bool = Field(default=False, description="Enable debug logging")
     # `telemetry` field removed in v8.0. AXONFLOW_TELEMETRY=off is now the
