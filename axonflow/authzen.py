@@ -342,6 +342,12 @@ def _attribute_parts(value: object) -> tuple[str, Any, str]:
 
     Only ever called behind :func:`_is_attribute`, which has already
     established that the value is one of those two shapes.
+
+    The returned state is whatever the document carries, NOT normalised into
+    the three this build knows: a copied dict with an unrecognised or missing
+    state yields that string (or ``""``), and ``_resolve_value`` refuses it.
+    Mapping an unknown state onto a known one here would put the fail-open back
+    one frame lower, where it is harder to see.
     """
     if isinstance(value, AuthZENAttribute):
         return value.state, value.value, value.reason
@@ -350,15 +356,34 @@ def _attribute_parts(value: object) -> tuple[str, Any, str]:
 
 
 def _is_attribute(value: object) -> bool:
-    """Whether ``value`` is a tri-state attribute, however it was copied."""
+    """Whether ``value`` is a tri-state attribute, however it was copied.
+
+    Recognition keys on the MARKER alone, deliberately, and not on the marker
+    plus a state this build happens to know.
+
+    Pairing them was a fail-open (#234). A document carrying
+    ``__axonflow_authzen_attribute__: True`` with any other ``state`` — a newer
+    producer's, or a corrupted one — was reported as NOT an attribute, and so
+    was walked as ordinary data and sent on the wire, marker key and all. By
+    the surface's own reasoning that document IS an attribute; it is one this
+    build cannot interpret. Evaluating around it records an attribute nobody
+    resolved as one that was weighed, and it leaks the marker convention to the
+    gateway.
+
+    Recognising it here routes it to the same refusal an ``unknown`` attribute
+    gets: ``_resolve_value`` matches ``known`` and ``absent`` explicitly and
+    raises ``_Unresolvable`` for everything else, so an unrecognised state
+    (including a missing one) refuses locally, non-retryably, with a pointer to
+    the member — which is what the Go SDK does (sdk-go#210).
+
+    A marker that is present but not boolean ``True`` stays data: only a
+    positive self-identification counts, so a caller's own bag with a
+    similarly-named key cannot be turned into a refusal.
+    """
     if isinstance(value, AuthZENAttribute):
         return True
     if isinstance(value, dict):
-        return value.get(AUTHZEN_ATTRIBUTE_MARKER) is True and value.get("state") in {
-            "known",
-            "absent",
-            "unknown",
-        }
+        return value.get(AUTHZEN_ATTRIBUTE_MARKER) is True
     return False
 
 

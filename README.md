@@ -360,6 +360,83 @@ client = AxonFlow(
 )
 ```
 
+## Reading decisions: who is asking decides what comes back
+
+`explain_decision` and `list_decisions` — and the audit reads — are scoped to
+the **per-user identity** you present, not to the tenant credential. Since
+platform #2922:
+
+| What you present | What an enterprise stack returns |
+|---|---|
+| a tenant-wide role (`admin`, `owner`, `policy_admin`) | the whole tenant |
+| any other identity (`developer`, `viewer`) | only the rows attributed to it |
+| **no identity** | **nothing at all** — every list is empty, every explain is not-found |
+
+`client_id`/`client_secret` authenticate the **organization**. They do not say
+who is asking, so on their own they land in the third row. Community and
+Community-SaaS deployments are single-operator and read tenant-wide with no
+identity needed.
+
+```python
+client = AxonFlow(
+    endpoint="http://localhost:8080",
+    client_id=os.environ["AXONFLOW_CLIENT_ID"],
+    client_secret=os.environ["AXONFLOW_CLIENT_SECRET"],
+    user_token=os.environ["AXONFLOW_USER_TOKEN"],   # <- the per-user identity
+)
+
+# Per call:
+exp = await client.explain_decision(decision_id, user_token=users_token)
+
+# Or, for a process acting on behalf of several people, derive a client bound
+# to one person. Unlike the per-call keyword, which only the read methods
+# accept, this reaches EVERY method.
+rows = await client.as_user(alices_token).list_decisions()
+```
+
+The token is a per-user JWT — minted by the customer portal's user-token API,
+or for local testing by `scripts/generate-jwt.sh --kind user`. It is **not** the
+tenant JWT and not `client_secret`. It is sent as `X-User-Token`, is never
+logged, never reaches telemetry, and is never sent to any origin but the
+configured endpoint.
+
+### Telling the outcomes apart
+
+"Not found", "not yours" and "no identity resolved" used to arrive as the same
+`404`, and an unscoped list arrived as an ordinary empty page. Both now carry a
+cause:
+
+```python
+from axonflow.read_identity import ReadScopeError
+
+try:
+    decisions = await client.list_decisions()
+except ReadScopeError as err:
+    # The platform resolved no identity, so it returned zero rows by
+    # construction. The empty answer was never evidence about your data.
+    assert err.identity_missing
+```
+
+`explain_decision` is where the other scope shows up. Under `own-rows` the
+platform answers "not attributed to you" and "not there at all" with the **same
+404**, deliberately, so that a miss cannot be used to probe for another user's
+rows — the error reports the scope the read ran under, never a claim about what
+exists.
+
+> **A valid token can still resolve to nobody.** The platform reserves the whole
+> of `@axonflow.local` and `@axonflow.internal` for *shared* identities and
+> censuses them to nothing before scoping. A correctly-signed developer token
+> minted at `demo-user@axonflow.local` — which is `generate-jwt.sh`'s own
+> default — reads zero rows and reports `identity_missing`, exactly like no
+> token at all. Mint per-user identities at a real domain.
+
+> **Setting `user_token` affects more than reads.** The header rides every
+> request and the agent validates it on every route it proxies — not just the
+> scoped reads. A stale or rotated token therefore turns `list_connectors`,
+> `install_connector` and policy CRUD into `401`s rather than merely unscoping a
+> read. That is the correct, fail-closed direction, but it puts this value in
+> the same rotation story as `client_secret`.
+
 ## Error Handling
 
 ```python
