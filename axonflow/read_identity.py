@@ -131,7 +131,15 @@ def read_scope_of(response: httpx.Response | None) -> ReadScope:
     """
     if response is None:
         return ReadScope.ABSENT
-    return ReadScope((response.headers.get(HEADER_READ_SCOPE) or "").strip().lower())
+    # `header or ""` would be a falsey-clobber, and an ironic one in this file:
+    # the whole point here is that ABSENT and EMPTY are different states, and
+    # `or` collapses them. They happen to reach the same answer today (both are
+    # ReadScope.ABSENT), which is exactly why the linter is right to flag it —
+    # the next member read this way may not be a string.
+    raw = response.headers.get(HEADER_READ_SCOPE)
+    if raw is None:
+        return ReadScope.ABSENT
+    return ReadScope(raw.strip().lower())
 
 
 # --------------------------------------------------------------------------
