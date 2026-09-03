@@ -851,3 +851,71 @@ def test_generated_models_still_accept_the_correct_types() -> None:
     )
     assert obligation.mandatory is True
     assert obligation.schema_version == 1
+
+
+# ==========================================================================
+# A derived client shares the cache — so the key must know the identity
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+async def test_two_derived_clients_do_not_share_a_cached_response(httpx_mock) -> None:
+    """Two identities asking one question must produce TWO governed requests.
+
+    ``as_user`` shares this client's cache deliberately — deriving one per
+    request must not cost a cache — and its own docstring says so. The key was
+    ``request_type:query:user_token``, where ``user_token`` is the write-path
+    BODY field, and carried nothing about the identity the request would
+    actually PRESENT.
+
+    Measured before the fix: one request reached the server, identities
+    ``['ALICE']``. The second caller was handed the first caller's governed
+    response with nothing evaluated on their behalf. Two INDEPENDENT clients
+    each own a cache and send two, which is why nothing outside the
+    derived-client path could see it.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    base = _client(cache_enabled=True)
+    query = "the same question from two people"
+    for token in ("ALICE-TOKEN", "BOB-TOKEN"):
+        await base.as_user(token).proxy_llm_call(
+            user_token="", query=query, request_type="mcp-query"
+        )
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    identities = [r.headers.get(HEADER_USER_TOKEN, "NO IDENTITY") for r in requests]
+    assert len(requests) == 2, (
+        "two identities asking the same question must produce TWO governed requests. One "
+        "means the second caller was served the FIRST caller's response out of a shared "
+        f"cache, without the platform evaluating anything on their behalf. Seen: {identities}"
+    )
+    assert set(identities) == {"ALICE-TOKEN", "BOB-TOKEN"}, identities
+
+
+@pytest.mark.asyncio
+async def test_one_identity_asking_twice_still_hits_the_cache(httpx_mock) -> None:
+    """The other failure direction.
+
+    Without this, the test above is satisfied by a key that never matches — a
+    disabled cache wearing a fix's name, costing every caller a round trip.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    alice = _client(cache_enabled=True).as_user("ALICE-TOKEN")
+    for _ in range(2):
+        await alice.proxy_llm_call(user_token="", query="one question", request_type="mcp-query")
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    assert len(requests) == 1, (
+        "the same identity asking the same question twice must be served from the cache; "
+        "a key that never matches is a disabled cache wearing a fix's name"
+    )
