@@ -36,6 +36,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
 
 from axonflow.exceptions import PolicyViolationError
+from axonflow.telemetry import register_adapter
 from axonflow.types import TokenUsage
 
 if TYPE_CHECKING:
@@ -321,11 +322,25 @@ class AxonFlowRunnableBinding(_GovernanceMixin):
         provider: str = "unknown",
         model_name: str = "unknown",
     ) -> None:
+
         self._inner = bound
         self._axonflow = axonflow
         self._user_token = user_token
         self._provider = provider
         self._model_name = model_name
+
+        # Declare this adapter on the next telemetry heartbeat: otherwise an
+        # application driving the SDK through it is indistinguishable from bare
+        # SDK use on every dimension. See ``axonflow.telemetry.register_adapter``
+        # for the full reasoning, which is deliberately recorded in ONE place
+        # rather than copied to each of the four adapter entry points.
+        #
+        # LAST, so a construction that raises declares nothing — a registration
+        # is a claim that the adapter is in use, and an object that failed to
+        # build is not. This constructor validates nothing today, so the
+        # position is a convention the other three enforce rather than a
+        # behaviour difference.
+        register_adapter("langchain")
 
     def __repr__(self) -> str:
         return f"AxonFlowRunnableBinding(provider={self._provider!r}, model={self._model_name!r})"
@@ -369,11 +384,23 @@ class AxonFlowChatModel(_GovernanceMixin):
         axonflow: AxonFlow,
         user_token: str | None = None,
     ) -> None:
+
         from langchain_core.language_models import BaseChatModel
 
         if not isinstance(wrapped, BaseChatModel):
             msg = f"wrapped must be a BaseChatModel instance, got {type(wrapped)}"
             raise TypeError(msg)
+
+        # Declare this adapter on the next telemetry heartbeat: otherwise an
+        # application driving the SDK through it is indistinguishable from bare
+        # SDK use on every dimension. See ``axonflow.telemetry.register_adapter``
+        # for the full reasoning, which is deliberately recorded in ONE place
+        # rather than copied to each of the four adapter entry points.
+        #
+        # AFTER validation, so a construction that raises declares nothing — a
+        # registration is a claim that the adapter is in use, and an object that
+        # failed to build is not.
+        register_adapter("langchain")
 
         self._inner: Any = wrapped
         self._axonflow = axonflow

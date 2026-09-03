@@ -5,8 +5,12 @@ Implements the cross-SDK contract:
     AxonFlow emits at most one heartbeat per environment every
     7 days during SDK activity.
 
-The gate is consulted both at client construction and at every public
-HTTP request site (via ``_pre_request_hook``). Each gate run:
+The gate is consulted at every public HTTP request site, via
+``_pre_request_hook``. It is NO LONGER consulted at client construction
+(axonflow-enterprise#3682): every framework adapter takes a client, so an
+adapter registering from its own constructor could never reach a
+constructor-time ping. A client that is constructed and never used does not
+ping. Each gate run:
 
 1. Re-evaluates ``AXONFLOW_TELEMETRY=off`` cheaply (lock-free) so a
    mid-process opt-out toggle takes effect immediately. As of v8.0 the
@@ -55,6 +59,39 @@ logger = logging.getLogger(__name__)
 # them via ``monkeypatch.setattr(axonflow.heartbeat, "HEARTBEAT_INTERVAL_S", ...)``.
 HEARTBEAT_INTERVAL_S: float = 7 * 24 * 60 * 60  # 7 days
 HEARTBEAT_GUARD_INTERVAL_S: float = 60 * 60  # 1 hour
+
+#: Ceiling on how many times the guard interval may double. 16 doublings
+#: already exceed the 7-day cap by orders of magnitude; the clamp exists so an
+#: unbounded failure counter cannot produce an absurd shift.
+_MAX_BACKOFF_DOUBLINGS = 16
+
+
+def _guard_interval_for(consecutive_failures: int) -> float:
+    """How long the gate waits before re-consulting, given how many attempts
+    in a row have failed to deliver.
+
+    Doubling from :data:`HEARTBEAT_GUARD_INTERVAL_S`, capped at
+    :data:`HEARTBEAT_INTERVAL_S`.
+
+    Without this the SDK has no backoff at all, and two deliberate design
+    choices combine into a defect: the 7-day stamp only advances on DELIVERY,
+    and the gate is re-evaluated on every request. In a deployment where
+    egress to the checkpoint service is blocked — the normal state of the
+    air-gapped and in-VPC self-hosted topologies this SDK supports — every
+    process would issue a ``/health`` GET against the CUSTOMER'S OWN platform
+    once an hour, indefinitely, with a failed POST beside it. Unsolicited
+    hourly traffic against someone else's platform, for a heartbeat disclosed
+    as weekly, is not defensible.
+
+    Backing off loses no ping: the stamp is still untouched, so the first
+    attempt after the widened interval sends normally.
+    """
+    doublings = min(consecutive_failures, _MAX_BACKOFF_DOUBLINGS)
+    # float(...) because `2**doublings` is typed Any under mypy's numeric
+    # rules, and returning Any from a function declared -> float fails the
+    # build. The cast is to the declared type, not a silencing comment.
+    widened = float(HEARTBEAT_GUARD_INTERVAL_S) * float(2**doublings)
+    return min(widened, HEARTBEAT_INTERVAL_S)
 
 
 def _resolve_stamp_path() -> Path | None:  # noqa: PLR0911
@@ -121,6 +158,13 @@ class HeartbeatState:
         self._lock = threading.Lock()
         self._last_checked_monotonic: float | None = None
         self._in_flight = False
+        # Consecutive attempts that did NOT deliver. Widens the re-check
+        # interval so a deployment that can never reach the checkpoint stops
+        # probing its own platform every hour forever. Reset on delivery.
+        self._consecutive_failures = 0
+        # When this PROCESS last delivered a ping. See the module docstring's
+        # "two bounds" note for why the stamp file alone is not enough.
+        self._last_delivered_monotonic: float | None = None
         if stamp_path is _USE_DEFAULT_CACHE_DIR:
             self._stamp_path: Path | None = _resolve_stamp_path()
         else:
@@ -250,7 +294,8 @@ def maybe_send_heartbeat(
 ) -> None:
     """Central gate for telemetry pings.
 
-    Called from ``AxonFlow.__init__`` and ``AxonFlow._pre_request_hook``.
+    Called from ``AxonFlow._pre_request_hook`` only — the constructor no
+    longer pings (axonflow-enterprise#3682).
     Implements the contract documented at the top of this module. Never
     raises — heartbeat failures must not surface to the caller.
 
@@ -272,10 +317,19 @@ def maybe_send_heartbeat(
         if h._in_flight:
             return
         if h._last_checked_monotonic is not None and (
-            now_mono - h._last_checked_monotonic < HEARTBEAT_GUARD_INTERVAL_S
+            now_mono - h._last_checked_monotonic < _guard_interval_for(h._consecutive_failures)
         ):
             return
         h._last_checked_monotonic = now_mono
+
+        # The 7-day cadence enforced IN MEMORY, before the stamp is consulted.
+        # Where the stamp cannot be persisted this is the only thing standing
+        # between a delivered ping and an hourly one — see the note on
+        # ``_last_delivered_monotonic``.
+        if h._last_delivered_monotonic is not None and (
+            now_mono - h._last_delivered_monotonic < HEARTBEAT_INTERVAL_S
+        ):
+            return
 
         mtime = h.read_stamp_mtime()
         if mtime is not None and (time.time() - mtime) < HEARTBEAT_INTERVAL_S:
@@ -300,8 +354,21 @@ def maybe_send_heartbeat(
         # the stamp write is independent and runs OUTSIDE the lock so its
         # mkdir + tempfile + rename syscalls don't serialize concurrent
         # gate runs through disk IO.
+        #
+        # The attempt is recorded here for EVERY outcome, which is why this
+        # block is inside the worker and not at the gate: the failure counter
+        # is what widens the guard, and the delivery instant is what bounds
+        # the success cadence when the stamp file is unavailable. A pass that
+        # stopped at a fresh stamp never reaches this code, and must not — a
+        # suppressed pass is the gate working, not an attempt that failed, and
+        # counting it would ratchet a healthy deployment to the 7-day cap.
         with h._lock:
             h._in_flight = False
+            if ok:
+                h._consecutive_failures = 0
+                h._last_delivered_monotonic = time.monotonic()
+            else:
+                h._consecutive_failures += 1
         if ok:
             h.write_stamp_atomic()
 

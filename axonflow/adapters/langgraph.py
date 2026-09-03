@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from axonflow.exceptions import PolicyViolationError
+from axonflow.telemetry import register_adapter
 from axonflow.workflow import (
     ApprovalStatus,
     CreateWorkflowRequest,
@@ -145,6 +146,17 @@ class AxonFlowLangGraphAdapter:
             auto_block: If True, check_gate raises WorkflowBlockedError on block
                        If False, returns False and caller handles it
         """
+
+        # Declare this adapter on the next telemetry heartbeat: otherwise an
+        # application driving the SDK through it is indistinguishable from bare
+        # SDK use on every dimension. See ``axonflow.telemetry.register_adapter``
+        # for the full reasoning, which is deliberately recorded in ONE place
+        # rather than copied to each of the four adapter entry points.
+        #
+        # AFTER validation, so a construction that raises declares nothing — a
+        # registration is a claim that the adapter is in use, and an object that
+        # failed to build is not.
+        register_adapter("langgraph")
         self.client = client
         self.workflow_name = workflow_name
         self.source = source

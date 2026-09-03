@@ -65,6 +65,31 @@ def _disable_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "post", _blocked_http)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_adapter_registry():
+    """Reset the process-global adapter registry around every test.
+
+    The registry is module-global BY DESIGN — an adapter constructed anywhere
+    in the process is genuinely in use, and that is exactly what the telemetry
+    heartbeat should report. In a test session that same property is
+    cross-test pollution: ``tests/test_langgraph_adapter.py`` constructs
+    ``AxonFlowLangGraphAdapter`` dozens of times, each of which registers
+    ``langgraph``, and any later test asserting ``features == []`` then fails
+    depending on collection order.
+
+    Autouse and in conftest for the same reason ``_disable_telemetry`` is:
+    the isolation has to hold for tests that have never heard of the registry,
+    not only for the ones that use it deliberately.
+    """
+    from axonflow import telemetry as _tel
+
+    previous = _tel._reset_adapter_registry_for_test()  # noqa: SLF001
+    try:
+        yield
+    finally:
+        _tel._restore_adapter_registry_for_test(previous)  # noqa: SLF001
+
+
 # ============================================================================
 # Fixture Loading Utilities
 # ============================================================================

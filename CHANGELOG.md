@@ -11,6 +11,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`register_adapter(name)` declares a framework adapter on the existing
+  heartbeat (axonflow-enterprise#3682).** A LangChain / LangGraph / LiteLLM
+  wrapper — or your own in-house adapter — was previously indistinguishable
+  from bare SDK use on every telemetry dimension: same `sdk`, same
+  `sdk_version`, same endpoint. `register_adapter("langchain")` adds
+  `adapter:langchain` to the `features` array of the ping that already fires.
+  **No new network request, no new configuration surface, no second endpoint.**
+  Idempotent and thread-safe. The name is lowercased and trimmed and otherwise
+  sent as given — deliberately NOT checked against a list of known frameworks,
+  because the canonical vocabulary lives on the receiver, which preserves an
+  unrecognised name on the row while bucketing it for reporting. Only adoption
+  signal is collected: nothing about what the adapter does.
+
+  **The SDK's own adapters now declare themselves**, so using them is enough:
+  `AxonFlowLangGraphAdapter`, `wrap_langgraph` / `GovernedGraph`,
+  `AxonFlowChatModel` and `AxonFlowRunnableBinding`. This is the FIRST producer
+  of `features` in this SDK — the array was a hardcoded `[]`.
+
+- **The heartbeat now relays `edition` and `platform_deployment_mode`** from the
+  same `/health` response it already fetches for the platform version and
+  licence tier — no new request. Both are omitted entirely when not learned,
+  never sent as `""` or `null`. `platform_deployment_mode` is the PLATFORM's own
+  deployment mode and travels under its own key; it never overwrites the
+  SDK-derived `deployment_mode` topology field. Adoption analytics only: the
+  endpoint's operator controls both values and the SDK verifies neither, so they
+  must never gate entitlement or any authorization decision.
+
+### Changed
+
+- **The telemetry heartbeat now fires on the client's first outbound request
+  rather than at client construction.** A process that constructs a client and
+  never sends a request no longer pings at all — a heartbeat is a claim about
+  usage.
+
+  The reason is `register_adapter`. Every framework adapter takes a client, so
+  an adapter cannot exist until the constructor has returned; pinging there
+  meant an adapter registering from its own constructor could never reach the
+  first ping, and the 7-day stamp then suppressed the next one for a week. For a
+  short-lived process — a CLI, a serverless handler, a CI job — the adapter was
+  never reported at all.
+
+  Ten request paths that issued HTTP without consulting the gate now do:
+  `stream_execution_status`, `mcp_query`, `mcp_check_input`, `mcp_check_output`,
+  `login_to_portal`, `logout_from_portal`, the two customer-portal request
+  helpers, `_step_request_with_idempotency_check` and `_do_request`. Before the
+  move this cost nothing because the constructor pinged; after it, a process
+  whose only outbound call was one of those would never have pinged at all.
+
+  Short-lived delivery (issue #1692) is unaffected: the gate spawns a daemon
+  thread tracked by an atexit flush handler, so a process that makes one call
+  and exits still delivers the POST.
+
+- **Every value the SDK relays but did not author is now bounded at 64 bytes and
+  DROPPED WHOLE when it exceeds that** — the values promoted out of `/health`
+  and adapter names alike, through one helper so the two paths cannot drift.
+  Dropping rather than truncating is the point: a truncated version string is a
+  version nobody is running, and the receiver would record it as a real value.
+  The bound is measured in **bytes** (`len(s.encode("utf-8"))`), not characters:
+  33 accented characters are 33 code points and 66 bytes. The `features` array
+  is bounded at 32 entries of 128 bytes.
+
+- **A checkpoint response of any 2xx now counts as delivery**, not `200` exactly.
+  Every sibling SDK already accepted any 2xx; Python alone compared against 200,
+  so a checkpoint answering `202` read as a failure and the same ping was
+  retried at every gate run forever with the stamp never advancing.
+
+- **Redirects are refused explicitly on both telemetry legs, and a refused
+  redirect is now logged.** `follow_redirects=False` was already httpx's default
+  so behaviour is unchanged, but it is now a stated decision rather than an
+  inherited default — a library default change, or this call being copied to a
+  client configured differently, would otherwise silently start relaying
+  whatever answered at a redirect target, and on the POST leg would report
+  delivery for a ping converted to a bodyless GET.
+
+### Fixed
+
+- **A delivered heartbeat could recur hourly, forever, where the stamp file
+  cannot be written.** The 7-day cadence was enforced only by a stamp file, so in
+  a runtime with no usable cache directory — distroless and scratch containers,
+  Lambda custom runtimes — or on a read-only root filesystem (ordinary
+  Kubernetes hardening), a *successful* ping left no record and the gate
+  re-opened an hour later, indefinitely: 168 pings a week against a contract
+  that discloses one. The cadence is now also enforced in memory. Note what this
+  means in those runtimes: with no writable stamp the cadence is enforced PER
+  PROCESS, not per machine.
+
+- **A deployment that cannot reach the checkpoint service probed the customer's
+  own platform every hour, indefinitely.** There was no failure backoff: the
+  7-day stamp advances only on delivery and the gate is consulted on every
+  request, so with egress blocked — the normal state of air-gapped and in-VPC
+  self-hosted topologies — every process issued a `/health` GET against the
+  customer's own platform hourly, with a failed POST beside it. The re-check
+  interval now doubles per consecutive undelivered attempt, capped at the 7-day
+  interval — in numbers, from **1 hour** through 2, 4, 8 … up to a ceiling of
+  **7 days (604,800 seconds)**, reached after 8 consecutive failures. No ping is
+  lost: the stamp is untouched, so the first attempt after the widened interval
+  sends normally, and a single delivery resets the interval to 1 hour.
+
 ## [9.2.0] - 2026-09-01: AuthZEN-native authorization surface
 
 ### Added

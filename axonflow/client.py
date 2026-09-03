@@ -683,21 +683,26 @@ class AxonFlow:
                 endpoint=endpoint,
             )
 
-        # Heartbeat gate: at most one anonymous ping per environment per
-        # 7 days, gated by SDK activity. The constructor runs the gate
-        # synchronously enough to schedule the daemon thread; the thread
-        # is tracked by an atexit flush handler so short-lived processes
-        # (CLI, serverless cold-starts) still deliver the ping. Subsequent
-        # gate runs happen async via ``_pre_request_hook`` on every
-        # public HTTP request. See axonflow/heartbeat.py for the contract
-        # and stamp-on-DELIVERY semantics. The v7.x ``telemetry_enabled``
-        # programmatic override was removed in v8.0; AXONFLOW_TELEMETRY=off
-        # is now the sole opt-out lever.
-        maybe_send_heartbeat(
-            mode=self._config.mode.value,
-            endpoint=self._config.endpoint,
-            debug=debug,
-        )
+        # NO HEARTBEAT HERE ANY MORE (axonflow-enterprise#3682). The gate is
+        # consulted on the client's FIRST OUTBOUND REQUEST instead, via
+        # ``_pre_request_hook`` — which was already a call site, so this is a
+        # removal rather than a move.
+        #
+        # Why: every framework adapter takes a client, so an adapter cannot
+        # exist until this constructor has returned. Pinging here meant an
+        # adapter registering from its own constructor could never reach the
+        # first ping, and the 7-day stamp then suppressed the next one for a
+        # week — so a short-lived process using an adapter (a CLI, a
+        # serverless handler) reported it never. See
+        # ``axonflow.telemetry.register_adapter``.
+        #
+        # A client that is constructed and never used therefore no longer
+        # pings. That is deliberate and disclosed: a heartbeat is a claim
+        # about usage.
+        #
+        # Short-lived delivery is unaffected. The gate spawns a daemon thread
+        # tracked by an atexit flush handler (issue #1692), so a process that
+        # makes one call and exits still delivers the POST.
 
     @property
     def masfeat(self) -> MASFEATNamespace:
@@ -991,6 +996,13 @@ class AxonFlow:
             reraise=True,
         )
         async def _do_request() -> httpx.Response:
+            # Heartbeat trigger. This path issues an outbound request WITHOUT going
+            # through a wrapper that already calls the hook, so it must call it
+            # itself: the heartbeat fires on the client's first request, and a gate
+            # placed at some callers is not a gate on the others. A process whose
+            # only outbound call is this one would otherwise never ping.
+            # Pinned by tests/test_heartbeat_request_site_census.py.
+            self._pre_request_hook()
             return await self._http_client.request(method, url, json=json_data, headers=headers)
 
         return await _do_request()
@@ -1485,6 +1497,13 @@ class AxonFlow:
             if response.redacted:
                 print(f"Redacted fields: {response.redacted_fields}")
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         if not connector:
             msg = "connector name is required"
             raise ConnectorError(msg, connector=None, operation="mcp_query")
@@ -1601,6 +1620,13 @@ class AxonFlow:
         Raises:
             ConnectorError: If the request fails (non-403 errors only).
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         url = f"{self._config.endpoint}/api/v1/mcp/check-input"
         body: dict[str, Any] = {
             "connector_type": connector_type,
@@ -1708,6 +1734,13 @@ class AxonFlow:
         Raises:
             ConnectorError: If the request fails (non-403 errors only).
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         url = f"{self._config.endpoint}/api/v1/mcp/check-output"
         body: dict[str, Any] = {
             "connector_type": connector_type,
@@ -4382,6 +4415,13 @@ class AxonFlow:
             >>> login = await client.login_to_portal("test-org-001", "test123")
             >>> print(f"Logged in as {login['name']}")
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         base_url = self._config.endpoint
         url = f"{base_url}/api/v1/auth/login"
 
@@ -4417,6 +4457,13 @@ class AxonFlow:
 
     async def logout_from_portal(self) -> None:
         """Logout from Customer Portal and clear session cookie."""
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         if not self._session_cookie:
             return
 
@@ -4449,6 +4496,13 @@ class AxonFlow:
 
         Requires prior authentication via login_to_portal().
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         if not self._session_cookie:
             msg = "Not logged in to Customer Portal. Call login_to_portal() first."
             raise AuthenticationError(msg)
@@ -4492,6 +4546,13 @@ class AxonFlow:
         Used for CSV exports and other non-JSON responses.
         Requires prior authentication via login_to_portal().
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         if not self._session_cookie:
             msg = "Not logged in to Customer Portal. Call login_to_portal() first."
             raise AuthenticationError(msg)
@@ -5279,6 +5340,13 @@ class AxonFlow:
         """POST to a step gate/complete endpoint, mapping 409 IDEMPOTENCY_KEY_MISMATCH to
         IdempotencyKeyMismatchError. All other errors are handled like _orchestrator_request.
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         url = f"{self._config.endpoint}{path}"
         try:
             response = await self._http_client.request("POST", url, json=body)
@@ -6960,6 +7028,13 @@ class AxonFlow:
             ...     if status.is_terminal():
             ...         print(f"Execution finished: {status.status}")
         """
+        # Heartbeat trigger. This path issues an outbound request WITHOUT going
+        # through a wrapper that already calls the hook, so it must call it
+        # itself: the heartbeat fires on the client's first request, and a gate
+        # placed at some callers is not a gate on the others. A process whose
+        # only outbound call is this one would otherwise never ping.
+        # Pinned by tests/test_heartbeat_request_site_census.py.
+        self._pre_request_hook()
         if not execution_id:
             msg = "Execution ID is required"
             raise ValueError(msg)

@@ -641,6 +641,54 @@ The field is **omitted entirely** whenever the tier could not be determined — 
 
 `AXONFLOW_TELEMETRY=off` suppresses this field along with the rest of the heartbeat.
 
+### Platform build and deployment mode (`edition`, `platform_deployment_mode`)
+
+Each heartbeat also reports which **build** the connected platform is running (`edition`: `community` or `enterprise`) and the platform's **own deployment mode** (`platform_deployment_mode`: for example `community`, `in-vpc-enterprise`, `community-saas`). Neither is derivable from the other or from the licence tier — the Community SaaS fleet runs the *enterprise* build against the *community-saas* schema.
+
+Both are read from the platform's own `/health` response — the **same response** the heartbeat already fetches for the platform version and licence tier, and an endpoint that returns these fields to any caller without authentication. **No additional network request is made.** Both are **omitted entirely** when the platform did not report them (unreachable, an error, an unparseable body, or a version older than 10.4.0 that does not serve these members). An absent field means "not known"; it is never defaulted.
+
+These are adoption-analytics signals, **not entitlement ones**: whoever operates your configured endpoint controls both values, the SDK relays them unchanged and verifies nothing, and they must never gate entitlement, unlock a feature, or enter an authorization or billing decision.
+
+> One naming caution for anyone reading raw payloads: the heartbeat's own `deployment_mode` field is a **different** dimension — a coarse topology (`self_hosted` / `community_saas` / `unknown`) that this SDK derives from the endpoint URL you configured. The platform's own mode travels as `platform_deployment_mode`.
+
+### Declaring a framework adapter (`register_adapter`)
+
+If you are building a framework integration on top of this SDK — a LangChain or LangGraph wrapper, a LiteLLM callback, your own in-house adapter — you can declare it so aggregate adoption figures can tell adapter-driven usage apart from bare SDK usage. Without this they are indistinguishable: an adapter reports the same `sdk`, the same `sdk_version` and the same endpoint as any other client.
+
+```python
+from axonflow import register_adapter
+
+register_adapter("my-framework")
+```
+
+**The SDK's own adapters already do this.** `AxonFlowLangGraphAdapter`, `wrap_langgraph`, `AxonFlowChatModel` and `AxonFlowRunnableBinding` each declare themselves from their constructor, so simply using them is enough — no telemetry code in your application.
+
+The name is added to the `features` array of the heartbeat that already fires, as `adapter:my-framework`. **It adds no network request** — no second ping, no second endpoint, no new configuration surface — and calling `register_adapter` does not itself send anything. It is idempotent and thread-safe; repeat registrations of the same name collapse to one entry.
+
+The heartbeat fires on the client's **first outbound request**, not at construction, so anything registered before that request is on the very first ping. A name registered afterwards rides the next heartbeat.
+
+What is and is not collected:
+
+- **Collected:** the adapter name you pass, lowercased and trimmed.
+- **Not collected:** anything about what the adapter *does* — no prompts, no payloads, no tool names, no user identities, no configuration.
+
+Bounds, so a malformed call cannot damage the ping it rides on:
+
+- A name longer than **64 bytes** is **dropped whole**, never truncated — a truncated adapter name is a name nothing is running, and it would be recorded as if it were real. A name that is empty after trimming, or not a string, is ignored.
+- The `features` array carries at most **32 entries**, none longer than **128 bytes**, mirroring the receiver's own bounds.
+
+The name is **not** validated against a list of known frameworks. The canonical vocabulary lives on the receiving service, which folds an unrecognised name into an `adapter:unknown` bucket while keeping the raw name on the row — so an adapter this SDK build predates still shows up as "something we do not recognise is in use" instead of vanishing at the client.
+
+### When the heartbeat fires, and how often
+
+The heartbeat fires on the client's **first outbound request**, not at construction — so a client that is created and never used does not ping at all. At most one ping per machine per **7 days** is delivered; the cadence is held by a stamp file, and additionally in memory for runtimes where that file cannot be written (distroless and scratch containers, Lambda custom runtimes, read-only root filesystems), where it is enforced per process instead.
+
+If the checkpoint service cannot be reached — the normal state of air-gapped and in-VPC deployments — the SDK backs off rather than retrying hourly forever: the re-check interval doubles from **1 hour** through 2, 4, 8 … to a ceiling of **7 days**, and a single successful delivery resets it. No ping is lost by backing off, because the 7-day stamp is only advanced on delivery.
+
+The whole telemetry path is bounded at **3 seconds** — the `/health` probe and the checkpoint POST share one deadline rather than stacking — so the most it can add to a first request is 3 seconds, and only when a ping is actually due.
+
+`AXONFLOW_TELEMETRY=off` suppresses all of the above along with the rest of the heartbeat.
+
 `DO_NOT_TRACK` is **not** honored as an opt-out for AxonFlow telemetry. It is commonly inherited from host tools and developer environments, which makes it an unreliable expression of user intent.
 
 See [Telemetry Documentation](https://docs.getaxonflow.com/docs/telemetry) for full details.

@@ -27,6 +27,7 @@ from axonflow.adapters.langgraph import (
     WorkflowApprovalRequiredError,
     WorkflowBlockedError,
 )
+from axonflow.telemetry import register_adapter
 from axonflow.workflow import WorkflowSource
 
 if TYPE_CHECKING:
@@ -337,7 +338,19 @@ class GovernedGraph:
         exclude_nodes: frozenset[str] = _DEFAULT_EXCLUDE,
         govern_tools: bool = True,
     ) -> None:
+
         _get_callback_class()  # Fail fast if langchain-core missing
+
+        # Declare this adapter on the next telemetry heartbeat: otherwise an
+        # application driving the SDK through it is indistinguishable from bare
+        # SDK use on every dimension. See ``axonflow.telemetry.register_adapter``
+        # for the full reasoning, which is deliberately recorded in ONE place
+        # rather than copied to each of the four adapter entry points.
+        #
+        # AFTER validation, so a construction that raises declares nothing — a
+        # registration is a claim that the adapter is in use, and an object that
+        # failed to build is not.
+        register_adapter("langgraph")
         self._graph = graph
         self._client = client
         self._workflow_name = workflow_name

@@ -31,6 +31,7 @@ confirmation, not a CI gate.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import http.server
 import json
@@ -111,11 +112,26 @@ def run_child() -> None:
     matter how many clients it builds.
     """
     clear_stamp()
-    AxonFlow(
+    client = AxonFlow(
         endpoint=os.environ.get("AXONFLOW_E2E_PLATFORM_ENDPOINT", ""),
         client_id="rt-e2e",
         client_secret="rt-e2e",
     )
+
+    # THE HEARTBEAT FIRES ON THE FIRST REQUEST, not at construction
+    # (axonflow-enterprise#3682). Constructing a client and exiting no longer
+    # pings at all, so this driver has to make a call — which is also a more
+    # faithful runtime proof, since a client nobody uses is not a deployment
+    # worth reporting.
+    #
+    # The call FAILS against the stand-in platform, deliberately: the
+    # heartbeat rides the ATTEMPT to make a request, so a caller whose first
+    # API call fails is still a caller.
+    async def _touch() -> None:
+        with contextlib.suppress(Exception):
+            await client.list_decisions()
+
+    asyncio.run(_touch())
     # The atexit flush handler joins the telemetry thread on interpreter exit.
 
 

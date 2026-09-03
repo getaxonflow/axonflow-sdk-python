@@ -175,6 +175,7 @@ from axonflow.policies import (
     UpdateDynamicPolicyRequest,
     UpdateStaticPolicyRequest,
 )
+from axonflow.telemetry import register_adapter
 from axonflow.types import (
     CATEGORY_MEDIA_BIOMETRIC,
     CATEGORY_MEDIA_DOCUMENT,
@@ -324,6 +325,9 @@ from axonflow.workflow import (
 __all__ = [
     # Version
     "__version__",
+    # Telemetry — declaring a framework adapter on the existing heartbeat.
+    # See axonflow.telemetry.register_adapter; it performs no I/O.
+    "register_adapter",
     # Main client
     "AxonFlow",
     "SyncAxonFlow",

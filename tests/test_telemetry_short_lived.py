@@ -55,8 +55,24 @@ class _CapturingHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b'{"latest_version":"99.99.99","source":"external"}')
 
+    #: Seconds the ``/health`` probe is delayed before answering.
+    #:
+    #: NOT decoration. With an instantly-answering ``/health`` the whole
+    #: telemetry path completes inside the subprocess's own teardown, so
+    #: deleting ``axonflow.heartbeat._register_thread`` — the call that enrolls
+    #: the worker in the atexit flush this file exists to protect — SURVIVED:
+    #: the ping still landed, because there was nothing left to flush.
+    #: Measured: at 0 ms the mutant delivers 1 ping; at 500 ms it delivers 0.
+    #:
+    #: A fixture that cannot express the defect reads exactly like one that
+    #: disproves it, so the probe is deliberately slow enough that the POST is
+    #: still in flight when the interpreter starts shutting down. It stays well
+    #: inside the SDK's own 3 s budget, so the ping itself is unaffected.
+    health_delay_seconds: ClassVar[float] = 0.5
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path.endswith("/health"):
+            time.sleep(self.__class__.health_delay_seconds)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -120,9 +136,25 @@ def test_telemetry_flushes_on_immediate_exit(mock_checkpoint: Any) -> None:
             [
                 sys.executable,
                 "-c",
-                "from axonflow import AxonFlow; AxonFlow(endpoint='"  # no trailing sleep
-                + base_url
-                + "')",
+                # THE FIXTURE NOW MAKES A REQUEST, AND THAT IS THE #3682
+                # CHANGE, NOT A WEAKENING. The heartbeat trigger moved from
+                # client construction to the client's first outbound request,
+                # so a script that constructs a client and never uses it
+                # deliberately no longer pings — a heartbeat is a claim about
+                # usage. The property under test is unchanged and is still the
+                # one this file exists for: a SHORT-LIVED PROCESS MUST NOT DROP
+                # ITS PING. So the subprocess does what the caller it models
+                # does — construct, make one call, exit immediately — and still
+                # asserts the ping arrived. The call fails (nothing serves that
+                # route); the heartbeat rides the ATTEMPT, because a caller
+                # whose first API call fails is still a caller.
+                "import asyncio, contextlib\n"
+                "from axonflow import AxonFlow\n"
+                "async def main():\n"
+                "    c = AxonFlow(endpoint='" + base_url + "')\n"
+                "    with contextlib.suppress(Exception):\n"
+                "        await c.list_decisions()\n"
+                "asyncio.run(main())\n",
             ],
             env=env,
             capture_output=True,
@@ -139,7 +171,10 @@ def test_telemetry_flushes_on_immediate_exit(mock_checkpoint: Any) -> None:
     while time.time() < deadline and not received:
         time.sleep(0.05)
 
-    assert len(received) >= 1, (
+    # EXACTLY one, not ">= 1". A lower bound cannot tell "the flush worked"
+    # from "the gate fired twice", and the contract here is one ping per
+    # process per interval.
+    assert len(received) == 1, (
         "telemetry ping was not received by the mock checkpoint — "
         "the atexit flush regression has returned. "
         f"subprocess stderr: {result.stderr!r}"
