@@ -34,6 +34,85 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CHECKPOINT_URL = "https://checkpoint.getaxonflow.com/v1/ping"
 _TIMEOUT_SECONDS = 3
 _HTTP_OK = 200
+#: Boundaries of the HTTP status classes this module distinguishes. Named
+#: rather than inlined so the two predicates below read as one decision each.
+_HTTP_REDIRECT_MIN = 300
+_HTTP_REDIRECT_MAX_EXCLUSIVE = 400
+
+
+def _is_success(status_code: int) -> bool:
+    """True for any 2xx.
+
+    A RANGE, not ``== 200``. Every sibling SDK treats any 2xx as delivery
+    (Go ``StatusCode < 300``, Rust ``status().is_success()``, TypeScript
+    ``response.ok``, Java ``isSuccessful()``); Python alone compared against
+    200 exactly, so a checkpoint answering 202 read as a failure and the same
+    ping was retried at every gate run forever with the stamp never advancing.
+    """
+    return _HTTP_OK <= status_code < _HTTP_REDIRECT_MIN
+
+
+def _is_redirect(status_code: int) -> bool:
+    """True for any 3xx.
+
+    Distinguished from an ordinary non-2xx so a REFUSED REDIRECT is
+    observable. It is the one failure on this path that would otherwise look
+    like success: a client that follows a 301/302/303 does not re-POST, it
+    converts the request to a bodyless GET, so a followed redirect yields a
+    200 for a ping that carried nothing.
+    """
+    return _HTTP_REDIRECT_MIN <= status_code < _HTTP_REDIRECT_MAX_EXCLUSIVE
+
+
+#: Bounds every value this SDK puts on the telemetry wire that it did not
+#: author itself — every string promoted out of a ``/health`` response, and
+#: every adapter name handed to :func:`register_adapter`.
+#:
+#: WHY A DROP AND NOT A TRUNCATION. The checkpoint refuses a request body over
+#: 64 KiB. A single 70 KB value from a hostile or broken ``/health`` therefore
+#: produces a ping that is rejected WHOLE — the version, the tier, the org id,
+#: every dimension lost, not just the oversized one — and because the stamp is
+#: only written on a 2xx, the SDK retries that same doomed request at every
+#: gate run for as long as ``/health`` keeps answering that way. Dropping the
+#: offending value alone keeps the ping under the limit and preserves every
+#: other dimension.
+#:
+#: It is dropped rather than truncated because a truncated value is a value
+#: nobody reported: 64 bytes of a 70 KB string is not a licence tier and not an
+#: adapter name, and relaying it would put a fabricated observation on the
+#: wire. Absent is the honest answer, and this path already has a well-defined
+#: meaning for absent.
+#:
+#: BYTES, NOT CHARACTERS — and in Python that distinction has to be written
+#: out, because ``len(s)`` counts code points. Every check against this bound
+#: uses ``len(s.encode("utf-8"))``. The bound is bytes because the thing being
+#: bounded, the serialized request body, is bytes: 33 accented characters are
+#: 33 code points and 66 bytes.
+#:
+#: Same bound the receiver applies to these coarse enums
+#: (checkpoint-service ``MaxCoarseEnumValueBytes``), and ~3.5x the longest
+#: legitimate value.
+_MAX_RELAYED_VALUE_BYTES = 64
+
+#: Bounds on the ``features`` array itself, mirroring the receiver's own
+#: ``MaxFeatures`` / ``MaxFeatureBytes``. Applying them client-side means an
+#: over-long array is shaped HERE, where the SDK still knows what it dropped,
+#: rather than silently at ingest.
+#:
+#: READ WHAT THESE TWO ACTUALLY REACH. The entry cap is live: register 33
+#: adapters and the 33rd does not reach the wire. The byte cap is a BACKSTOP
+#: that today's only producer cannot trigger — :func:`register_adapter`
+#: already refuses a name over ``_MAX_RELAYED_VALUE_BYTES``, so the longest
+#: entry it can emit is ``len("adapter:") + 64 == 72`` bytes. It is tested
+#: directly on :func:`_bound_features` rather than through the registry,
+#: because a test driven through the registry could not express it.
+_MAX_FEATURES = 32
+_MAX_FEATURE_BYTES = 128
+
+#: Marks a ``features[]`` entry as an adapter identifier. The vocabulary is
+#: SERVER-DEFINED (checkpoint-service ``FeatureAdapterPrefix``) and is not
+#: this SDK's to extend.
+_FEATURE_ADAPTER_PREFIX = "adapter:"
 # Minimum HTTP budget (seconds) — below this, skip the operation rather than
 # issue a request that is almost guaranteed to time out before any useful
 # work completes. Keeps the telemetry path from making "essentially zero
@@ -65,6 +144,137 @@ def _flush_pending_telemetry() -> None:
             t.join(timeout=_TIMEOUT_SECONDS)
 
 
+def _byte_len(value: str) -> int:
+    """Length of ``value`` in UTF-8 BYTES.
+
+    Spelled as its own function so every bound in this module is measured the
+    same way and no call site can quietly fall back to ``len()``, which counts
+    code points. The two disagree for any non-ASCII input, and the wire is
+    bytes.
+    """
+    return len(value.encode("utf-8"))
+
+
+# --------------------------------------------------------------------------
+# The adapter registry — the ONLY producer of ``features`` entries.
+# --------------------------------------------------------------------------
+
+# A set, so a framework that registers on every wrapper construction — the
+# ordinary case for an adapter whose constructor runs per request — declares
+# itself once on the wire rather than N times. Guarded by a lock because
+# registration can race a heartbeat thread reading it.
+_adapter_registry: set[str] = set()
+_adapter_registry_lock = threading.Lock()
+
+
+def register_adapter(name: str) -> None:
+    """Declare that a framework adapter is driving this SDK.
+
+    The next telemetry heartbeat carries ``adapter:<name>`` in its
+    ``features`` array. A framework adapter (LangChain, LangGraph, LiteLLM,
+    …) wrapping this SDK is indistinguishable from bare SDK use on every
+    other telemetry dimension — same ``sdk``, same ``sdk_version``, same
+    endpoint. This is the one call that makes the difference visible, and it
+    is adoption signal only.
+
+    IT ADDS NO REQUEST. The name rides the ``features`` array of the heartbeat
+    that already fires; there is no second ping, no second endpoint and no new
+    configuration surface. Calling this does not itself send anything.
+
+    Idempotent and thread-safe. Call it once at import time; calling it per
+    request is harmless but pointless, since the set already deduplicates.
+
+    THE NAME IS NOT VALIDATED AGAINST A LIST, DELIBERATELY. The canonical
+    vocabulary lives on the receiver (checkpoint-service
+    ``NormalizeAdapterFeature``, which folds an unrecognised name into
+    ``adapter:unknown`` at READ time while keeping the raw name on the row).
+    An allowlist here would be a second vocabulary that drifts from the first:
+    a name this SDK build predates would be dropped at the client instead of
+    arriving and rendering as "someone is using an adapter we do not know
+    about" — precisely the signal the unknown bucket exists to preserve.
+
+    So the only transformations are the two the receiver also applies before
+    matching: strip surrounding whitespace, and lowercase. What is refused is
+    refused for a reason that is not about vocabulary:
+
+    * a name empty after stripping — there is nothing to declare, and
+      ``adapter:`` alone is not an identifier;
+    * a name longer than :data:`_MAX_RELAYED_VALUE_BYTES` — dropped WHOLE,
+      never truncated, for the reason recorded on that constant.
+
+    Both refusals are silent, and a non-string argument is refused the same
+    way: this is a telemetry declaration on a fire-and-forget path, and
+    raising would invite a caller to fail their own startup over an analytics
+    detail.
+
+    Args:
+        name: The adapter's own name, e.g. ``"langchain"``.
+    """
+    if not isinstance(name, str):
+        return
+    normalized = name.strip().lower()
+    if not normalized or _byte_len(normalized) > _MAX_RELAYED_VALUE_BYTES:
+        return
+    with _adapter_registry_lock:
+        _adapter_registry.add(normalized)
+
+
+def _bound_features(features: list[str]) -> list[str]:
+    """Apply the receiver's array bounds: at most :data:`_MAX_FEATURES`
+    entries, none over :data:`_MAX_FEATURE_BYTES` bytes.
+
+    An over-long entry is DROPPED rather than truncated, which is where this
+    deliberately differs from the receiver's own ``BoundFeatures``. The
+    receiver truncates because it is defending storage against arbitrary
+    clients and a truncated entry harmlessly folds into its unknown bucket.
+    Here the entry is something this process declared about itself, and a
+    truncated adapter name is a name nothing is running.
+    """
+    out: list[str] = []
+    for feature in features:
+        if _byte_len(feature) > _MAX_FEATURE_BYTES:
+            continue
+        out.append(feature)
+        if len(out) == _MAX_FEATURES:
+            break
+    return out
+
+
+def _registered_features() -> list[str]:
+    """Render the registry as the ``features`` array for one ping.
+
+    Sorted so the wire is deterministic — two processes that registered the
+    same adapters in a different order produce the same array, which is what
+    lets a test assert on the whole field, and what makes "which 32 survive"
+    a defined answer rather than a set-iteration accident.
+    """
+    with _adapter_registry_lock:
+        names = sorted(_adapter_registry)
+    return _bound_features([_FEATURE_ADAPTER_PREFIX + name for name in names])
+
+
+def _reset_adapter_registry_for_test() -> set[str]:
+    """Test helper: empty the registry and return what was there so the
+    caller can restore it. The registry is process-global by design, so a
+    test that registers an adapter would otherwise leak it into every later
+    test's ping. Production code does not call this.
+    """
+    global _adapter_registry  # noqa: PLW0603 — test-only mutator
+    with _adapter_registry_lock:
+        previous = _adapter_registry
+        _adapter_registry = set()
+    return previous
+
+
+def _restore_adapter_registry_for_test(previous: set[str]) -> None:
+    """Test helper: restore a registry saved by
+    :func:`_reset_adapter_registry_for_test`.
+    """
+    global _adapter_registry  # noqa: PLW0603 — test-only mutator
+    with _adapter_registry_lock:
+        _adapter_registry = previous
+
+
 def _is_telemetry_enabled() -> bool:
     """Determine whether telemetry should fire.
 
@@ -91,18 +301,78 @@ def _is_telemetry_enabled() -> bool:
 class PlatformHealthProbe(NamedTuple):
     """What a single ``/health`` fetch established.
 
-    Each field is INDEPENDENT: a response carrying one but not the other
-    yields a partially-populated result rather than discarding both.
+    Each field is INDEPENDENT: a response carrying one but not another
+    yields a partially-populated result rather than discarding all of them.
     ``None`` means "not learned" and is omitted from the wire — it never
-    degrades to a default. See ``_build_payload`` for why that distinction
-    is load-bearing.
+    degrades to a default, an empty string, or a JSON ``null``. See
+    ``_build_payload`` for why that distinction is load-bearing.
+
+    TRUST BOUNDARY. These values are whatever is answering at the endpoint the
+    caller configured. The SDK derives nothing from them, verifies nothing
+    about them, and the receiver cannot verify the relay either. They are
+    adoption analytics; they must never gate entitlement, unlock a feature, or
+    enter an authorization or billing decision.
     """
 
     platform_version: str | None
     license_tier: str | None
+    #: ``/health`` → ``edition``. The BUILD the platform is running,
+    #: ``community`` or ``enterprise``. Added platform-side by
+    #: axonflow-enterprise#3660; absent against any platform that predates it,
+    #: which is exactly what "omitted when not learned" already handles.
+    #:
+    #: NOT derivable from anything else here: the Community-SaaS fleet runs
+    #: the ENTERPRISE build against the community-saas schema, so neither the
+    #: topology nor the licence tier implies it.
+    edition: str | None = None
+    #: ``/health`` → ``deployment_mode``, relayed on the wire as
+    #: ``platform_deployment_mode``.
+    #:
+    #: READ THE NAMES CAREFULLY — THIS IS THE TRAP THIS CONTRACT IS MOST LIKELY
+    #: TO BE GOT WRONG ON. The ``/health`` member is called ``deployment_mode``
+    #: because there the platform is describing ITSELF. On the ping,
+    #: ``deployment_mode`` already means something else entirely: the TOPOLOGY
+    #: bucket this SDK derives from the endpoint URL it was configured with.
+    #: They are different dimensions, and mapping ``/health``'s member onto the
+    #: topology field would overwrite a value every existing dashboard reads.
+    platform_deployment_mode: str | None = None
 
 
-_EMPTY_HEALTH_PROBE = PlatformHealthProbe(platform_version=None, license_tier=None)
+_EMPTY_HEALTH_PROBE = PlatformHealthProbe(
+    platform_version=None,
+    license_tier=None,
+    edition=None,
+    platform_deployment_mode=None,
+)
+
+
+def _learned(body: dict[str, object], key: str) -> str | None:
+    """Promote one ``/health`` member to a relayable value, or ``None``.
+
+    Learned only when the member is present, is a string, is non-empty, and
+    is within :data:`_MAX_RELAYED_VALUE_BYTES`. An absent key, a non-string
+    value, an explicit ``""`` and an over-long string are all NOT LEARNED —
+    the field stays ``None`` rather than becoming a value the platform did not
+    report.
+
+    A non-string is refused rather than coerced: ``{"tier": 42}`` becoming
+    ``"42"`` would land in the receiver's unknown bucket as though the
+    platform had reported a tier. Absent is the honest answer.
+    """
+    value = body.get(key)
+    if not isinstance(value, str) or not value:
+        return None
+    if _byte_len(value) > _MAX_RELAYED_VALUE_BYTES:
+        # The VALUE is deliberately not logged: it is remote-controlled text,
+        # and the diagnostic exists to say which field was dropped and why.
+        logger.debug(
+            "Telemetry: /health field %r exceeded %d bytes (%d bytes); omitted",
+            key,
+            _MAX_RELAYED_VALUE_BYTES,
+            _byte_len(value),
+        )
+        return None
+    return value
 
 
 def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealthProbe:
@@ -122,8 +392,32 @@ def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealt
     combined budget — see issue #1692.
     """
     try:
-        resp = httpx.get(f"{endpoint}/health", timeout=timeout)
+        # NO REDIRECTS ON THE TELEMETRY PATH, STATED EXPLICITLY.
+        #
+        # ``follow_redirects=False`` is already httpx's default, so this is a
+        # pin rather than a fix — and it is written out precisely because a
+        # default is not a decision. A future httpx release, or a maintainer
+        # copying this call to a client that sets a different default, would
+        # silently change behaviour that matters: a 30x from ``/health``
+        # followed silently means every value promoted below would describe
+        # the REDIRECT TARGET rather than the endpoint the caller configured.
+        # A captive portal, a misconfigured proxy or an http->https hop is
+        # enough to make the heartbeat report a platform the user never
+        # pointed at.
+        #
+        # The 30x itself then fails the status check below and yields an empty
+        # probe — "not learned", the honest answer.
+        resp = httpx.get(f"{endpoint}/health", timeout=timeout, follow_redirects=False)
         if resp.status_code != _HTTP_OK:
+            if _is_redirect(resp.status_code):
+                # Named separately from an ordinary non-2xx so a refused
+                # redirect is OBSERVABLE rather than silent. The Location
+                # value is deliberately NOT logged: it is remote-controlled
+                # text, and the diagnostic only needs to say what was refused.
+                logger.debug(
+                    "Telemetry: /health answered %d (a redirect); refused, relayed fields omitted",
+                    resp.status_code,
+                )
             return _EMPTY_HEALTH_PROBE
         body = resp.json()
         if not isinstance(body, dict):
@@ -134,19 +428,24 @@ def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealt
             # exception, not because a test pins it.
             return _EMPTY_HEALTH_PROBE
 
-        # Each field is promoted independently and only when it is a
-        # non-empty string. An absent key, a non-string value and an
-        # explicit "" are all "not learned", leaving None rather than
-        # putting a meaningless value on the wire.
-        version = body.get("version")
-        tier = body.get("tier")
+        # Each field is promoted independently, through ONE helper. Four
+        # copies of the same two conditions is the shape that gets found in
+        # production by the field the bound was not applied to.
         return PlatformHealthProbe(
-            platform_version=version if isinstance(version, str) and version else None,
+            platform_version=_learned(body, "version"),
             # Verbatim, including the transient "starting" the agent returns
             # before its licence is validated. "starting" is a real signal
             # the receiver buckets deliberately, not an error to filter
             # client-side.
-            license_tier=tier if isinstance(tier, str) and tier else None,
+            license_tier=_learned(body, "tier"),
+            edition=_learned(body, "edition"),
+            # NOTE THE NAME CHANGE, AND THAT IT IS DELIBERATE. The /health
+            # member is `deployment_mode` (the platform describing itself);
+            # the wire field is `platform_deployment_mode`. This SDK's OWN
+            # `deployment_mode` is a different dimension — the topology it
+            # derives from its endpoint URL — and promoting /health's member
+            # into it would overwrite a value every existing dashboard reads.
+            platform_deployment_mode=_learned(body, "deployment_mode"),
         )
     except Exception:  # noqa: BLE001 — see below; a probe must never raise
         # Deliberately broad. This is a best-effort probe on the telemetry
@@ -281,6 +580,8 @@ def _build_payload(
     endpoint_type: str = "unknown",
     deployment_mode: str = "unknown",
     license_tier: str | None = None,
+    edition: str | None = None,
+    platform_deployment_mode: str | None = None,
 ) -> dict[str, object]:
     """Build the JSON payload for the checkpoint ping.
 
@@ -349,17 +650,29 @@ def _build_payload(
         "runtime_version": platform.python_version(),
         "deployment_mode": deployment_mode,
         "endpoint_type": endpoint_type,
-        "features": [],
+        # The adapter registry is the ONLY producer of this array. Read here
+        # rather than snapshotted at import so an adapter that registers after
+        # the first client is built still reaches the next heartbeat.
+        "features": _registered_features(),
         "instance_id": str(uuid.uuid4()),
         "org_id": _telemetry_org_id(),
     }
     if mode == "sandbox":
         payload["stream"] = "sandbox"
-    # Key inserted ONLY when the tier was learned. Setting it to None would
-    # serialize as JSON null, which is a claim ("the tier is nothing")
-    # rather than an omission ("we do not know the tier").
+    # Keys inserted ONLY when the value was learned. Setting one to None would
+    # serialize as JSON null, which is a claim ("the tier is nothing") rather
+    # than an omission ("we do not know the tier"). Presence is has(key), not
+    # truthiness — and "" never reaches here, because _learned refuses it.
     if license_tier is not None:
         payload["license_tier"] = license_tier
+    # Relayed verbatim, omitted when not learned. NOTE that /health's
+    # `deployment_mode` member lands on `platform_deployment_mode` here, NOT
+    # on `deployment_mode` above, which is the topology this SDK derived from
+    # its own endpoint URL. See PlatformHealthProbe.
+    if edition is not None:
+        payload["edition"] = edition
+    if platform_deployment_mode is not None:
+        payload["platform_deployment_mode"] = platform_deployment_mode
     return payload
 
 
@@ -404,15 +717,44 @@ def _send_telemetry_ping_now(url: str, mode: str, endpoint: str, debug: bool) ->
             endpoint_type,
             deployment_mode,
             probe.license_tier,
+            probe.edition,
+            probe.platform_deployment_mode,
         )
 
         # POST uses all remaining budget.
         post_budget = max(0.0, deadline - time.monotonic())
         if post_budget < _MIN_BUDGET_SECONDS:
             return False
-        resp = httpx.post(url, json=payload, timeout=post_budget)
-        if resp.status_code != _HTTP_OK:
-            if debug:
+        # NO REDIRECTS, AND HERE IT IS A CORRECTNESS BUG RATHER THAN A PRIVACY
+        # ONE. An HTTP client that follows a 301/302/303 does not re-POST: it
+        # converts the request to a bodyless GET. A followed redirect on the
+        # checkpoint POST would therefore produce a 200 for a request that
+        # carried NO PAYLOAD, this function would report delivery, and the
+        # caller would write the 7-day stamp — leaving the installation silent
+        # for a week on a ping that was never actually sent. A 200 meaning "we
+        # delivered nothing" is the worst possible shape for this path,
+        # because it is indistinguishable from success at every layer above.
+        #
+        # As on the probe, False is already httpx's default and is stated
+        # explicitly so it is a decision rather than an inherited default.
+        resp = httpx.post(url, json=payload, timeout=post_budget, follow_redirects=False)
+        # A 2xx RANGE, not `== 200`. Every sibling SDK treats any 2xx as
+        # delivery (Go `resp.StatusCode < 300`, Rust `status().is_success()`,
+        # TypeScript `response.ok`, Java `isSuccessful()`); Python alone
+        # compared against 200 exactly, so a checkpoint answering 202 would
+        # have been read as a failure and the same ping retried at every gate
+        # run forever, with the stamp never advancing.
+        if not _is_success(resp.status_code):
+            if _is_redirect(resp.status_code):
+                # Observable, and distinct from an ordinary non-2xx: a refused
+                # redirect is the one failure here that would otherwise look
+                # like success.
+                logger.debug(
+                    "Telemetry: checkpoint answered %d (a redirect); refused, ping NOT delivered "
+                    "and the stamp will not advance",
+                    resp.status_code,
+                )
+            elif debug:
                 logger.debug("Telemetry ping returned non-2xx: %d", resp.status_code)
             return False
         try:

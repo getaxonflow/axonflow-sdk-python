@@ -146,9 +146,19 @@ def test_after_rate_limit_expiry_fires_again(
     _wait_for_threads()
     assert mock_ping_success.call_count == 1
 
-    # Backdate in-memory cache (2h ago) AND stamp file (8d ago).
+    # Backdate in-memory cache (2h ago), the in-memory DELIVERY record (8d
+    # ago) AND the stamp file (8d ago).
+    #
+    # ``_last_delivered_monotonic`` joined this list with the in-memory 7-day
+    # cadence (axonflow-enterprise#3682 item 3). It is not an extra knob for
+    # the test's convenience: "eight days have passed" is a statement about
+    # all three records, and a fixture that moved only two of them was
+    # modelling a state the process cannot actually be in.
     with isolated_state._lock:  # noqa: SLF001
         isolated_state._last_checked_monotonic = _time.monotonic() - 2 * 3600  # noqa: SLF001
+        isolated_state._last_delivered_monotonic = (  # noqa: SLF001
+            _time.monotonic() - 8 * 24 * 3600
+        )
     eight_days_ago = _time.time() - 8 * 24 * 3600
     os.utime(isolated_state.stamp_path, (eight_days_ago, eight_days_ago))
 
@@ -223,15 +233,31 @@ def test_no_cache_dir_pings_but_no_stamp(mock_ping_success, telemetry_enabled_en
         _wait_for_threads()
         assert mock_ping_success.call_count == 1, "in-memory cache must still suppress 2nd call"
 
-        # Backdate cache, call again — fires again because no stamp gate exists.
+        # ASSERTION INVERTED IN #3682 (item 3), AND THE OLD ONE WAS THE DEFECT.
+        #
+        # This block used to backdate the cache and assert a SECOND ping fired,
+        # "because no stamp gate exists". That is precisely the bug: in a
+        # runtime with no usable cache dir — distroless and scratch containers,
+        # Lambda custom runtimes, a read-only root filesystem — the stamp can
+        # never be written, so nothing bounded the cadence and a SUCCESSFUL
+        # ping recurred every hour, forever. 168 pings a week against a
+        # contract that discloses one, in exactly the environments least able
+        # to notice, and the failure backoff cannot help because these
+        # deliveries succeed.
+        #
+        # The in-memory ``_last_delivered_monotonic`` record is the bound. An
+        # hour after a delivery the gate must now REFUSE; only the 7-day
+        # interval re-opens it (see
+        # test_success_cadence_reopens_after_the_interval).
         import time as _time
 
         with state._lock:  # noqa: SLF001
             state._last_checked_monotonic = _time.monotonic() - 2 * 3600  # noqa: SLF001
         maybe_send_heartbeat(mode="production", endpoint="http://localhost")
         _wait_for_threads()
-        assert mock_ping_success.call_count == 2, (
-            "ping fires again when cache expires and no stamp exists"
+        assert mock_ping_success.call_count == 1, (
+            "a delivered ping must stay bounded in memory when no stamp file exists; "
+            "without that bound a success recurs hourly"
         )
     finally:
         hb_module._state = previous  # noqa: SLF001

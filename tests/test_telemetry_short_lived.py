@@ -120,9 +120,25 @@ def test_telemetry_flushes_on_immediate_exit(mock_checkpoint: Any) -> None:
             [
                 sys.executable,
                 "-c",
-                "from axonflow import AxonFlow; AxonFlow(endpoint='"  # no trailing sleep
-                + base_url
-                + "')",
+                # THE FIXTURE NOW MAKES A REQUEST, AND THAT IS THE #3682
+                # CHANGE, NOT A WEAKENING. The heartbeat trigger moved from
+                # client construction to the client's first outbound request,
+                # so a script that constructs a client and never uses it
+                # deliberately no longer pings — a heartbeat is a claim about
+                # usage. The property under test is unchanged and is still the
+                # one this file exists for: a SHORT-LIVED PROCESS MUST NOT DROP
+                # ITS PING. So the subprocess does what the caller it models
+                # does — construct, make one call, exit immediately — and still
+                # asserts the ping arrived. The call fails (nothing serves that
+                # route); the heartbeat rides the ATTEMPT, because a caller
+                # whose first API call fails is still a caller.
+                "import asyncio, contextlib\n"
+                "from axonflow import AxonFlow\n"
+                "async def main():\n"
+                "    c = AxonFlow(endpoint='" + base_url + "')\n"
+                "    with contextlib.suppress(Exception):\n"
+                "        await c.list_decisions()\n"
+                "asyncio.run(main())\n",
             ],
             env=env,
             capture_output=True,

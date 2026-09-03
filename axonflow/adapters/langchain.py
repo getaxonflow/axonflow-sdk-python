@@ -36,6 +36,7 @@ from collections.abc import AsyncIterator, Iterator
 from typing import TYPE_CHECKING, Any
 
 from axonflow.exceptions import PolicyViolationError
+from axonflow.telemetry import register_adapter
 from axonflow.types import TokenUsage
 
 if TYPE_CHECKING:
@@ -321,6 +322,27 @@ class AxonFlowRunnableBinding(_GovernanceMixin):
         provider: str = "unknown",
         model_name: str = "unknown",
     ) -> None:
+
+        # Declare this adapter on the next telemetry heartbeat. Without it, an
+        # application driving the SDK through this adapter is indistinguishable
+        # from bare SDK use on every telemetry dimension — same sdk, same
+        # sdk_version, same endpoint — which is the gap the registry closes.
+        #
+        # Here rather than at module import, and the distinction is the point:
+        # importing the module says the adapter is INSTALLED, constructing one
+        # says it is IN USE, and only the second is adoption signal.
+        #
+        # The heartbeat fires on the client's first outbound REQUEST, not at
+        # client construction, so a registration made here — necessarily after
+        # the client exists and before any call through it — reaches the very
+        # first ping. No I/O; one insert into a set that deduplicates.
+        #
+        # A LITERAL, not WorkflowSource.LANGGRAPH.value even where that holds
+        # the same text: WorkflowSource is a platform API value the
+        # orchestrator interprets, this is a telemetry value the checkpoint
+        # buckets. Deriving one from the other would let a rename in the
+        # workflow API silently repoint an analytics dimension.
+        register_adapter("langchain")
         self._inner = bound
         self._axonflow = axonflow
         self._user_token = user_token
@@ -369,6 +391,27 @@ class AxonFlowChatModel(_GovernanceMixin):
         axonflow: AxonFlow,
         user_token: str | None = None,
     ) -> None:
+
+        # Declare this adapter on the next telemetry heartbeat. Without it, an
+        # application driving the SDK through this adapter is indistinguishable
+        # from bare SDK use on every telemetry dimension — same sdk, same
+        # sdk_version, same endpoint — which is the gap the registry closes.
+        #
+        # Here rather than at module import, and the distinction is the point:
+        # importing the module says the adapter is INSTALLED, constructing one
+        # says it is IN USE, and only the second is adoption signal.
+        #
+        # The heartbeat fires on the client's first outbound REQUEST, not at
+        # client construction, so a registration made here — necessarily after
+        # the client exists and before any call through it — reaches the very
+        # first ping. No I/O; one insert into a set that deduplicates.
+        #
+        # A LITERAL, not WorkflowSource.LANGGRAPH.value even where that holds
+        # the same text: WorkflowSource is a platform API value the
+        # orchestrator interprets, this is a telemetry value the checkpoint
+        # buckets. Deriving one from the other would let a rename in the
+        # workflow API silently repoint an analytics dimension.
+        register_adapter("langchain")
         from langchain_core.language_models import BaseChatModel
 
         if not isinstance(wrapped, BaseChatModel):
