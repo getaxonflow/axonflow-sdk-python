@@ -1,5 +1,5 @@
 # Copyright 2026 AxonFlow
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: MIT
 
 """HITL (Human-in-the-Loop) Queue API Types for AxonFlow SDK.
 
