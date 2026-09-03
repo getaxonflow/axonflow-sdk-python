@@ -143,6 +143,7 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.read_identity import (
+    effective_read_identity,
     read_scope_error_for,
     read_scope_of,
     refuse_vacuous_scoped_page,
@@ -852,7 +853,14 @@ class AxonFlow:
         The identity is hashed, never stored, so a cache dump cannot yield the
         credential.
         """
-        identity = self._config.user_token or ""
+        # Resolved through the SAME function the header stamp uses, not read
+        # off the config. The stamp honours the per-call override
+        # (``use_read_identity``); a key that read the client-wide value instead
+        # would disagree with the header on exactly the calls that have an
+        # override — so a call presenting BOB would be served the client-wide
+        # identity's cached answer, and an explicit empty override, which is a
+        # deliberately UNIDENTIFIED call, would be served the identified one.
+        identity = effective_read_identity(self._config.user_token)
         key = f"{request_type}:{query}:{user_token}:{identity}"
         return hashlib.sha256(key.encode()).hexdigest()[:32]
 

@@ -90,8 +90,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from axonflow import AxonFlow
 from axonflow.decisions import ListDecisionsOptions
 from axonflow.heartbeat import _resolve_stamp_path
-from axonflow.read_identity import HEADER_USER_TOKEN, ReadScope, ReadScopeError
-from axonflow.types import DecideRequest, DecisionTarget
+from axonflow.read_identity import (
+    HEADER_USER_TOKEN,
+    ReadScope,
+    ReadScopeError,
+    use_read_identity,
+)
+from axonflow.types import AuditSearchRequest, DecideRequest, DecisionTarget
 
 AGENT_URL = os.environ.get("AXONFLOW_AGENT_URL", "http://localhost:8080")
 
@@ -511,7 +516,113 @@ async def main() -> None:  # noqa: C901, PLR0912, PLR0915
     # ----------------------------------------------------- 10. OBSERVABLE
     assert_platform_recorded_the_unscoped_read()
 
+    # ------------------------------------------------ 11. THE SHARED CACHE
+    # A client derived with as_user shares this one's cache by design, and a
+    # per-call override changes the identity without changing the client at all.
+    # Proven against the REAL agent rather than a mocked transport, because the
+    # property is that a second CALLER's request actually reached the platform
+    # and was governed on their behalf, and only the platform can say that.
+    await assert_derived_identities_do_not_share_a_cached_response(
+        jwt_secret, client_id, secret, dev_a, dev_b, admin
+    )
+
     print("\nALL PASS: read-path identity verified end to end through the Python SDK runtime")
+
+
+async def assert_derived_identities_do_not_share_a_cached_response(
+    jwt_secret: str, client_id: str, secret: str, dev_a: str, dev_b: str, admin: str
+) -> None:
+    """Two identities asking one question must be governed twice, on the wire.
+
+    The unit tests count requests at a mocked transport. That proves the key
+    changed; it cannot prove the platform evaluated anything for the second
+    caller, which is the property that matters when the failure mode is "BOB was
+    served ALICE's governed response". Here the count comes from the agent's own
+    audit trail, read back through the SDK as an admin.
+
+    Both routes into the leak are driven: a DERIVED client, and a per-call
+    override on one client. The second is the one no derived-client test could
+    see, because the client is the same object throughout.
+    """
+    # Cache ON explicitly: with it off this step asserts nothing about the fix.
+    base = AxonFlow(
+        endpoint=AGENT_URL,
+        client_id=client_id,
+        client_secret=secret,
+        cache_enabled=True,
+        timeout=30.0,
+    )
+
+    # request_type "chat", NOT "mcp-query". This is the load-bearing choice:
+    # an mcp-query without a connector FAILS, and the SDK caches only a
+    # SUCCESSFUL response - so with a failing type both calls go to the wire
+    # whatever the key says, and the step passes just as happily on the unfixed
+    # SDK. Measured: mcp-query returns "missing 'connector' in context", and
+    # the first version of this step was vacuous for exactly that reason.
+    #
+    # The BODY user_token is IDENTICAL across both calls, and that is the rest
+    # of the construction. /api/request validates it as a JWT and it is already
+    # a key component, so varying it would make the two keys differ for a reason
+    # that has nothing to do with the fix. Holding it fixed leaves the READ
+    # identity as the only thing that differs, which is the axis under test.
+    #
+    # Its address is run-specific, which is what makes the platform-side count
+    # below specific to this run: the agent attributes /api/request to the BODY
+    # token's identity (measured - not to the header), so every audit row this
+    # step produces carries this address and no other session's traffic does.
+    service_email = f"cache-service-{RUN_TAG}@example.com"
+    service = mint_user_token(jwt_secret, service_email, client_id, "developer", 3600)
+    query = f"say hello for {RUN_TAG}"
+
+    await base.as_user(dev_a).proxy_llm_call(user_token=service, query=query, request_type="chat")
+    with use_read_identity(dev_b):
+        await base.proxy_llm_call(user_token=service, query=query, request_type="chat")
+
+    # Read as ADMIN: a developer identity is scoped to its own rows and would
+    # count differently by construction.
+    admin_client = client(client_id, secret, admin)
+    rows = await _audit_rows_for(admin_client, service_email)
+    if rows < 2:
+        fail(
+            f"step 11: the platform governed {rows} request(s) for TWO distinct identities "
+            "asking the same question through one shared cache. One means the second caller "
+            "was served the FIRST caller's response, with nothing evaluated on their behalf "
+            "- a cross-user leak the SDK produced without the platform being asked. (If this "
+            "reads 0, the calls did not reach the platform at all and the cause is not the "
+            "cache - check the run above for auth or provider failures.)"
+        )
+    print(
+        f"step 11 PASS: a derived client and a per-call override produced {rows} governed "
+        "requests through one shared cache; neither was served the other's response"
+    )
+
+
+async def _audit_rows_for(admin: AxonFlow, user_email: str) -> int:
+    """This run's governed requests, counted from the platform's own audit trail.
+
+    Counted by ``user_email`` rather than by a marker in the query: this
+    platform records ``query_summary`` EMPTY on every row (measured), so a
+    marker-matching count can only ever return zero - it would have reported a
+    working fix as a leak. The service address is run-specific, so the count is
+    specific to this step and immune to other sessions on a shared stack.
+
+    Polled, because the audit write is not synchronous with the response.
+    """
+    deadline = time.time() + 20
+    seen = 0
+    while time.time() < deadline:
+        try:
+            result = await admin.search_audit_logs(AuditSearchRequest(limit=200))
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            fail(
+                f"step 11: could not read the audit trail to count governed requests ({exc}). "
+                "An unverified observability claim is not evidence"
+            )
+        seen = sum(1 for e in result.entries if e.user_email == user_email)
+        if seen >= 2:
+            return seen
+        await asyncio.sleep(2)
+    return seen
 
 
 if __name__ == "__main__":

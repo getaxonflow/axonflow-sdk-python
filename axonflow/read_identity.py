@@ -189,6 +189,31 @@ def _same_origin(a: httpx.URL, b: httpx.URL) -> bool:
     return a.scheme == b.scheme and a.netloc == b.netloc
 
 
+def effective_read_identity(client_token: str | None) -> str:
+    """The identity a request made right now would actually PRESENT.
+
+    One function rather than the same three lines in two places, because the
+    two places are the header stamp and the response-cache key, and they must
+    never disagree about who is asking. They did: the stamp resolved the
+    per-call override and the key read the client-wide value, so a call made
+    inside ``use_read_identity("BOB")`` presented BOB and was served the
+    client-wide identity's cached answer — and an explicit empty override, which
+    deliberately makes one call unidentified, was served the *identified*
+    response. Both are the cross-user leak the key was meant to close, one level
+    further in.
+
+    ``None`` from the context var means "this call said nothing", so the
+    client-wide value applies. An explicit ``""`` is a caller deliberately
+    making one call unidentified and must NOT fall back — "unidentified" is a
+    state the platform treats as different from every other (see
+    :class:`ReadScope`), and a key that folded it back onto the client-wide
+    identity would hand it that identity's rows.
+    """
+    override = _per_call_identity.get()
+    token = client_token if override is None else override
+    return (token or "").strip()
+
+
 def stamp_read_identity(
     client_token: str | None,
     request: httpx.Request,
@@ -253,9 +278,7 @@ def stamp_read_identity(
     message, and never reaches telemetry — the heartbeat builds its own request
     with its own client and never passes through here.
     """
-    override = _per_call_identity.get()
-    token = client_token if override is None else override
-    token = (token or "").strip()
+    token = effective_read_identity(client_token)
     if token and endpoint and not _same_origin(request.url, httpx.URL(endpoint)):
         # Off-origin: this is a redirect (or a caller-built request) pointing
         # somewhere other than the client's configured endpoint. The identity
