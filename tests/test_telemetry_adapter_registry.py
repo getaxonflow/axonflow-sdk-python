@@ -690,3 +690,73 @@ def test_a_refused_checkpoint_redirect_is_logged(route_http, caplog):
     assert any("redirect" in m and "302" in m for m in messages), (
         f"no diagnostic named the refused redirect; records were {messages}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Per-ENTRY-POINT registration
+# ---------------------------------------------------------------------------
+
+
+def test_each_adapter_entry_point_registers_itself(monkeypatch):
+    """Four entry points, four assertions — on the CALL, not on the wire set.
+
+    THE WIRE-SET TESTS ABOVE CANNOT SEE THIS, and that gap is not theoretical:
+    while collapsing a duplicated comment block I deleted
+    ``AxonFlowRunnableBinding``'s registration entirely and the whole suite
+    stayed GREEN. Both LangChain entry points declare the same name and the
+    registry is a SET, so the surviving ``AxonFlowChatModel`` registration
+    satisfied the assertion for both. I caught it by counting call sites, not by
+    a test.
+
+    Spying on ``register_adapter`` gives each entry point a distinct observable
+    without inventing a new wire value: the set test stays as the integration
+    assertion, and this pins the call site — the thing that was deleted.
+    """
+    calls: list[str] = []
+
+    def _spy(name: str) -> None:
+        calls.append(name)
+
+    # Patched in each ADAPTER module, because they import the symbol directly:
+    # patching axonflow.telemetry.register_adapter would not be seen by a
+    # `from ... import register_adapter` binding already made at import time.
+    for module in (
+        "axonflow.adapters.langgraph",
+        "axonflow.adapters.langgraph_wrapper",
+        "axonflow.adapters.langchain",
+    ):
+        monkeypatch.setattr(f"{module}.register_adapter", _spy)
+
+    from axonflow.adapters.langchain import AxonFlowChatModel, AxonFlowRunnableBinding
+    from axonflow.adapters.langgraph import AxonFlowLangGraphAdapter
+    from axonflow.adapters.langgraph_wrapper import GovernedGraph
+
+    for entry_point, construct, expected in [
+        (
+            "AxonFlowLangGraphAdapter",
+            lambda: AxonFlowLangGraphAdapter(client=object(), workflow_name="wf"),
+            "langgraph",
+        ),
+        (
+            "GovernedGraph",
+            lambda: GovernedGraph(object(), client=object(), workflow_name="wf"),
+            "langgraph",
+        ),
+        (
+            "AxonFlowRunnableBinding",
+            lambda: AxonFlowRunnableBinding(bound=object(), axonflow=object()),
+            "langchain",
+        ),
+        (
+            "AxonFlowChatModel",
+            lambda: AxonFlowChatModel(wrapped=_fake_chat_model(), axonflow=object()),
+            "langchain",
+        ),
+    ]:
+        calls.clear()
+        construct()
+        assert calls == [expected], (
+            f"{entry_point} made register_adapter calls {calls}, want exactly "
+            f"['{expected}']. Each entry point must declare itself: the wire-set "
+            f"assertions cannot distinguish four entry points that share two names."
+        )
