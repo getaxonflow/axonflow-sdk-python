@@ -35,6 +35,7 @@ from axonflow.read_identity import (
     ReadScope,
     ReadScopeError,
     stamp_read_identity,
+    use_read_identity,
 )
 
 # Distinctive on purpose: the leak tests grep whole captured streams for it,
@@ -851,3 +852,165 @@ def test_generated_models_still_accept_the_correct_types() -> None:
     )
     assert obligation.mandatory is True
     assert obligation.schema_version == 1
+
+
+# ==========================================================================
+# A derived client shares the cache — so the key must know the identity
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+async def test_two_derived_clients_do_not_share_a_cached_response(httpx_mock) -> None:
+    """Two identities asking one question must produce TWO governed requests.
+
+    ``as_user`` shares this client's cache deliberately — deriving one per
+    request must not cost a cache — and its own docstring says so. The key was
+    ``request_type:query:user_token``, where ``user_token`` is the write-path
+    BODY field, and carried nothing about the identity the request would
+    actually PRESENT.
+
+    Measured before the fix: one request reached the server, identities
+    ``['ALICE']``. The second caller was handed the first caller's governed
+    response with nothing evaluated on their behalf. Two INDEPENDENT clients
+    each own a cache and send two, which is why nothing outside the
+    derived-client path could see it.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    base = _client(cache_enabled=True)
+    query = "the same question from two people"
+    for token in ("ALICE-TOKEN", "BOB-TOKEN"):
+        await base.as_user(token).proxy_llm_call(
+            user_token="", query=query, request_type="mcp-query"
+        )
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    identities = [r.headers.get(HEADER_USER_TOKEN, "NO IDENTITY") for r in requests]
+    assert len(requests) == 2, (
+        "two identities asking the same question must produce TWO governed requests. One "
+        "means the second caller was served the FIRST caller's response out of a shared "
+        f"cache, without the platform evaluating anything on their behalf. Seen: {identities}"
+    )
+    assert set(identities) == {"ALICE-TOKEN", "BOB-TOKEN"}, identities
+
+
+@pytest.mark.asyncio
+async def test_one_identity_asking_twice_still_hits_the_cache(httpx_mock) -> None:
+    """The other failure direction.
+
+    Without this, the test above is satisfied by a key that never matches — a
+    disabled cache wearing a fix's name, costing every caller a round trip.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    alice = _client(cache_enabled=True).as_user("ALICE-TOKEN")
+    for _ in range(2):
+        await alice.proxy_llm_call(user_token="", query="one question", request_type="mcp-query")
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    assert len(requests) == 1, (
+        "the same identity asking the same question twice must be served from the cache; "
+        "a key that never matches is a disabled cache wearing a fix's name"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_per_call_override_is_not_served_the_client_wide_cached_response(
+    httpx_mock,
+) -> None:
+    """The cache key must resolve the identity the way the HEADER does.
+
+    The first fix put ``self._config.user_token`` in the key while the stamp
+    resolved the per-call override, so the two disagreed on exactly the calls
+    that HAVE an override: a call made inside ``use_read_identity("BOB")``
+    presented BOB on the wire and was served the client-wide identity's cached
+    answer. Same leak as two derived clients, one level further in, and no test
+    over derived clients could see it.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    client = _client(cache_enabled=True, user_token="CLIENT-WIDE-TOKEN")
+    query = "the same question, two identities"
+
+    await client.proxy_llm_call(user_token="", query=query, request_type="mcp-query")
+    with use_read_identity("BOB-TOKEN"):
+        await client.proxy_llm_call(user_token="", query=query, request_type="mcp-query")
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    identities = [r.headers.get(HEADER_USER_TOKEN, "NO IDENTITY") for r in requests]
+    assert len(requests) == 2, (
+        "a per-call override presents a different identity on the wire, so it must not be "
+        f"served the client-wide identity's cached response. Seen: {identities}"
+    )
+    assert identities == ["CLIENT-WIDE-TOKEN", "BOB-TOKEN"], identities
+
+
+@pytest.mark.asyncio
+async def test_an_explicitly_unidentified_call_is_not_served_the_identified_response(
+    httpx_mock,
+) -> None:
+    """An explicit empty override is a deliberately UNIDENTIFIED call.
+
+    It drops the header, so the platform scopes it to nothing. If the key still
+    resolved to the client-wide identity, that call would be handed the
+    IDENTIFIED response out of the cache — the opposite of what the caller
+    asked for, and the more dangerous direction of the two.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    client = _client(cache_enabled=True, user_token="CLIENT-WIDE-TOKEN")
+    query = "identified, then deliberately not"
+
+    await client.proxy_llm_call(user_token="", query=query, request_type="mcp-query")
+    with use_read_identity(""):
+        await client.proxy_llm_call(user_token="", query=query, request_type="mcp-query")
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    identities = [r.headers.get(HEADER_USER_TOKEN, "NO IDENTITY") for r in requests]
+    assert len(requests) == 2, (
+        "an explicitly unidentified call must not be served the identified identity's cached "
+        f"response. Seen: {identities}"
+    )
+    assert identities == ["CLIENT-WIDE-TOKEN", "NO IDENTITY"], identities
+
+
+@pytest.mark.asyncio
+async def test_the_same_per_call_override_twice_still_hits_the_cache(httpx_mock) -> None:
+    """The control for both tests above.
+
+    Without it, they are satisfied by a key that never matches — a disabled
+    cache wearing a fix's name.
+    """
+    httpx_mock.add_response(
+        url=re.compile(r".*/api/request$"),
+        json={"success": True, "data": {"content": "answer"}},
+        is_reusable=True,
+    )
+
+    client = _client(cache_enabled=True, user_token="CLIENT-WIDE-TOKEN")
+    for _ in range(2):
+        with use_read_identity("BOB-TOKEN"):
+            await client.proxy_llm_call(
+                user_token="", query="one question", request_type="mcp-query"
+            )
+
+    requests = [r for r in httpx_mock.get_requests() if r.url.path == "/api/request"]
+    assert len(requests) == 1, (
+        "the same override asking the same question twice must be served from the cache"
+    )

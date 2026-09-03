@@ -143,6 +143,7 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.read_identity import (
+    effective_read_identity,
     read_scope_error_for,
     read_scope_of,
     refuse_vacuous_scoped_page,
@@ -833,8 +834,34 @@ class AxonFlow:
         )
 
     def _get_cache_key(self, request_type: str, query: str, user_token: str) -> str:
-        """Generate cache key for a request."""
-        key = f"{request_type}:{query}:{user_token}"
+        """Generate cache key for a request.
+
+        ``user_token`` is the write-path BODY field this call was made with. The
+        client's own ``user_token`` is a different thing — the ``X-User-Token``
+        header the request will present — and both belong in the key, because
+        both can change the answer.
+
+        The identity has to be here because a client derived with
+        :meth:`as_user` SHARES this one's cache by design (deriving one per
+        request must not cost a cache). Without it,
+        ``base.as_user(ALICE)`` and ``base.as_user(BOB)`` asking the same
+        question hash to one entry: one request goes out carrying ALICE and BOB
+        is handed ALICE's governed response, with nothing evaluated on his
+        behalf. Measured before the fix: one request reached the server,
+        identities ``['ALICE']``.
+
+        The identity is hashed, never stored, so a cache dump cannot yield the
+        credential.
+        """
+        # Resolved through the SAME function the header stamp uses, not read
+        # off the config. The stamp honours the per-call override
+        # (``use_read_identity``); a key that read the client-wide value instead
+        # would disagree with the header on exactly the calls that have an
+        # override — so a call presenting BOB would be served the client-wide
+        # identity's cached answer, and an explicit empty override, which is a
+        # deliberately UNIDENTIFIED call, would be served the identified one.
+        identity = effective_read_identity(self._config.user_token)
+        key = f"{request_type}:{query}:{user_token}:{identity}"
         return hashlib.sha256(key.encode()).hexdigest()[:32]
 
     def _pre_request_hook(self) -> None:

@@ -36,6 +36,7 @@ decisions - and `explain` answering `404` for ids that plainly existed.
 | 8 | `as_user` | A derived client must be scoped to the identity it was derived FOR, on a method that takes no per-call `user_token`. This step is what caught the derived client silently keeping the ORIGINAL identity |
 | 9 | No leak | The token must appear in **no** log char and in **no** request reaching the telemetry collector this driver hosts. `debug=True` and a **positive control** assert SDK output is present *before* the grep - otherwise "absent" is a claim about an empty haystack. Fails if the collector received nothing |
 | 10 | Observable | The orchestrator must have **recorded** the unscoped read |
+| 11 | Shared cache | Two identities (one derived client, one per-call override) asking one question must be governed **twice**, counted from the platform's audit trail |
 
 ## Three traps this driver exists to not fall into
 
@@ -76,3 +77,30 @@ Env: `AXONFLOW_AGENT_URL`, `AXONFLOW_CLIENT_ID`, `AXONFLOW_CLIENT_SECRET`,
 (default `axonflow-orchestrator`) for step 10.
 
 Exits non-zero on the first failed assertion.
+
+## Step 11 and its three load-bearing choices
+
+`as_user` shares this client's cache by design, and a per-call override changes
+the identity without changing the client at all. The unit tests count requests
+at a mocked transport, which proves the key changed; only the platform can say
+whether the second caller's request was actually *governed on their behalf*.
+Step 11 counts that from the agent's own audit trail.
+
+Three choices in it are not incidental, and each was found by measurement:
+
+1. **`request_type` is `chat`, not `mcp-query`.** An mcp-query without a
+   connector FAILS, and the SDK caches only a SUCCESSFUL response - so with a
+   failing type both calls reach the wire whatever the key says, and the step
+   passes just as happily on the unfixed SDK. The first version of this step was
+   vacuous for exactly that reason.
+2. **The body `user_token` is identical across both calls.** `/api/request`
+   validates it as a JWT and it is already a key component; varying it would make
+   the two keys differ for a reason unrelated to the fix.
+3. **Rows are counted by `user_email`, not by a marker in the query.** This
+   platform records `query_summary` EMPTY on every row (measured), so a
+   marker-matching count can only ever return zero - it would report a working
+   fix as a leak. The service address is run-specific, so the count is immune to
+   other sessions on a shared stack.
+
+Verified falsifiable: with the identity removed from the cache key, the step
+reports `the platform governed 1 request(s)` and the suite exits 1.
