@@ -7,6 +7,8 @@ name: heartbeat-real-stack
 # invocation does NOT re-fire (warm-cache regression).
 
 on:
+  # Full three-OS matrix on demand (see the matrix comment below).
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
