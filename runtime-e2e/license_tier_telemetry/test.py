@@ -117,6 +117,7 @@ def run_child() -> None:
         client_id="rt-e2e",
         client_secret="rt-e2e",
     )
+
     # THE HEARTBEAT FIRES ON THE FIRST REQUEST, not at construction
     # (axonflow-enterprise#3682). Constructing a client and exiting no longer
     # pings at all, so this driver has to make a call — which is also a more

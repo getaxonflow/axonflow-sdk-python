@@ -34,10 +34,56 @@ from pathlib import Path
 CLIENT = Path(__file__).parent.parent / "axonflow" / "client.py"
 
 # How an outbound request is spelled in this module.
+#
+# THE RECEIVER IS PART OF THE PATTERN, and the width was chosen against two
+# failure directions rather than one. Too narrow and a bypass hides: the first
+# version named only the three known client attributes, so `await httpx.get(...)`
+# or a side `httpx.AsyncClient()` inside a hook-less method stayed green. Too
+# broad and it cries wolf: a bare `\.get\(` matches `response.headers.get(...)`
+# and `params.get(...)`, and a guard that produces false positives trains the
+# next reader to add a bogus exemption, after which the census means nothing.
+#
+# So: any receiver whose name ends in `client`, plus the `httpx` module itself.
+#
+# DECLARED LIMIT: a client held in a variable NOT named `*client` — say
+# `hc.get(u)` — is not matched. That is the price of no false positives, and it
+# is stated rather than left to be discovered.
 _CALL = re.compile(
-    r"(self\._http_client|self\._map_http_client|stream_client)"
-    r"\.(get|post|put|patch|delete|request|stream)\("
+    r"(?:\b\w*client|\bhttpx)"
+    r"\.(?:get|post|put|patch|delete|request|stream|send)\(",
+    re.IGNORECASE,
 )
+
+#: Constructing an httpx client is NOT a request, so it is a SEPARATE check.
+#:
+#: Folding it into ``_CALL`` was wrong and the fixture said so immediately: it
+#: flagged the three sites where this SDK legitimately builds its own pooled
+#: clients. But a client built on the SIDE, inside a method that never calls the
+#: hook, is the specific smell worth watching for — it is how a request path
+#: comes to exist outside the wrapper. So the construction sites are ENUMERATED,
+#: and a new one has to be justified rather than silently added.
+_CLIENT_CONSTRUCTION = re.compile(r"\bhttpx\.(?:Async)?Client\(")
+
+#: Functions allowed to construct an httpx client, and why.
+CLIENT_CONSTRUCTION_SITES: dict[str, str] = {
+    "_stamp_identity": (
+        "builds the client's own pooled AsyncClients at construction — this IS "
+        "the client, not a side client, and every request through it goes "
+        "through _fetch/_pre_request_hook"
+    ),
+    "_stamp_derived": (
+        "borrows the parent's transport for an as_user()-derived client so the "
+        "pool is shared; same pooled client, different identity hook"
+    ),
+    "stream_execution_status": (
+        "SSE needs a client with no read timeout, which the pooled client "
+        "cannot express — the same exception the Go SDK's StreamExecutionStatus "
+        "carries. It is NOT exempt from the heartbeat trigger: it calls "
+        "_pre_request_hook itself, and the census above enforces that. This "
+        "entry records that the side client is deliberate, not that the path "
+        "is unwatched."
+    ),
+}
 _DEF = re.compile(r"^(\s*)(async )?def (\w+)\s*\(")
 _CLASS = re.compile(r"^class (\w+)")
 
@@ -47,11 +93,12 @@ _CLASS = re.compile(r"^class (\w+)")
 EXEMPT: dict[str, str] = {}
 
 
-def _scan() -> tuple[dict[int, tuple[str, str]], set[str]]:
-    """Return {line: (class, function)} for raw calls, and the set of
-    functions that call the hook."""
+def _scan() -> tuple[dict[int, tuple[str, str]], set[str], dict[int, str]]:
+    """Return {line: (class, function)} for raw calls, the set of functions
+    that call the hook, and {line: function} for client constructions."""
     src = CLIENT.read_text().split("\n")
     calls: dict[int, tuple[str, str]] = {}
+    constructions: dict[int, str] = {}
     hook_fns: set[str] = set()
     cls = ""
     fn = ""
@@ -71,11 +118,13 @@ def _scan() -> tuple[dict[int, tuple[str, str]], set[str]]:
             hook_fns.add(f"{cls}.{fn}")
         if _CALL.search(line):
             calls[i] = (cls, fn)
-    return calls, hook_fns
+        if _CLIENT_CONSTRUCTION.search(line):
+            constructions[i] = fn
+    return calls, hook_fns, constructions
 
 
 def test_every_request_site_passes_the_heartbeat_trigger():
-    calls, hook_fns = _scan()
+    calls, hook_fns, _constructions = _scan()
 
     # POSITIVE CONTROL. A scan finding nothing has stopped working — a renamed
     # attribute, a moved file, a changed spelling — and an empty result would
@@ -109,6 +158,40 @@ def test_every_request_site_passes_the_heartbeat_trigger():
     )
 
 
+def test_no_side_http_client_is_built_outside_the_known_sites():
+    """A client built on the SIDE is how a request path comes to exist outside
+    the wrapper — and outside the heartbeat trigger with it.
+
+    Constructing a client is not itself a request, so this is a separate check
+    from the census above rather than a wider needle. Folding the two together
+    flagged the three sites where the SDK legitimately builds its own pooled
+    clients, which is a false positive, and false positives get silenced with
+    bogus exemptions.
+    """
+    _calls, _hooks, constructions = _scan()
+
+    # POSITIVE CONTROL: the SDK really does construct clients, so an empty
+    # result means the detector stopped matching.
+    assert constructions, (
+        "the scan found ZERO httpx client constructions in client.py, which "
+        "cannot be true. The detector has stopped matching."
+    )
+
+    unexpected = [
+        f"  client.py:{line}  {fn}"
+        for line, fn in sorted(constructions.items())
+        if fn not in CLIENT_CONSTRUCTION_SITES
+    ]
+    assert not unexpected, (
+        "these functions construct an httpx client outside the known sites:\n"
+        + "\n".join(unexpected)
+        + "\n\nA client built on the side can issue requests that never reach "
+        "_pre_request_hook, so the SDK would never ping for a process that only "
+        "uses that path. Route it through the pooled client, or add it to "
+        "CLIENT_CONSTRUCTION_SITES with a reason."
+    )
+
+
 def test_the_needle_has_no_false_positives():
     """A guard that cries wolf is not a stricter guard.
 
@@ -123,7 +206,8 @@ def test_the_needle_has_no_false_positives():
         '        scope = response.headers.get("X-Axonflow-Read-Scope")',
         '        value = params.get("id")',
         "        cached = self._cache.get(key)",
-        "        client = self._registry.get(name)",
+        # Constructing a client is not issuing a request — it has its own check.
+        "        self._http_client = httpx.AsyncClient(timeout=t)",
     ]:
         assert not _CALL.search(not_a_request), (
             f"the needle matches {not_a_request.strip()!r}, which issues no request. "
@@ -135,6 +219,9 @@ def test_the_needle_has_no_false_positives():
         "        response = await self._http_client.post(url, json=body)",
         "        response = await self._map_http_client.request(method, url)",
         '        async with stream_client.stream("GET", url) as response:',
+        # The forms the first, narrower needle MISSED — this is what M1 was.
+        "        response = await httpx.get(url)",
+        "        response = await httpx.post(url, json=body)",
     ]:
         assert _CALL.search(is_a_request), (
             f"the needle MISSES {is_a_request.strip()!r}, an ordinary request spelling"

@@ -55,8 +55,24 @@ class _CapturingHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b'{"latest_version":"99.99.99","source":"external"}')
 
+    #: Seconds the ``/health`` probe is delayed before answering.
+    #:
+    #: NOT decoration. With an instantly-answering ``/health`` the whole
+    #: telemetry path completes inside the subprocess's own teardown, so
+    #: deleting ``_register_thread`` — the atexit flush this file exists to
+    #: protect — SURVIVED: the ping still landed, because there was nothing left
+    #: to flush. Measured: at 0 ms the mutant delivers 1 ping; at 500 ms it
+    #: delivers 0.
+    #:
+    #: A fixture that cannot express the defect reads exactly like one that
+    #: disproves it, so the probe is deliberately slow enough that the POST is
+    #: still in flight when the interpreter starts shutting down. It stays well
+    #: inside the SDK's own 3 s budget, so the ping itself is unaffected.
+    health_delay_seconds: ClassVar[float] = 0.5
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path.endswith("/health"):
+            time.sleep(self.__class__.health_delay_seconds)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()

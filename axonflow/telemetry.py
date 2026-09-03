@@ -1,4 +1,4 @@
-"""SDK telemetry: fire-and-forget checkpoint ping on client init.
+"""SDK telemetry: fire-and-forget checkpoint ping on the client's first request.
 
 Collects anonymous, non-PII usage data (SDK version, OS, architecture) and
 sends it to the AxonFlow checkpoint service. The response may include the
@@ -22,7 +22,7 @@ import platform
 import threading
 import time
 import uuid
-from typing import NamedTuple
+from typing import NamedTuple, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -210,7 +210,21 @@ def register_adapter(name: str) -> None:
     Args:
         name: The adapter's own name, e.g. ``"langchain"``.
     """
-    if not isinstance(name, str):
+    # A RUNTIME type check, despite the `str` annotation, and the cast is what
+    # makes it survive mypy rather than a silencing comment.
+    #
+    # Python's annotations are erased at runtime and this is a fire-and-forget
+    # telemetry call reachable from untyped user code, so `register_adapter(None)`
+    # is a real thing a caller can do. Without the guard it raises
+    # AttributeError out of a telemetry helper that documents refusing bad input
+    # silently — telemetry must never disrupt the caller. Coercing with
+    # `str(name)` would be worse still: it would put the literal text `None` on
+    # the wire as an adapter name.
+    #
+    # `cast(object, name)` widens the static type so the isinstance is genuinely
+    # informative to mypy instead of provably-unreachable. The public signature
+    # stays `str`, so a typed caller still gets the error at their call site.
+    if not isinstance(cast("object", name), str):
         return
     normalized = name.strip().lower()
     if not normalized or _byte_len(normalized) > _MAX_RELAYED_VALUE_BYTES:
@@ -382,10 +396,11 @@ def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealt
     non-2xx, unparseable body — so telemetry degrades to omitting the fields
     and never fails the ping or raises into the caller.
 
-    This is the SDK's only ``/health`` fetch on the telemetry path; the
-    licence tier rides along on the response already being fetched for the
-    version. Adding a second request here would double the telemetry path's
-    blocking budget and its failure surface — do not.
+    This is the SDK's only ``/health`` fetch on the telemetry path. The
+    licence tier, the edition and the platform's own deployment mode all ride
+    along on the response already being fetched for the version. Adding a
+    second request here would double the telemetry path's blocking budget and
+    its failure surface — do not.
 
     The caller passes a timeout derived from the shared telemetry deadline so
     the health probe and the checkpoint POST don't stack into a larger

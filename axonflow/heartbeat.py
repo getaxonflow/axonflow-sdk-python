@@ -5,8 +5,12 @@ Implements the cross-SDK contract:
     AxonFlow emits at most one heartbeat per environment every
     7 days during SDK activity.
 
-The gate is consulted both at client construction and at every public
-HTTP request site (via ``_pre_request_hook``). Each gate run:
+The gate is consulted at every public HTTP request site, via
+``_pre_request_hook``. It is NO LONGER consulted at client construction
+(axonflow-enterprise#3682): every framework adapter takes a client, so an
+adapter registering from its own constructor could never reach a
+constructor-time ping. A client that is constructed and never used does not
+ping. Each gate run:
 
 1. Re-evaluates ``AXONFLOW_TELEMETRY=off`` cheaply (lock-free) so a
    mid-process opt-out toggle takes effect immediately. As of v8.0 the
@@ -83,7 +87,11 @@ def _guard_interval_for(consecutive_failures: int) -> float:
     attempt after the widened interval sends normally.
     """
     doublings = min(consecutive_failures, _MAX_BACKOFF_DOUBLINGS)
-    return min(HEARTBEAT_GUARD_INTERVAL_S * (2**doublings), HEARTBEAT_INTERVAL_S)
+    # float(...) because `2**doublings` is typed Any under mypy's numeric
+    # rules, and returning Any from a function declared -> float fails the
+    # build. The cast is to the declared type, not a silencing comment.
+    widened = float(HEARTBEAT_GUARD_INTERVAL_S) * float(2**doublings)
+    return min(widened, HEARTBEAT_INTERVAL_S)
 
 
 def _resolve_stamp_path() -> Path | None:  # noqa: PLR0911
@@ -286,7 +294,8 @@ def maybe_send_heartbeat(
 ) -> None:
     """Central gate for telemetry pings.
 
-    Called from ``AxonFlow.__init__`` and ``AxonFlow._pre_request_hook``.
+    Called from ``AxonFlow._pre_request_hook`` only — the constructor no
+    longer pings (axonflow-enterprise#3682).
     Implements the contract documented at the top of this module. Never
     raises — heartbeat failures must not surface to the caller.
 

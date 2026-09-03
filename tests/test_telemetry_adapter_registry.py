@@ -518,6 +518,30 @@ def test_guard_interval_doubles_and_caps():
 # ---------------------------------------------------------------------------
 
 
+def _fake_chat_model() -> object:
+    """A stand-in that satisfies ``AxonFlowChatModel``'s isinstance guard.
+
+    Mirrors ``tests/test_langchain_adapter.py::_make_wrapped_model``:
+    ``MagicMock(spec=BaseChatModel)`` passes ``isinstance``. Falls back to a
+    bare mock when langchain_core is absent so the registration assertion still
+    runs — the guard would then raise, which the caller sees.
+    """
+    from unittest.mock import MagicMock
+
+    try:
+        from langchain_core.language_models import BaseChatModel
+
+        base: type = BaseChatModel
+    except ImportError:  # pragma: no cover - langchain_core is a dev dep
+        base = object
+
+    model = MagicMock(spec=base)
+    model.__class__.__name__ = "ChatAnthropic"
+    model.__class__.__module__ = "langchain_anthropic"
+    model.model_name = "claude-sonnet-4-6"
+    return model
+
+
 def test_langgraph_adapter_declares_itself():
     """The census correction.
 
@@ -564,7 +588,18 @@ def test_langchain_adapters_declare_themselves():
     AxonFlowRunnableBinding(bound=object(), axonflow=object())
     assert tel._registered_features() == ["adapter:langchain"]  # noqa: SLF001
 
-    assert AxonFlowChatModel is not None  # imported above; construction needs langchain_core
+    # AxonFlowChatModel is a SEPARATE entry point and needs its own
+    # construction, not a "not None" import check.
+    #
+    # An earlier version of this test ended at `assert AxonFlowChatModel is not
+    # None`, which is satisfied by the import alone — so deleting
+    # `register_adapter` from that constructor SURVIVED the mutant. A test that
+    # cannot reach the code it names is not covering it. Its isinstance guard
+    # needs a real BaseChatModel, so build the same MagicMock(spec=...) the
+    # LangChain adapter suite uses.
+    tel._reset_adapter_registry_for_test()  # noqa: SLF001
+    AxonFlowChatModel(wrapped=_fake_chat_model(), axonflow=object())
+    assert tel._registered_features() == ["adapter:langchain"]  # noqa: SLF001
 
 
 def test_both_frameworks_ride_one_ping():
@@ -583,3 +618,75 @@ def test_both_frameworks_ride_one_ping():
         "adapter:langchain",
         "adapter:langgraph",
     ]
+
+
+def test_governed_graph_declares_itself():
+    """``wrap_langgraph`` / ``GovernedGraph`` is a THIRD entry point.
+
+    Deleting ``register_adapter`` from ``GovernedGraph.__init__`` survived every
+    other test in this file, because nothing constructed one. Four adapter entry
+    points need four constructions; testing one and asserting the others by
+    import is how three of them stay uncovered.
+    """
+    from axonflow.adapters.langgraph_wrapper import GovernedGraph
+
+    assert tel._registered_features() == []  # noqa: SLF001
+    GovernedGraph(object(), client=object(), workflow_name="wf")
+    assert tel._registered_features() == ["adapter:langgraph"]  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# The refusal must be OBSERVABLE, not merely correct
+# ---------------------------------------------------------------------------
+
+
+def test_a_refused_health_redirect_is_logged(route_http, caplog):
+    """A refused redirect is the one failure on this path that would otherwise
+    look like an ordinary non-2xx, so the diagnostic naming it is part of the
+    contract — and an unasserted log line is a claim, not a behaviour.
+
+    The Location value must NOT appear: it is remote-controlled text.
+    """
+    import logging
+
+    target = _Route("http://elsewhere.test/health", body='{"version":"6.6.6"}')
+    redirector = _Route(
+        "http://platform.test/health", status=302, location="http://elsewhere.test/health"
+    )
+    route_http(redirector, target)
+
+    with caplog.at_level(logging.DEBUG, logger="axonflow.telemetry"):
+        tel._probe_platform_health("http://platform.test", timeout=2.0)  # noqa: SLF001
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("redirect" in m and "302" in m for m in messages), (
+        f"no diagnostic named the refused redirect; records were {messages}"
+    )
+    assert not any("elsewhere.test" in m for m in messages), (
+        "the Location value reached the log. It is remote-controlled text and the "
+        f"diagnostic only needs to say what was refused. Records: {messages}"
+    )
+
+
+def test_a_refused_checkpoint_redirect_is_logged(route_http, caplog):
+    """Same, on the leg where a followed redirect would be reported as
+    DELIVERY — which is the more dangerous half.
+    """
+    import logging
+
+    target = _Route("http://elsewhere.test/v1/ping", body="{}")
+    redirector = _Route(
+        "http://checkpoint.test/v1/ping", status=302, location="http://elsewhere.test/v1/ping"
+    )
+    route_http(redirector, target)
+
+    with caplog.at_level(logging.DEBUG, logger="axonflow.telemetry"):
+        delivered = tel._send_telemetry_ping_now(  # noqa: SLF001
+            "http://checkpoint.test/v1/ping", "production", "", debug=False
+        )
+
+    assert delivered is False
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("redirect" in m and "302" in m for m in messages), (
+        f"no diagnostic named the refused redirect; records were {messages}"
+    )
