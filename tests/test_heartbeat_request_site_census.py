@@ -213,15 +213,35 @@ def test_the_out_of_scope_modules_still_look_the_way_this_census_assumes():
     """``community.py`` is excluded on the grounds that its request is
     module-level and client-free. If that stops being true the exclusion is
     stale, so the premise is asserted rather than trusted.
+
+    THE FIRST VERSION OF THIS TEST COULD NOT GO RED. It was a disjunction —
+    ``"class " not in ... or "self._http_client" not in ...`` — which stays
+    true if community.py is rewritten to build a client and call
+    ``_c._http_client.post(...)``, because the first half still holds. A guard
+    whose failure branch is unreachable is not a guard, so each half is now its
+    own assertion.
     """
     community = Path(__file__).parent.parent / "axonflow" / "community.py"
     src = community.read_text()
     assert "axonflow/community.py" in OUT_OF_SCOPE_MODULES
-    # The premise: no class holds this request, so there is no client on which
-    # a heartbeat gate could be consulted.
-    assert "class " not in src.split("def ")[0] or "self._http_client" not in src, (
-        "community.py now has client state; the exclusion above may be stale and "
-        "the census should cover it"
+
+    # The premise, in three parts, each independently able to fail:
+    #  1. the request really is a module-level httpx call, not a client method;
+    #  2. nothing constructs an AxonFlow client here;
+    #  3. nothing imports one to construct elsewhere in the module.
+    assert "httpx.post(" in src, (
+        "community.py no longer issues its request via a module-level httpx call; "
+        "the exclusion above may be stale and the census should cover it"
+    )
+    assert "AxonFlow(" not in src, (
+        "community.py now constructs an AxonFlow client, so there IS a gate it could "
+        "consult; the exclusion is stale"
+    )
+    assert "from axonflow.client import" not in src, (
+        "community.py now imports the client; the exclusion is stale"
+    )
+    assert "from .client import" not in src, (
+        "community.py now imports the client; the exclusion is stale"
     )
 
 

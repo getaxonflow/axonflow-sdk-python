@@ -59,10 +59,10 @@ class _CapturingHandler(BaseHTTPRequestHandler):
     #:
     #: NOT decoration. With an instantly-answering ``/health`` the whole
     #: telemetry path completes inside the subprocess's own teardown, so
-    #: deleting ``_register_thread`` — the atexit flush this file exists to
-    #: protect — SURVIVED: the ping still landed, because there was nothing left
-    #: to flush. Measured: at 0 ms the mutant delivers 1 ping; at 500 ms it
-    #: delivers 0.
+    #: deleting ``axonflow.heartbeat._register_thread`` — the call that enrolls
+    #: the worker in the atexit flush this file exists to protect — SURVIVED:
+    #: the ping still landed, because there was nothing left to flush.
+    #: Measured: at 0 ms the mutant delivers 1 ping; at 500 ms it delivers 0.
     #:
     #: A fixture that cannot express the defect reads exactly like one that
     #: disproves it, so the probe is deliberately slow enough that the POST is

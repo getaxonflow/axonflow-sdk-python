@@ -700,13 +700,16 @@ def test_a_refused_checkpoint_redirect_is_logged(route_http, caplog):
 def test_each_adapter_entry_point_registers_itself(monkeypatch):
     """Four entry points, four assertions — on the CALL, not on the wire set.
 
-    THE WIRE-SET TESTS ABOVE CANNOT SEE THIS, and that gap is not theoretical:
-    while collapsing a duplicated comment block I deleted
-    ``AxonFlowRunnableBinding``'s registration entirely and the whole suite
-    stayed GREEN. Both LangChain entry points declare the same name and the
-    registry is a SET, so the surviving ``AxonFlowChatModel`` registration
-    satisfied the assertion for both. I caught it by counting call sites, not by
-    a test.
+    THE WIRE-SET TESTS ABOVE CANNOT DISTINGUISH FOUR ENTRY POINTS THAT SHARE TWO
+    NAMES. The registry is a SET, so an assertion that the wire carries
+    ``adapter:langchain`` is satisfied by EITHER LangChain entry point having
+    registered — it cannot say which, and it cannot say that both did.
+
+    That matters because both LangChain registrations were briefly deleted
+    together while a duplicated comment block was collapsed, and restored by
+    counting call sites. The wire-set tests do catch BOTH being gone; what they
+    cannot catch is ONE of the two going missing while the other covers for it.
+    This test closes that gap by asserting the CALL, per constructor.
 
     Spying on ``register_adapter`` gives each entry point a distinct observable
     without inventing a new wire value: the set test stays as the integration
