@@ -392,9 +392,11 @@ def _learned(body: dict[str, object], key: str) -> str | None:
 def _probe_platform_health(endpoint: str, timeout: float = 2.0) -> PlatformHealthProbe:
     """Probe the agent's ``/health`` endpoint ONCE for every telemetry dimension.
 
-    Returns both fields ``None`` on any failure — unreachable endpoint,
-    non-2xx, unparseable body — so telemetry degrades to omitting the fields
-    and never fails the ping or raises into the caller.
+    Returns EVERY field ``None`` on any failure — unreachable endpoint, a
+    redirect, non-2xx, unparseable body — so telemetry degrades to omitting the
+    fields and never fails the ping or raises into the caller. There are four
+    fields now, not two: version, tier, edition and the platform's own
+    deployment mode.
 
     This is the SDK's only ``/health`` fetch on the telemetry path. The
     licence tier, the edition and the platform's own deployment mode all ride

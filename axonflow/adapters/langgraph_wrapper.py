@@ -339,27 +339,18 @@ class GovernedGraph:
         govern_tools: bool = True,
     ) -> None:
 
-        # Declare this adapter on the next telemetry heartbeat. Without it, an
-        # application driving the SDK through this adapter is indistinguishable
-        # from bare SDK use on every telemetry dimension — same sdk, same
-        # sdk_version, same endpoint — which is the gap the registry closes.
-        #
-        # Here rather than at module import, and the distinction is the point:
-        # importing the module says the adapter is INSTALLED, constructing one
-        # says it is IN USE, and only the second is adoption signal.
-        #
-        # The heartbeat fires on the client's first outbound REQUEST, not at
-        # client construction, so a registration made here — necessarily after
-        # the client exists and before any call through it — reaches the very
-        # first ping. No I/O; one insert into a set that deduplicates.
-        #
-        # A LITERAL, not WorkflowSource.LANGGRAPH.value even where that holds
-        # the same text: WorkflowSource is a platform API value the
-        # orchestrator interprets, this is a telemetry value the checkpoint
-        # buckets. Deriving one from the other would let a rename in the
-        # workflow API silently repoint an analytics dimension.
-        register_adapter("langgraph")
         _get_callback_class()  # Fail fast if langchain-core missing
+
+        # Declare this adapter on the next telemetry heartbeat: otherwise an
+        # application driving the SDK through it is indistinguishable from bare
+        # SDK use on every dimension. See ``axonflow.telemetry.register_adapter``
+        # for the full reasoning, which is deliberately recorded in ONE place
+        # rather than copied to each of the four adapter entry points.
+        #
+        # AFTER validation, so a construction that raises declares nothing — a
+        # registration is a claim that the adapter is in use, and an object that
+        # failed to build is not.
+        register_adapter("langgraph")
         self._graph = graph
         self._client = client
         self._workflow_name = workflow_name

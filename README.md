@@ -679,6 +679,14 @@ Bounds, so a malformed call cannot damage the ping it rides on:
 
 The name is **not** validated against a list of known frameworks. The canonical vocabulary lives on the receiving service, which folds an unrecognised name into an `adapter:unknown` bucket while keeping the raw name on the row — so an adapter this SDK build predates still shows up as "something we do not recognise is in use" instead of vanishing at the client.
 
+### When the heartbeat fires, and how often
+
+The heartbeat fires on the client's **first outbound request**, not at construction — so a client that is created and never used does not ping at all. At most one ping per machine per **7 days** is delivered; the cadence is held by a stamp file, and additionally in memory for runtimes where that file cannot be written (distroless and scratch containers, Lambda custom runtimes, read-only root filesystems), where it is enforced per process instead.
+
+If the checkpoint service cannot be reached — the normal state of air-gapped and in-VPC deployments — the SDK backs off rather than retrying hourly forever: the re-check interval doubles from **1 hour** through 2, 4, 8 … to a ceiling of **7 days**, and a single successful delivery resets it. No ping is lost by backing off, because the 7-day stamp is only advanced on delivery.
+
+The whole telemetry path is bounded at **3 seconds** — the `/health` probe and the checkpoint POST share one deadline rather than stacking — so the most it can add to a first request is 3 seconds, and only when a ping is actually due.
+
 `AXONFLOW_TELEMETRY=off` suppresses all of the above along with the rest of the heartbeat.
 
 `DO_NOT_TRACK` is **not** honored as an opt-out for AxonFlow telemetry. It is commonly inherited from host tools and developer environments, which makes it an unreliable expression of user intent.

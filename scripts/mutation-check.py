@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Apply one source mutant, verify it was APPLIED, run tests, report, restore.
 
-    python scripts/mutation-check.py "<label>" <file> "<old>" "<new>" "<-k expr>"
+    python scripts/mutation-check.py "<label>" <file> "<old>" "<new>" "<-k expr>" [test-path]
+
+Exit codes: 0 = KILLED (good), 1 = SURVIVED (a finding), 3 = the mutation could
+not be applied, 4 = no test actually ran. Every non-zero code is a reason not
+to trust a green report.
 
 WHY THIS EXISTS AS A COMMITTED SCRIPT RATHER THAN A SHELL ONE-LINER.
 
@@ -32,6 +36,14 @@ import subprocess
 import sys
 
 desc, path, old, new, kexpr = sys.argv[1:6]
+# The test file is an ARGUMENT, not a constant: pinning one file made the
+# harness silently useless for every other suite.
+#: Positional slot of the optional test-path argument.
+_TEST_TARGET_ARGV = 6
+# The test file is an ARGUMENT, not a constant: pinning one file made the
+# harness silently useless for every other suite.
+test_target = sys.argv[_TEST_TARGET_ARGV] if len(sys.argv) > _TEST_TARGET_ARGV else "tests/"
+survived = False
 p = pathlib.Path(path)
 orig = p.read_text(encoding="utf-8")
 if old not in orig:
@@ -59,10 +71,13 @@ try:
         shutil.rmtree(cache, ignore_errors=True)
     r = subprocess.run(  # noqa: S603 - argv is literal; sys.executable is trusted
         [
-            ".venv/bin/python",
+            # sys.executable, NOT a hardcoded ".venv/bin/python": the harness has
+            # to run under whatever interpreter invoked it, including CI and a
+            # non-.venv virtualenv.
+            sys.executable,
             "-m",
             "pytest",
-            "tests/test_telemetry_adapter_registry.py",
+            test_target,
             "-p",
             "no:cacheprovider",
             "--no-cov",
@@ -85,5 +100,13 @@ try:
         print(f"KILLED       :: {desc}  [{tail}]")
     else:
         print(f"SURVIVED(BAD):: {desc}  [{tail}]")
+        survived = True
 finally:
     p.write_text(bak, encoding="utf-8")
+
+# NON-ZERO on SURVIVED, and raised AFTER the restore rather than inside the try.
+# Exiting 0 for a surviving mutant means a CI loop over this script reports
+# success for the one outcome that is a finding — the harness would certify
+# exactly what it exists to catch.
+if survived:
+    sys.exit(1)

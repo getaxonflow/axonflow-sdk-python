@@ -171,7 +171,10 @@ def test_telemetry_flushes_on_immediate_exit(mock_checkpoint: Any) -> None:
     while time.time() < deadline and not received:
         time.sleep(0.05)
 
-    assert len(received) >= 1, (
+    # EXACTLY one, not ">= 1". A lower bound cannot tell "the flush worked"
+    # from "the gate fired twice", and the contract here is one ping per
+    # process per interval.
+    assert len(received) == 1, (
         "telemetry ping was not received by the mock checkpoint — "
         "the atexit flush regression has returned. "
         f"subprocess stderr: {result.stderr!r}"

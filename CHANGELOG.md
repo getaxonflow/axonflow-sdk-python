@@ -106,8 +106,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-hosted topologies — every process issued a `/health` GET against the
   customer's own platform hourly, with a failed POST beside it. The re-check
   interval now doubles per consecutive undelivered attempt, capped at the 7-day
-  interval. No ping is lost: the stamp is untouched, so the first attempt after
-  the widened interval sends normally.
+  interval — in numbers, from **1 hour** through 2, 4, 8 … up to a ceiling of
+  **7 days (604,800 seconds)**, reached after 8 consecutive failures. No ping is
+  lost: the stamp is untouched, so the first attempt after the widened interval
+  sends normally, and a single delivery resets the interval to 1 hour.
 
 ## [9.2.0] - 2026-09-01: AuthZEN-native authorization surface
 

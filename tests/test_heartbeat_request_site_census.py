@@ -33,6 +33,23 @@ from pathlib import Path
 
 CLIENT = Path(__file__).parent.parent / "axonflow" / "client.py"
 
+#: Modules deliberately OUTSIDE this census, and why.
+#:
+#: ``axonflow/community.py`` issues one ``httpx.post`` to ``/api/v1/register``
+#: from a MODULE-LEVEL function, not a client method: registration is how a
+#: tenant is created, so there is no client and no configured endpoint for a
+#: heartbeat to describe. Pinging there would report a deployment that does not
+#: exist yet. The Go SDK exempts its ``register.go`` for the same reason.
+#:
+#: Named here rather than left implicit, so "the census only reads client.py"
+#: is a decision on the record instead of an accident of scope.
+OUT_OF_SCOPE_MODULES = {
+    "axonflow/community.py": (
+        "module-level tenant registration — no client, no endpoint, nothing for "
+        "a heartbeat to describe"
+    ),
+}
+
 # How an outbound request is spelled in this module.
 #
 # THE RECEIVER IS PART OF THE PATTERN, and the width was chosen against two
@@ -189,6 +206,22 @@ def test_no_side_http_client_is_built_outside_the_known_sites():
         "_pre_request_hook, so the SDK would never ping for a process that only "
         "uses that path. Route it through the pooled client, or add it to "
         "CLIENT_CONSTRUCTION_SITES with a reason."
+    )
+
+
+def test_the_out_of_scope_modules_still_look_the_way_this_census_assumes():
+    """``community.py`` is excluded on the grounds that its request is
+    module-level and client-free. If that stops being true the exclusion is
+    stale, so the premise is asserted rather than trusted.
+    """
+    community = Path(__file__).parent.parent / "axonflow" / "community.py"
+    src = community.read_text()
+    assert "axonflow/community.py" in OUT_OF_SCOPE_MODULES
+    # The premise: no class holds this request, so there is no client on which
+    # a heartbeat gate could be consulted.
+    assert "class " not in src.split("def ")[0] or "self._http_client" not in src, (
+        "community.py now has client state; the exclusion above may be stale and "
+        "the census should cover it"
     )
 
 
