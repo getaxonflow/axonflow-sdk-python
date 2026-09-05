@@ -55,7 +55,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         self.rfile.read(length)
         # Record the path and every header this request actually carried.
-        RECEIVED.append({"path": self.path, **{k: v for k, v in self.headers.items()}})
+        RECEIVED.append({"path": self.path, **dict(self.headers.items())})
         body = json.dumps({"allowed": True, "policies_evaluated": 1}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
