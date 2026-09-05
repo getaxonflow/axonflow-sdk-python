@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [9.3.0] - 2026-09-05
+
+### Added
+
+- **Per-call `extra_headers` on the governed methods** (`mcp_check_input`, `mcp_check_output`, `check_tool_input`, `check_tool_output`). Headers passed this way are merged into that one request and are never added to the client's default header set, so a header supplied for one call cannot leak into the next one or into any other method.
+- **This is the ADR-065 PEP capability handshake's attach point for this SDK** (getaxonflow/axonflow-enterprise#3763). What makes a per-call parameter necessary rather than a convenience over the client's defaults is that one process can be **two enforcement points**: a client whose request path and response path discharge different obligations must present a different declaration on each, and a process-wide default header can only carry one document. When this SDK presents its own declaration it will build on this parameter rather than adding a second mechanism.
+- **Strictly additive.** Omitting the parameter sends exactly the bytes the previous release sent, which is asserted rather than argued: a test drives a governed call without it and checks the handshake header is absent while the credential headers are untouched.
+
 ## [Unreleased]
 
 ### Added

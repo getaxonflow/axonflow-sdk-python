@@ -927,9 +927,17 @@ class AxonFlow:
         path: str,
         *,
         json_data: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Make HTTP request to Agent."""
-        response = await self._send_raw(method, path, json_data=json_data)
+        """Make HTTP request to Agent.
+
+        ``extra_headers`` are merged into THIS request only. They never reach
+        the client's default header set, so a header supplied for one call
+        cannot leak into the next one - which is the property that makes a
+        per-call declaration safe to vary (see the governed methods' own
+        ``extra_headers`` documentation).
+        """
+        response = await self._send_raw(method, path, json_data=json_data, headers=extra_headers)
 
         try:
             response.raise_for_status()
@@ -1587,6 +1595,7 @@ class AxonFlow:
         user_role: str | None = None,
         user_token: str | None = None,
         content_type: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it.
 
@@ -1658,7 +1667,7 @@ class AxonFlow:
                 statement=statement[:50],
             )
 
-        response = await self._http_client.post(url, json=body)
+        response = await self._http_client.post(url, json=body, headers=extra_headers)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -1680,6 +1689,7 @@ class AxonFlow:
         user_id: str | None = None,
         user_role: str | None = None,
         user_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckInputResponse:
         """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
         return await self.mcp_check_input(
@@ -1693,6 +1703,7 @@ class AxonFlow:
             user_id=user_id,
             user_role=user_role,
             user_token=user_token,
+            extra_headers=extra_headers,
         )
 
     async def mcp_check_output(
@@ -1708,6 +1719,7 @@ class AxonFlow:
         tenant_id: str | None = None,
         user_id: str | None = None,
         user_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckOutputResponse:
         """Validate MCP response data against configured policies.
 
@@ -1772,7 +1784,7 @@ class AxonFlow:
                 row_count=row_count,
             )
 
-        response = await self._http_client.post(url, json=body)
+        response = await self._http_client.post(url, json=body, headers=extra_headers)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -1794,6 +1806,7 @@ class AxonFlow:
         tenant_id: str | None = None,
         user_id: str | None = None,
         user_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckOutputResponse:
         """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return await self.mcp_check_output(
@@ -1807,6 +1820,7 @@ class AxonFlow:
             tenant_id=tenant_id,
             user_id=user_id,
             user_token=user_token,
+            extra_headers=extra_headers,
         )
 
     async def generate_plan(
