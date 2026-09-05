@@ -91,9 +91,7 @@ async def main() -> int:
 
         # Two governed calls on ONE client, presenting DIFFERENT declarations,
         # then a third presenting none.
-        await client.mcp_check_input(
-            "postgres", "select 1", extra_headers={HEADER: REQUEST_DECL}
-        )
+        await client.mcp_check_input("postgres", "select 1", extra_headers={HEADER: REQUEST_DECL})
         await client.mcp_check_output(
             "postgres", message="hi", extra_headers={HEADER: RESPONSE_DECL}
         )
@@ -108,13 +106,11 @@ async def main() -> int:
     first, second, third = RECEIVED
 
     check(
-        first["path"].endswith("/api/v1/mcp/check-input")
-        and first.get(HEADER) == REQUEST_DECL,
+        first["path"].endswith("/api/v1/mcp/check-input") and first.get(HEADER) == REQUEST_DECL,
         "the request-path declaration reached the wire on check-input",
     )
     check(
-        second["path"].endswith("/api/v1/mcp/check-output")
-        and second.get(HEADER) == RESPONSE_DECL,
+        second["path"].endswith("/api/v1/mcp/check-output") and second.get(HEADER) == RESPONSE_DECL,
         "the response-path declaration reached the wire on check-output",
     )
     # The two-enforcement-points property, observable only across two requests.

@@ -42,9 +42,7 @@ class TestExtraHeadersReachTheWire:
             url="http://localhost:8080/api/v1/mcp/check-input",
             json={"allowed": True, "policies_evaluated": 1},
         )
-        await _client().mcp_check_input(
-            "postgres", "select 1", extra_headers={HEADER: HANDSHAKE}
-        )
+        await _client().mcp_check_input("postgres", "select 1", extra_headers={HEADER: HANDSHAKE})
         assert httpx_mock.get_requests()[-1].headers[HEADER] == HANDSHAKE
 
     @pytest.mark.asyncio
@@ -66,9 +64,7 @@ class TestExtraHeadersReachTheWire:
             url="http://localhost:8080/api/v1/mcp/check-input",
             json={"allowed": True, "policies_evaluated": 1},
         )
-        await _client().check_tool_input(
-            "postgres", "select 1", extra_headers={HEADER: HANDSHAKE}
-        )
+        await _client().check_tool_input("postgres", "select 1", extra_headers={HEADER: HANDSHAKE})
         assert httpx_mock.get_requests()[-1].headers[HEADER] == HANDSHAKE
 
     @pytest.mark.asyncio
@@ -165,9 +161,7 @@ class TestExtraHeadersDoNotOverrideCredentials:
             url="http://localhost:8080/api/v1/mcp/check-input",
             json={"allowed": True, "policies_evaluated": 1},
         )
-        await _client().mcp_check_input(
-            "postgres", "a", extra_headers={HEADER: HANDSHAKE}
-        )
+        await _client().mcp_check_input("postgres", "a", extra_headers={HEADER: HANDSHAKE})
         req = httpx_mock.get_requests()[-1]
         assert req.headers["Authorization"].startswith("Basic ")
         assert req.headers[HEADER] == HANDSHAKE
