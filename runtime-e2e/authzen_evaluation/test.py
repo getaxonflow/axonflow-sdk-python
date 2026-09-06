@@ -58,6 +58,8 @@ from axonflow import (
     AUTHZEN_ERROR_CODE_UNSUPPORTED_ACTION,
     AUTHZEN_ERROR_CODE_UNSUPPORTED_SUBJECT,
     AUTHZEN_OPERATIONAL_STATE_DENY,
+    AUTHZEN_PATH,
+    AUTHZEN_PROFILE_HEADER,
     AUTHZEN_PROFILE_V1,
     AuthZENAction,
     AuthZENBulk,
@@ -131,6 +133,64 @@ def decide_verdict(query: str) -> str:
         msg = f"/api/v1/decide returned no verdict: {payload}"
         raise RuntimeError(msg)
     return str(verdict)
+
+
+def raw_evaluate(header_name: str, query: str) -> dict:
+    """POST the evaluation to the GENERATED path with the given header NAME.
+
+    Bypasses the SDK client on purpose: the leg below proves that the
+    constants this SDK generated are the ones the server reads, and the client
+    would use the same constants, so sending through it would prove nothing.
+    """
+    envelope = {"evaluation": request(query).model_dump(exclude_none=True)}
+    req = urllib.request.Request(  # noqa: S310 - the endpoint is operator-supplied
+        f"{ENDPOINT}{AUTHZEN_PATH}", data=json.dumps(envelope).encode(), method="POST"
+    )
+    req.add_header("Content-Type", "application/json")
+    req.add_header(header_name, AUTHZEN_PROFILE_V1)
+    if CLIENT_ID:
+        raw = f"{CLIENT_ID}:{CLIENT_SECRET or ''}".encode()
+        req.add_header("Authorization", "Basic " + base64.b64encode(raw).decode())
+    with urllib.request.urlopen(req, timeout=30) as response:  # noqa: S310
+        return json.loads(response.read())
+
+
+def check_generated_route_and_header() -> None:
+    """The served route and header NAME are the ones this SDK generated.
+
+    AUTHZEN_PATH and AUTHZEN_PROFILE_HEADER come from the platform's surface
+    artifact (axonflow-enterprise#3603), not from a literal here. With the
+    generated header name the server returns the negotiated profile context;
+    with the name altered by one character it must NOT - the bare boolean is
+    the proof that the NAME is what the handler reads.
+    """
+    name = "the generated route and header name negotiate the profile on the live wire"
+    try:
+        body = raw_evaluate(AUTHZEN_PROFILE_HEADER, BENIGN)
+    except Exception as exc:  # noqa: BLE001 - every failure mode is a finding here
+        check(name, f"{type(exc).__name__}: {exc}")
+    else:
+        profile = (body.get("context") or {}).get("profile")
+        check(
+            name,
+            None
+            if profile == AUTHZEN_PROFILE_V1
+            else f"POST {AUTHZEN_PATH} with {AUTHZEN_PROFILE_HEADER} returned {body}",
+        )
+
+    off_by_one = AUTHZEN_PROFILE_HEADER[:-1]
+    name = "a header name one character off is not read, so the constant is the name"
+    try:
+        body = raw_evaluate(off_by_one, BENIGN)
+    except Exception as exc:  # noqa: BLE001
+        check(name, f"{type(exc).__name__}: {exc}")
+    else:
+        problem = None
+        if "context" in body:
+            problem = f"header {off_by_one!r} still negotiated a context: {body}"
+        elif "decision" not in body:
+            problem = f"header {off_by_one!r} returned no decision member at all: {body}"
+        check(name, problem)
 
 
 async def check_route_answers(client: AxonFlow) -> None:
@@ -370,6 +430,8 @@ async def main() -> int:
         await check_plural_pointer(client)
         await check_bulk_meets_to_one_decision(client)
         await check_agreement_with_decide(client)
+
+    check_generated_route_and_header()
 
     # A secret that is wrong but well-formed. Derived from the real one so it
     # cannot accidentally be a valid credential on any stack.

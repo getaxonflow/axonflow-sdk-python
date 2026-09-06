@@ -4,7 +4,7 @@ Source: tests/fixtures/authzen-surface.json
   artifact:        axonflow-authzen-surface v1
   profile:         axonflow-authzen-profile-2026-08-29
   contract schema: 2026-08-29
-  schema digest:   sha256:647e16f769766f0ee8cf4913aaf5ac5c4567660fd2903da6766eead5db279efe
+  schema digest:   sha256:04f63f4d97215faa9fbf2b6a5152630f7310edbe47440b975d0f66ad63df811f
 
 Regenerate with::
 
@@ -49,11 +49,19 @@ AUTHZEN_PROFILE_V1: Final = "axonflow-authzen-profile-2026-08-29"
 # server echoes in AuthZENResponseContext.schema_version.
 AUTHZEN_CONTRACT_SCHEMA_VERSION: Final = "2026-08-29"
 
+# The one route the AuthZEN surface is served on, and the request header the
+# profile is negotiated with. Both are generated from the platform's contract
+# through the artifact, not written here: a rename on the platform is a
+# regenerate-and-diff failure in this SDK, not a 404 in production
+# (axonflow-enterprise#3603).
+AUTHZEN_PATH: Final = "/api/v1/access/evaluation"
+AUTHZEN_PROFILE_HEADER: Final = "X-Axonflow-AuthZEN-Profile"
+
 # The digest of the JSON Schema the artifact was reduced from. It is carried so
 # a support conversation can establish which contract a deployed SDK was built
 # against without reading its dependency tree.
 AUTHZEN_SOURCE_SCHEMA_SHA256: Final = (
-    "sha256:647e16f769766f0ee8cf4913aaf5ac5c4567660fd2903da6766eead5db279efe"
+    "sha256:04f63f4d97215faa9fbf2b6a5152630f7310edbe47440b975d0f66ad63df811f"
 )
 
 
@@ -679,6 +687,8 @@ __all__ = [
     "AUTHZEN_OPERATIONAL_STATE_DENY",
     "AUTHZEN_OPERATIONAL_STATE_ERROR",
     "AUTHZEN_OPERATIONAL_STATE_VALUES",
+    "AUTHZEN_PATH",
+    "AUTHZEN_PROFILE_HEADER",
     "AUTHZEN_PROFILE_V1",
     "AUTHZEN_REASON_CODE_APPROVAL_EXPIRED",
     "AUTHZEN_REASON_CODE_APPROVAL_REQUIRED",

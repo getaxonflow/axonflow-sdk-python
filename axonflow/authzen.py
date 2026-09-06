@@ -49,6 +49,8 @@ from axonflow.authzen_types_gen import (
     AUTHZEN_OPERATIONAL_STATE_ALLOW,
     AUTHZEN_OPERATIONAL_STATE_ERROR,
     AUTHZEN_OPERATIONAL_STATE_VALUES,
+    AUTHZEN_PATH,
+    AUTHZEN_PROFILE_HEADER,
     AUTHZEN_PROFILE_V1,
     AuthZENAction,
     AuthZENApprovalRequirement,
@@ -107,18 +109,19 @@ __all__ = [
     "to_wire",
 ]
 
-# The AuthZEN evaluation endpoint.
-AUTHZEN_PATH: Final = "/api/v1/access/evaluation"
-
-# How a Policy Enforcement Point negotiates the AxonFlow profile.
+# AUTHZEN_PATH and AUTHZEN_PROFILE_HEADER are GENERATED (axonflow.authzen_types_gen)
+# and re-exported here under the names this module has always had. They used to
+# be literals in this file - the SDK's own copy of two strings the platform also
+# wrote by hand - and nothing compared the copies (axonflow-enterprise#3603). The
+# artifact now carries them, so a platform rename is a regenerate-and-diff
+# failure rather than a runtime 404.
 #
-# The SDK always sends it. AuthZEN 1.0's response is a bare boolean, and the
-# four-valued state, the obligations and the approval challenge ride in the
-# response context, which the server returns only to a caller that asked for it
-# by version. This SDK understands the profile, so there is no reason to ask for
-# less than it can read — and a response WITHOUT the context is therefore a
-# protocol failure here rather than a decision with no obligations.
-AUTHZEN_PROFILE_HEADER: Final = "X-Axonflow-AuthZEN-Profile"
+# The SDK always sends the profile header. AuthZEN 1.0's response is a bare
+# boolean, and the four-valued state, the obligations and the approval challenge
+# ride in the response context, which the server returns only to a caller that
+# asked for it by version. This SDK understands the profile, so there is no
+# reason to ask for less than it can read - and a response WITHOUT the context is
+# therefore a protocol failure here rather than a decision with no obligations.
 
 
 # --------------------------------------------------------------------------

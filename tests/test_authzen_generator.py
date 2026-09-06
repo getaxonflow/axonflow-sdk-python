@@ -294,6 +294,8 @@ class TestTheParserRefusesWhatItCannotGenerate:
             "artifact": "axonflow-authzen-surface",
             "artifact_version": 1,
             "profile": "p",
+            "profile_header": "X-Axonflow-AuthZEN-Profile",
+            "route": {"method": "POST", "path": "/api/v1/access/evaluation"},
             "contract_schema_version": "v",
             "source_schema_id": "i",
             "source_schema_sha256": "s",
@@ -317,6 +319,24 @@ class TestTheParserRefusesWhatItCannotGenerate:
         ("name", "old", "new"),
         [
             ("an unknown artifact member", '"enums":', '"transport": "grpc", "enums":'),
+            # The route and header are what the generated client CALLS (#3603).
+            (
+                "no route",
+                '"route": {"method": "POST", "path": "/api/v1/access/evaluation"}, ',
+                "",
+            ),
+            ("a route that is not POST", '"method": "POST"', '"method": "GET"'),
+            (
+                "a relative route path",
+                '"path": "/api/v1/access/evaluation"',
+                '"path": "api/v1/access/evaluation"',
+            ),
+            ("no profile header", '"profile_header": "X-Axonflow-AuthZEN-Profile", ', ""),
+            (
+                "a header that is not a header name",
+                '"X-Axonflow-AuthZEN-Profile"',
+                '"X-Axonflow AuthZEN: Profile"',
+            ),
             ("an unknown type kind", '{"kind": "string"}', '{"kind": "decimal"}'),
             ("a dangling type reference", '{"kind": "string"}', '{"kind": "ref", "ref": "nope"}'),
             ("a dangling enum reference", '{"kind": "string"}', '{"kind": "enum", "enum": "no"}'),

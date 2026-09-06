@@ -63,7 +63,7 @@ SUPPORTED_ARTIFACT_VERSION = 1
 # Bumping it is the deliberate act of re-vendoring: re-copy from the platform,
 # put the new digest here, regenerate, and say in the PR which platform commit
 # it came from.
-VENDORED_ARTIFACT_SHA256 = "7f768b8ad0d6278d3531e1410decad172459808ebda627da44dca5bb4c9f36f8"
+VENDORED_ARTIFACT_SHA256 = "36eb608375957ea9e29e68795759992d2e7b892b2683f18a21ec9b781e4fd9ed"
 
 # Kinds the emitter can render. Anything else is refused rather than defaulted
 # to ``Any`` — a silently permissive field compiles, ships, and accepts values
@@ -194,6 +194,13 @@ class Surface:
     artifact: str
     artifact_version: int
     profile: str
+    # The request header the profile is negotiated with and the one route the
+    # surface is served on, both from the platform's contract constants through
+    # the artifact, so this SDK generates the path and header it calls rather
+    # than transcribing them (axonflow-enterprise#3603: five hand-written copies).
+    profile_header: str
+    route_method: str
+    route_path: str
     contract_schema_version: str
     source_schema_id: str
     source_schema_sha256: str
@@ -209,6 +216,8 @@ _SURFACE_MEMBERS = {
     "artifact",
     "artifact_version",
     "profile",
+    "profile_header",
+    "route",
     "contract_schema_version",
     "source_schema_id",
     "source_schema_sha256",
@@ -419,6 +428,32 @@ def _parse_type(raw: object, seen: set[str]) -> Type:
     return Type(name=name, fields=fields, doc=doc, exactly_one_of=groups)
 
 
+def _parse_route_and_header(doc: dict[str, object]) -> tuple[str, str, str]:
+    """The route and header are what the generated client CALLS.
+
+    An artifact without them would generate a client with nowhere to send a
+    request, so they are required, not defaulted (axonflow-enterprise#3603).
+    """
+    route = doc.get("route")
+    if not isinstance(route, dict):
+        msg = "artifact.route: the artifact carries no route"
+        raise SurfaceError(msg)
+    _reject_unknown("artifact.route", route, {"method", "path"})
+    method = str(route.get("method", ""))
+    path = str(route.get("path", ""))
+    if method != "POST" or not path.startswith("/") or path.endswith("/"):
+        msg = (
+            f"artifact.route: {method!r} {path!r}; "
+            "want POST and an absolute path with no trailing slash"
+        )
+        raise SurfaceError(msg)
+    header = str(doc.get("profile_header", ""))
+    if not header or any(c in header for c in " :\n"):
+        msg = f"artifact.profile_header: {header!r} is not a header name"
+        raise SurfaceError(msg)
+    return method, path, header
+
+
 def parse_surface(raw_bytes: bytes) -> Surface:
     """Decode the artifact strictly and check that it hangs together.
 
@@ -442,9 +477,11 @@ def parse_surface(raw_bytes: bytes) -> Surface:
     seen_types: set[str] = set()
     types = tuple(_parse_type(raw, seen_types) for raw in doc.get("types", ()) or ())
 
+    route_method, route_path, profile_header = _parse_route_and_header(doc)
     for member in (
         "artifact",
         "profile",
+        "profile_header",
         "contract_schema_version",
         "source_schema_id",
         "source_schema_sha256",
@@ -454,10 +491,14 @@ def parse_surface(raw_bytes: bytes) -> Surface:
         # header emitter and were left unchecked, so a quote in `profile` still
         # emitted a module that does not parse.
         _check_literal(f"artifact.{member}", str(doc.get(member, "")))
+    _check_literal("artifact.route.path", route_path)
     surface = Surface(
         artifact=str(doc.get("artifact", "")),
         artifact_version=int(doc.get("artifact_version", 0) or 0),
         profile=str(doc.get("profile", "")),
+        profile_header=profile_header,
+        route_method=route_method,
+        route_path=route_path,
         contract_schema_version=str(doc.get("contract_schema_version", "")),
         source_schema_id=str(doc.get("source_schema_id", "")),
         source_schema_sha256=str(doc.get("source_schema_sha256", "")),
@@ -1009,6 +1050,7 @@ def _emit_header(out: list[str], surface: Surface) -> None:
         out, "", "AUTHZEN_CONTRACT_SCHEMA_VERSION: Final", f'"{surface.contract_schema_version}"'
     )
     out.append("")
+    _emit_route_constants(out, surface)
     out.append("# The digest of the JSON Schema the artifact was reduced from. It is carried so")
     out.append("# a support conversation can establish which contract a deployed SDK was built")
     out.append("# against without reading its dependency tree.")
@@ -1019,10 +1061,24 @@ def _emit_header(out: list[str], surface: Surface) -> None:
     out.append("")
 
 
+def _emit_route_constants(out: list[str], surface: Surface) -> None:
+    """The route and header the client calls, generated rather than transcribed."""
+    out.append("# The one route the AuthZEN surface is served on, and the request header the")
+    out.append("# profile is negotiated with. Both are generated from the platform's contract")
+    out.append("# through the artifact, not written here: a rename on the platform is a")
+    out.append("# regenerate-and-diff failure in this SDK, not a 404 in production")
+    out.append("# (axonflow-enterprise#3603).")
+    _emit_assignment(out, "", "AUTHZEN_PATH: Final", f'"{surface.route_path}"')
+    _emit_assignment(out, "", "AUTHZEN_PROFILE_HEADER: Final", f'"{surface.profile_header}"')
+    out.append("")
+
+
 def _emit_all(out: list[str], surface: Surface) -> None:
     out.append("__all__ = [")
     exported = [
         "AUTHZEN_CONTRACT_SCHEMA_VERSION",
+        "AUTHZEN_PATH",
+        "AUTHZEN_PROFILE_HEADER",
         "AUTHZEN_PROFILE_V1",
         "AUTHZEN_SOURCE_SCHEMA_SHA256",
     ]
