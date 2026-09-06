@@ -63,7 +63,10 @@ import re
 import tokenize
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:  # Python 3.10, which requires-python still admits
+    import tomli as tomllib  # type: ignore[no-redef]
 
 LICENSE_NAME = "MIT License"
 LICENSE_HOLDER = "Copyright (c) 2025 AxonFlow"
