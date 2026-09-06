@@ -70,7 +70,10 @@ import pytest
 # on ModuleNotFoundError while every PR board (3.11 only) stayed green. The
 # metadata this module checks is interpreter-independent, so the 3.11 and 3.12
 # lanes keep checking it; on 3.10 the module skips and says why.
-tomllib = pytest.importorskip("tomllib", reason="tomllib is stdlib from 3.11; this metadata check runs on the 3.11 and 3.12 lanes")
+tomllib = pytest.importorskip(
+    "tomllib",
+    reason="tomllib is stdlib from 3.11; this metadata check runs on the 3.11 and 3.12 lanes",
+)
 
 LICENSE_NAME = "MIT License"
 LICENSE_HOLDER = "Copyright (c) 2025 AxonFlow"
