@@ -34,6 +34,13 @@ async def main() -> None:
         endpoint=endpoint,
         client_id=client_id,
         client_secret=client_secret,
+        # The read-path identity search_audit_logs below is scoped to.
+        # client_id/client_secret say which ORGANIZATION is asking, not WHO,
+        # so without this the platform resolves no per-user identity, sets
+        # X-Axonflow-Read-Scope: none and returns zero rows by construction —
+        # the same gap that made list_decisions and explain_decision report
+        # confident empty answers before they were given one (platform #2922).
+        user_token=os.environ.get("AXONFLOW_USER_TOKEN") or None,
     )
 
     print("=== Indonesia Compliance Example ===\n")
