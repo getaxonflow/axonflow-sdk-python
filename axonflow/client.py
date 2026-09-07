@@ -2126,6 +2126,8 @@ class AxonFlow:
         query: str,
         data_sources: list[str] | None = None,
         context: dict[str, Any] | None = None,
+        *,
+        extra_headers: dict[str, str] | None = None,
     ) -> PolicyApprovalResult:
         """Perform policy pre-check before making LLM call.
 
@@ -2141,6 +2143,11 @@ class AxonFlow:
             query: The query/prompt that will be sent to the LLM
             data_sources: Optional list of MCP connectors to fetch data from
             context: Optional additional context for policy evaluation
+            extra_headers: Headers merged into THIS request only. They never
+                reach the client's default header set, so a header supplied
+                for one call cannot leak into the next one. This is the
+                ADR-065 PEP capability handshake's attach point on the
+                gateway pre-check plane (axonflow-enterprise#3763).
 
         Returns:
             PolicyApprovalResult with context ID and approved data
@@ -2181,6 +2188,7 @@ class AxonFlow:
             "POST",
             "/api/policy/pre-check",
             json_data=request_body,
+            extra_headers=extra_headers,
         )
 
         if self._config.debug:
@@ -2215,6 +2223,8 @@ class AxonFlow:
         query: str,
         data_sources: list[str] | None = None,
         context: dict[str, Any] | None = None,
+        *,
+        extra_headers: dict[str, str] | None = None,
     ) -> PolicyApprovalResult:
         """Alias for get_policy_approved_context().
 
@@ -2226,6 +2236,9 @@ class AxonFlow:
             query: The query/prompt that will be sent to the LLM
             data_sources: Optional list of MCP connectors to fetch data from
             context: Optional additional context for policy evaluation
+            extra_headers: Headers merged into THIS request only; never added
+                to the client's defaults. See
+                :meth:`get_policy_approved_context`.
 
         Returns:
             PolicyApprovalResult with context ID and approved data
@@ -2244,6 +2257,7 @@ class AxonFlow:
             query=query,
             data_sources=data_sources,
             context=context,
+            extra_headers=extra_headers,
         )
 
     async def audit_llm_call(
@@ -8070,8 +8084,13 @@ class SyncAxonFlow:
         user_role: str | None = None,
         user_token: str | None = None,
         content_type: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckInputResponse:
-        """Validate an MCP request against configured policies without executing it."""
+        """Validate an MCP request against configured policies without executing it.
+
+        Synchronous wrapper for :meth:`AxonFlow.mcp_check_input`. ``extra_headers``
+        are merged into THIS request only and never reach the client's defaults.
+        """
         return self._run_sync(
             self._async_client.mcp_check_input(
                 connector_type,
@@ -8085,6 +8104,7 @@ class SyncAxonFlow:
                 user_role=user_role,
                 user_token=user_token,
                 content_type=content_type,
+                extra_headers=extra_headers,
             )
         )
 
@@ -8149,8 +8169,13 @@ class SyncAxonFlow:
         tenant_id: str | None = None,
         user_id: str | None = None,
         user_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckOutputResponse:
-        """Validate MCP response data against configured policies."""
+        """Validate MCP response data against configured policies.
+
+        Synchronous wrapper for :meth:`AxonFlow.mcp_check_output`. ``extra_headers``
+        are merged into THIS request only and never reach the client's defaults.
+        """
         return self._run_sync(
             self._async_client.mcp_check_output(
                 connector_type,
@@ -8163,6 +8188,7 @@ class SyncAxonFlow:
                 tenant_id=tenant_id,
                 user_id=user_id,
                 user_token=user_token,
+                extra_headers=extra_headers,
             )
         )
 
@@ -8179,6 +8205,7 @@ class SyncAxonFlow:
         user_id: str | None = None,
         user_role: str | None = None,
         user_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckInputResponse:
         """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
         return self._run_sync(
@@ -8193,6 +8220,7 @@ class SyncAxonFlow:
                 user_id=user_id,
                 user_role=user_role,
                 user_token=user_token,
+                extra_headers=extra_headers,
             )
         )
 
@@ -8209,6 +8237,7 @@ class SyncAxonFlow:
         tenant_id: str | None = None,
         user_id: str | None = None,
         user_token: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> MCPCheckOutputResponse:
         """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return self._run_sync(
@@ -8223,6 +8252,7 @@ class SyncAxonFlow:
                 tenant_id=tenant_id,
                 user_id=user_id,
                 user_token=user_token,
+                extra_headers=extra_headers,
             )
         )
 
@@ -8286,10 +8316,23 @@ class SyncAxonFlow:
         query: str,
         data_sources: list[str] | None = None,
         context: dict[str, Any] | None = None,
+        *,
+        extra_headers: dict[str, str] | None = None,
     ) -> PolicyApprovalResult:
-        """Perform policy pre-check before making LLM call."""
+        """Perform policy pre-check before making LLM call.
+
+        Synchronous wrapper for :meth:`AxonFlow.get_policy_approved_context`.
+        ``extra_headers`` are merged into THIS request only and never reach the
+        client's defaults.
+        """
         return self._run_sync(
-            self._async_client.get_policy_approved_context(user_token, query, data_sources, context)
+            self._async_client.get_policy_approved_context(
+                user_token,
+                query,
+                data_sources,
+                context,
+                extra_headers=extra_headers,
+            )
         )
 
     def pre_check(
@@ -8298,13 +8341,23 @@ class SyncAxonFlow:
         query: str,
         data_sources: list[str] | None = None,
         context: dict[str, Any] | None = None,
+        *,
+        extra_headers: dict[str, str] | None = None,
     ) -> PolicyApprovalResult:
         """Alias for get_policy_approved_context().
 
-        Perform policy pre-check before making LLM call.
+        Perform policy pre-check before making LLM call. Synchronous wrapper
+        for :meth:`AxonFlow.pre_check`; ``extra_headers`` are merged into THIS
+        request only and never reach the client's defaults.
         """
         return self._run_sync(
-            self._async_client.pre_check(user_token, query, data_sources, context)
+            self._async_client.pre_check(
+                user_token,
+                query,
+                data_sources,
+                context,
+                extra_headers=extra_headers,
+            )
         )
 
     def audit_llm_call(

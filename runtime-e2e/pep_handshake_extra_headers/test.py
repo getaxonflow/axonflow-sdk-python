@@ -56,7 +56,16 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.rfile.read(length)
         # Record the path and every header this request actually carried.
         RECEIVED.append({"path": self.path, **dict(self.headers.items())})
-        body = json.dumps({"allowed": True, "policies_evaluated": 1}).encode()
+        if self.path.endswith("/api/policy/pre-check"):
+            # The gateway plane's response shape (PolicyApprovalResult).
+            payload = {
+                "context_id": "ctx-e2e",
+                "approved": True,
+                "expires_at": "2030-01-01T00:00:00Z",
+            }
+        else:
+            payload = {"allowed": True, "policies_evaluated": 1}
+        body = json.dumps(payload).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -78,32 +87,55 @@ def check(condition: bool, description: str) -> None:
         FAILURES.append(description)
 
 
-async def main() -> int:
+async def _async_calls(endpoint: str) -> None:
+    client = AxonFlow(
+        endpoint=endpoint,
+        client_id="runtime-e2e",
+        client_secret="runtime-e2e-secret",  # noqa: S106
+    )
+
+    # Two governed calls on ONE client, presenting DIFFERENT declarations,
+    # then a third presenting none.
+    await client.mcp_check_input("postgres", "select 1", extra_headers={HEADER: REQUEST_DECL})
+    await client.mcp_check_output("postgres", message="hi", extra_headers={HEADER: RESPONSE_DECL})
+    await client.mcp_check_input("postgres", "select 2")
+    # The gateway pre-check plane, in the exact call shape axonflow-litellm
+    # uses. At 9.3.0 this raised TypeError before any request left the process.
+    await client.pre_check(
+        user_token="tok", query="hello", context=None, extra_headers={HEADER: REQUEST_DECL}
+    )
+
+
+def _sync_calls(endpoint: str) -> None:
+    # The SyncAxonFlow twins, driven with NO running event loop, which is the
+    # litellm.completion() path. The sync wrapper must forward the parameter,
+    # not merely accept it.
+    with AxonFlow.sync(
+        endpoint=endpoint,
+        client_id="runtime-e2e",
+        client_secret="runtime-e2e-secret",  # noqa: S106
+    ) as client:
+        client.pre_check("tok", "hello", extra_headers={HEADER: RESPONSE_DECL})
+        client.mcp_check_input("postgres", "select 3", extra_headers={HEADER: REQUEST_DECL})
+        client.mcp_check_input("postgres", "select 4")
+
+
+def main() -> int:
     with socketserver.TCPServer(("127.0.0.1", 0), _Handler) as server:
         port = server.server_address[1]
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        endpoint = f"http://127.0.0.1:{port}"
 
-        client = AxonFlow(
-            endpoint=f"http://127.0.0.1:{port}",
-            client_id="runtime-e2e",
-            client_secret="runtime-e2e-secret",  # noqa: S106
-        )
-
-        # Two governed calls on ONE client, presenting DIFFERENT declarations,
-        # then a third presenting none.
-        await client.mcp_check_input("postgres", "select 1", extra_headers={HEADER: REQUEST_DECL})
-        await client.mcp_check_output(
-            "postgres", message="hi", extra_headers={HEADER: RESPONSE_DECL}
-        )
-        await client.mcp_check_input("postgres", "select 2")
+        asyncio.run(_async_calls(endpoint))
+        _sync_calls(endpoint)
 
         server.shutdown()
 
-    if len(RECEIVED) != 3:
-        print(f"  FAIL: expected 3 requests on the wire, got {len(RECEIVED)}")
+    if len(RECEIVED) != 7:  # noqa: PLR2004
+        print(f"  FAIL: expected 7 requests on the wire, got {len(RECEIVED)}")
         return 1
 
-    first, second, third = RECEIVED
+    first, second, third, async_pre, sync_pre, sync_mcp, sync_none = RECEIVED
 
     check(
         first["path"].endswith("/api/v1/mcp/check-input") and first.get(HEADER) == REQUEST_DECL,
@@ -135,13 +167,33 @@ async def main() -> int:
         all(r.get("Authorization", "").startswith("Basic ") for r in RECEIVED),
         "every request still authenticated with its Basic credential",
     )
+    # 9.3.1: the gateway pre-check plane, async and sync.
+    check(
+        async_pre["path"].endswith("/api/policy/pre-check")
+        and async_pre.get(HEADER) == REQUEST_DECL,
+        "the declaration reached the wire on async pre_check (the litellm call shape)",
+    )
+    check(
+        sync_pre["path"].endswith("/api/policy/pre-check")
+        and sync_pre.get(HEADER) == RESPONSE_DECL,
+        "the declaration reached the wire on SyncAxonFlow.pre_check",
+    )
+    check(
+        sync_mcp["path"].endswith("/api/v1/mcp/check-input")
+        and sync_mcp.get(HEADER) == REQUEST_DECL,
+        "the declaration reached the wire on SyncAxonFlow.mcp_check_input",
+    )
+    check(
+        HEADER not in sync_none,
+        "a sync call passing no declaration carried NO handshake header after two that did",
+    )
 
     if FAILURES:
         print(f"\nFAIL: pep_handshake_extra_headers ({len(FAILURES)} assertion(s))")
         return 1
-    print("\nPASS: pep_handshake_extra_headers (6 assertions)")
+    print("\nPASS: pep_handshake_extra_headers (10 assertions)")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    raise SystemExit(main())
