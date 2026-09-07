@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.3.1] - 2026-09-07
+
+### Fixed
+
+- **`extra_headers` now reaches the gateway pre-check plane and every sync governed method.** 9.3.0 added the per-call parameter to the four async MCP methods only: neither `pre_check` nor `get_policy_approved_context` accepted it on either client, and none of the `SyncAxonFlow` twins did. The first adapter to present the ADR-065 PEP capability handshake on that plane, axonflow-litellm 1.1.0, therefore raised `TypeError: AxonFlow.pre_check() got an unexpected keyword argument 'extra_headers'` on every governed call and failed closed. `pre_check` and `get_policy_approved_context` take `extra_headers` on both clients with the same merged-into-this-request-only semantics, and every `SyncAxonFlow` governed method (`mcp_check_input`, `mcp_check_output`, `check_tool_input`, `check_tool_output`, `get_policy_approved_context`, `pre_check`) forwards it to its async twin.
+- **Sync/async signature parity is now asserted**, not assumed: a test pins that every governed method carries the same parameter set, kinds and defaults on `AxonFlow` and `SyncAxonFlow`, and a census fails if a future async method gains `extra_headers` without its sync twin, so this class of drift cannot reach a downstream adapter's release again.
+
 ## [9.3.0] - 2026-09-06
 
 ### Added
