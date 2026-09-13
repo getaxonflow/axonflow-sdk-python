@@ -10,11 +10,12 @@ Arguments:
                 ``tests/fixtures/openapi`` (see its README), or a checkout
                 of the getaxonflow/axonflow community mirror's docs/api.
                 The specs there are the authoritative wire contract.
-    --sha       Commit SHA the specs were taken from. Always pass it for
-                the committed snapshot: when omitted, the script tries
-                ``git -C <parent-of-specs_dir> rev-parse HEAD``, which for
-                a directory inside this repository is the SDK's own HEAD,
-                not the platform commit.
+    --sha       Platform commit the specs were taken from. For the committed
+                snapshot it is read from the files' own headers (see
+                scripts/snapshot_openapi_schemas.py), and a --sha that
+                disagrees with them is refused. A directory that is not a
+                generated snapshot, such as a platform checkout's docs/api,
+                names no commit, so --sha is required for it.
 
 When to run:
     - After a deliberate spec change that should be acknowledged as the
@@ -41,13 +42,13 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_MODULE_PATH = REPO_ROOT / "tests" / "test_wire_shape.py"
+SNAPSHOT_SCRIPT_PATH = REPO_ROOT / "scripts" / "snapshot_openapi_schemas.py"
 BASELINE_PATH = REPO_ROOT / "tests" / "fixtures" / "wire_shape_baseline.json"
 
 # Bind ``import axonflow`` to THIS repo's package, ahead of any installed
@@ -71,35 +72,52 @@ def _load_test_helpers():
     return mod
 
 
-def _git_head_sha(spec_dir: Path) -> str:
-    """Best-effort: read the commit SHA of the git repo containing spec_dir.
+def _load_snapshot_script():
+    spec = importlib.util.spec_from_file_location("_snapshot", SNAPSHOT_SCRIPT_PATH)
+    if spec is None or spec.loader is None:
+        msg = f"Could not load {SNAPSHOT_SCRIPT_PATH}"
+        raise RuntimeError(msg)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
-    We invoke git via its absolute path (if resolvable) on a caller-supplied
-    directory argument. The script is developer-local tooling — run in CI
-    we pin the SHA explicitly via --sha and never rely on this path.
+
+def resolve_specs_sha(specs_dir: Path, explicit: str | None) -> str:
+    """The platform commit to pin the baseline to. Raises ValueError.
+
+    A generated snapshot names its commit in every file's header, and that is
+    the commit: --sha may repeat it but not contradict it. Any other directory
+    names none, so the caller must. There is no fallback to a git checkout's
+    HEAD: for the snapshot, which lives inside this repository, that is the
+    SDK's own commit, and a baseline pinned to it names a spec it never read.
     """
-    import shutil  # noqa: PLC0415
-
-    git = shutil.which("git")
-    if git is None:
-        return ""
-    try:
-        result = subprocess.run(  # noqa: S603 - git invoked with absolute path and fixed args
-            [git, "-C", str(spec_dir), "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=5,
+    named = _load_snapshot_script().snapshot_commit(specs_dir)
+    if named is not None:
+        if explicit is not None and explicit != named:
+            msg = (
+                f"--sha {explicit} disagrees with {specs_dir}, whose generated "
+                f"headers name platform commit {named}"
+            )
+            raise ValueError(msg)
+        return named
+    if not explicit:
+        msg = (
+            f"{specs_dir} is not a generated snapshot, so it names no platform "
+            "commit; pass --sha <commit> for the platform checkout its specs came from"
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        return ""
-    return result.stdout.strip()
+        raise ValueError(msg)
+    return explicit
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("specs_dir", type=Path, help="Path to docs/api directory")
-    parser.add_argument("--sha", type=str, default=None, help="Commit SHA to pin")
+    parser.add_argument(
+        "--sha",
+        type=str,
+        default=None,
+        help="Platform commit; read from a generated snapshot's headers, required otherwise",
+    )
     args = parser.parse_args()
 
     specs_dir: Path = args.specs_dir
@@ -107,19 +125,12 @@ def main() -> int:
         print(f"error: {specs_dir} is not a directory", file=sys.stderr)
         return 2
 
-    # Resolve SHA before touching any models / schemas so a bad SHA fails
-    # fast without wasted work AND without writing a poisoned baseline.
-    sha = args.sha if args.sha is not None else _git_head_sha(specs_dir)
-    if not sha:
-        print(
-            "error: could not determine OpenAPI specs commit SHA.\n"
-            "  Either run this script against a specs_dir that sits inside a git\n"
-            "  checkout of the getaxonflow/axonflow community mirror, or pass\n"
-            "  --sha <commit-sha> explicitly. An empty SHA would poison\n"
-            "  tests/fixtures/wire_shape_baseline.json and break the next CI\n"
-            "  wire-shape-contract run at bootstrap.",
-            file=sys.stderr,
-        )
+    # Resolve the SHA before touching any models or schemas, so a bad one
+    # fails fast and never writes a poisoned baseline.
+    try:
+        sha = resolve_specs_sha(specs_dir, args.sha)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
         return 2
 
     helpers = _load_test_helpers()
@@ -193,7 +204,7 @@ def main() -> int:
         f.write("\n")
 
     print(f"Wrote baseline: {BASELINE_PATH}")
-    print(f"  openapi_specs_sha: {sha or '(unknown — pass --sha or run inside a git checkout)'}")
+    print(f"  openapi_specs_sha: {sha}")
     print(f"  cross_spec_duplicates: {len(cross_spec)}")
     print(f"  registered_models:     {len(registered)}")
     print(f"  per_model_drift:       {len(drift)}")
