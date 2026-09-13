@@ -5,13 +5,16 @@ Usage:
     python scripts/refresh_wire_shape_baseline.py <specs_dir> [--sha <SHA>]
 
 Arguments:
-    specs_dir   Path to a local clone of the ``docs/api`` directory from
-                the getaxonflow/axonflow community mirror. The specs
-                there are the authoritative wire contract.
-    --sha       Optional commit SHA of the community repo at the time of
-                generation. When omitted, the script tries ``git -C
-                <parent-of-specs_dir> rev-parse HEAD`` if it's a git
-                checkout; otherwise records an empty string.
+    specs_dir   Path to a directory holding the platform's ``docs/api``
+                specs - normally the committed snapshot,
+                ``tests/fixtures/openapi`` (see its README), or a checkout
+                of the getaxonflow/axonflow community mirror's docs/api.
+                The specs there are the authoritative wire contract.
+    --sha       Commit SHA the specs were taken from. Always pass it for
+                the committed snapshot: when omitted, the script tries
+                ``git -C <parent-of-specs_dir> rev-parse HEAD``, which for
+                a directory inside this repository is the SDK's own HEAD,
+                not the platform commit.
 
 When to run:
     - After a deliberate spec change that should be acknowledged as the
