@@ -349,7 +349,9 @@ def _legacy_policy_write_frozen(response: httpx.Response) -> LegacyPolicyWriteFr
     return LegacyPolicyWriteFrozenError(str(err.get("message", "legacy policy write frozen")))
 
 
-def _warn_if_route_deprecated(response: httpx.Response, method: str, path: str) -> None:
+def _warn_if_route_deprecated(
+    response: httpx.Response, method: str, path: str, reported: set[str]
+) -> None:
     """Warn when the platform stamps the route a call used as deprecated.
 
     A v11 platform stamps its legacy policy routes with ``X-AxonFlow-Removed-In``
@@ -357,15 +359,23 @@ def _warn_if_route_deprecated(response: httpx.Response, method: str, path: str) 
     ``Deprecation`` header once the deprecating release is tagged. Either the
     first or the last marks the route deprecated, so the warning fires before
     the tag as well as after it.
+
+    Each route is reported once per client. ``reported`` is the client's memory
+    of the routes it has reported, keyed by method and path without the query
+    string, as the TypeScript and Go SDKs key theirs.
     """
     deprecation = response.headers.get("Deprecation")
     removed_in = response.headers.get("X-AxonFlow-Removed-In")
     if deprecation is None and removed_in is None:
         return
+    route = f"{method} {path.split('?', 1)[0]}"
+    if route in reported:
+        return
+    reported.add(route)
     match = _SUCCESSOR_LINK.search(response.headers.get("Link", ""))
     warnings.warn(
         PlatformRouteDeprecationWarning(
-            f"{method} {path}",
+            route,
             successor=match.group(1) if match else None,
             removed_in=removed_in,
             deprecation=deprecation,
@@ -567,6 +577,7 @@ class AxonFlow:
         "_masfeat",
         "_typed_policies",
         "_pep_handshake",
+        "_reported_deprecated_routes",
     )
 
     def __init__(
@@ -758,6 +769,10 @@ class AxonFlow:
         # Initialize MAS FEAT namespace (lazy)
         self._masfeat: MASFEATNamespace | None = None
         self._typed_policies: TypedPoliciesNamespace | None = None
+        # The deprecated routes this client has reported, keyed by method and
+        # path without its query. as_user copies the reference, so a derived
+        # client shares the memory (as the TypeScript SDK's clients do).
+        self._reported_deprecated_routes: set[str] = set()
 
         if debug:
             self._logger.info(
@@ -1070,7 +1085,7 @@ class AxonFlow:
         ``extra_headers`` documentation).
         """
         response = await self._send_raw(method, path, json_data=json_data, headers=extra_headers)
-        _warn_if_route_deprecated(response, method, path)
+        _warn_if_route_deprecated(response, method, path, self._reported_deprecated_routes)
 
         try:
             response.raise_for_status()
@@ -2904,6 +2919,13 @@ class AxonFlow:
     ) -> SimulatePoliciesResponse:
         """Simulate all active policies against input (dry run).
 
+        Deprecated: the platform deprecates ``POST /api/v1/policies/simulate`` in
+        v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
+        ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
+        every response, and this client reports the route once through
+        :class:`PlatformRouteDeprecationWarning`. Its successor is the typed simulate on
+        ``/api/v1/typed-policies``, which ships with the v11 series.
+
         Runs the full policy evaluation pipeline without actually blocking
         or auditing the request. Useful for testing policy configurations
         before deploying them.
@@ -2959,6 +2981,13 @@ class AxonFlow:
     ) -> ImpactReportResponse:
         """Test a single policy against multiple inputs.
 
+        Deprecated: the platform deprecates ``POST /api/v1/policies/impact-report`` in
+        v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
+        ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
+        every response, and this client reports the route once through
+        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
+        the typed policy methods (see ``client.typed_policies.validate``).
+
         Generates an impact report showing how a specific policy would
         affect a set of sample inputs. Useful for understanding the
         blast radius of policy changes.
@@ -3011,6 +3040,13 @@ class AxonFlow:
         policy_id: str | None = None,
     ) -> PolicyConflictResponse:
         """Detect conflicts between active policies.
+
+        Deprecated: the platform deprecates ``POST /api/v1/policies/conflicts`` in
+        v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
+        ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
+        every response, and this client reports the route once through
+        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
+        the typed policy methods (see ``client.typed_policies.validate``).
 
         Analyzes active policies for conflicts such as overlapping
         conditions with contradictory actions. Optionally scoped to
@@ -4041,6 +4077,10 @@ class AxonFlow:
     ) -> PolicyOverride:
         """Create an override for a static policy.
 
+        On a v11.0.0 platform per-policy overrides are retired: the platform refuses
+        this write with ``409 LEGACY_POLICY_WRITE_FROZEN``, raised as
+        :class:`LegacyPolicyWriteFrozenError`.
+
         Args:
             policy_id: ID of the policy to override
             request: Override configuration
@@ -4073,6 +4113,10 @@ class AxonFlow:
 
     async def delete_policy_override(self, policy_id: str) -> None:
         """Delete an override for a static policy.
+
+        On a v11.0.0 platform per-policy overrides are retired: the platform refuses
+        this write with ``409 LEGACY_POLICY_WRITE_FROZEN``, raised as
+        :class:`LegacyPolicyWriteFrozenError`.
 
         Args:
             policy_id: ID of the policy whose override to delete
@@ -4856,7 +4900,7 @@ class AxonFlow:
 
         try:
             response = await self._http_client.request(method, url, json=json_data)
-            _warn_if_route_deprecated(response, method, path)
+            _warn_if_route_deprecated(response, method, path, self._reported_deprecated_routes)
             response.raise_for_status()
             if response.status_code == 204:  # noqa: PLR2004
                 return None
@@ -8720,7 +8764,15 @@ class SyncAxonFlow:
         client: dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
     ) -> SimulatePoliciesResponse:
-        """Simulate all active policies against input (dry run)."""
+        """Simulate all active policies against input (dry run).
+
+        Deprecated: the platform deprecates ``POST /api/v1/policies/simulate`` in
+        v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
+        ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
+        every response, and this client reports the route once through
+        :class:`PlatformRouteDeprecationWarning`. Its successor is the typed simulate on
+        ``/api/v1/typed-policies``, which ships with the v11 series.
+        """
         return self._run_sync(
             self._async_client.simulate_policies(
                 query,
@@ -8736,14 +8788,30 @@ class SyncAxonFlow:
         policy_id: str,
         inputs: list[dict[str, Any]],
     ) -> ImpactReportResponse:
-        """Test a single policy against multiple inputs."""
+        """Test a single policy against multiple inputs.
+
+        Deprecated: the platform deprecates ``POST /api/v1/policies/impact-report`` in
+        v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
+        ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
+        every response, and this client reports the route once through
+        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
+        the typed policy methods (see ``client.typed_policies.validate``).
+        """
         return self._run_sync(self._async_client.get_policy_impact_report(policy_id, inputs))
 
     def detect_policy_conflicts(
         self,
         policy_id: str | None = None,
     ) -> PolicyConflictResponse:
-        """Detect conflicts between active policies."""
+        """Detect conflicts between active policies.
+
+        Deprecated: the platform deprecates ``POST /api/v1/policies/conflicts`` in
+        v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
+        ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
+        every response, and this client reports the route once through
+        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
+        the typed policy methods (see ``client.typed_policies.validate``).
+        """
         return self._run_sync(self._async_client.detect_policy_conflicts(policy_id=policy_id))
 
     # Policy CRUD sync wrappers
@@ -8815,11 +8883,21 @@ class SyncAxonFlow:
         policy_id: str,
         request: CreatePolicyOverrideRequest,
     ) -> PolicyOverride:
-        """Create an override for a static policy."""
+        """Create an override for a static policy.
+
+        On a v11.0.0 platform per-policy overrides are retired: the platform refuses
+        this write with ``409 LEGACY_POLICY_WRITE_FROZEN``, raised as
+        :class:`LegacyPolicyWriteFrozenError`.
+        """
         return self._run_sync(self._async_client.create_policy_override(policy_id, request))
 
     def delete_policy_override(self, policy_id: str) -> None:
-        """Delete an override for a static policy."""
+        """Delete an override for a static policy.
+
+        On a v11.0.0 platform per-policy overrides are retired: the platform refuses
+        this write with ``409 LEGACY_POLICY_WRITE_FROZEN``, raised as
+        :class:`LegacyPolicyWriteFrozenError`.
+        """
         return self._run_sync(self._async_client.delete_policy_override(policy_id))
 
     def list_policy_overrides(self) -> list[PolicyOverride]:
