@@ -293,6 +293,35 @@ class PEPHandshakeError(AxonFlowError, ValueError):
         self.pointer = pointer
 
 
+class TypedPolicyRefusal(AxonFlowError):
+    """A typed-policy authoring request the platform refused.
+
+    ``status`` is the HTTP status and ``reason`` the platform's reason, for
+    example ``publication_refused`` (422), ``activation_refused`` (409),
+    ``tier_limit`` (402, with ``code`` naming the limit) or ``artifact_cap``
+    (429). ``findings`` holds the declared findings a refused publication or
+    document carries, and ``retry_after`` the seconds from ``Retry-After`` when
+    the refusal is retryable. ``message`` is the platform's own explanation.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int,
+        reason: str | None = None,
+        code: str | None = None,
+        findings: list[Any] | None = None,
+        retry_after: int | None = None,
+    ) -> None:
+        super().__init__(message, details={"status": status, "reason": reason, "code": code})
+        self.status = status
+        self.reason = reason
+        self.code = code
+        self.findings = findings or []
+        self.retry_after = retry_after
+
+
 class PlatformRouteDeprecationWarning(DeprecationWarning):
     """The platform marked the route a call used as deprecated.
 
