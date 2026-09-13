@@ -39,6 +39,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
+    from axonflow.authzen import AuthZENTransport
     from axonflow.masfeat import (
         AISystemRegistry,
         FEATAssessment,
@@ -128,6 +129,7 @@ from axonflow.pep import CONTENT_TYPE_TEXT, OBLIGATION_REDACT_PII, PHASE_REQUEST
 from axonflow.pep import DECIDE_PATH as PEP_DECIDE_PATH
 from axonflow.pep import REQUEST_REDACTION_PATH as PEP_REQUEST_REDACTION_PATH
 from axonflow.pep import _endpoint_path_matches as pep_endpoint_path_matches
+from axonflow.pep_handshake import PEP_HANDSHAKE_HEADER, PEPHandshake
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
     CreatePolicyOverrideRequest,
@@ -532,6 +534,18 @@ def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
 _LAZY_NAMESPACE_SLOTS = ("_masfeat",)
 
 
+def _checked_pep_handshake(value: object) -> PEPHandshake | None:
+    """``value`` as a declaration, refusing anything that is not one.
+
+    A hand-built value (a dict, an already-encoded string) would otherwise be
+    dropped silently or sent as bytes the platform refuses.
+    """
+    if value is None or isinstance(value, PEPHandshake):
+        return value
+    msg = f"pep_handshake must be a PEPHandshake or None, not {type(value).__name__}"
+    raise TypeError(msg)
+
+
 class AxonFlow:
     """Main AxonFlow client for AI governance.
 
@@ -550,6 +564,7 @@ class AxonFlow:
         "_logger",
         "_session_cookie",
         "_masfeat",
+        "_pep_handshake",
     )
 
     def __init__(
@@ -568,6 +583,7 @@ class AxonFlow:
         cache_ttl: float = 60.0,
         cache_max_size: int = 1000,
         user_token: str | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> None:
         """Initialize AxonFlow client.
 
@@ -595,6 +611,13 @@ class AxonFlow:
                 to a caller that presents none. Override per call with the
                 ``user_token=`` keyword on the read. See
                 :mod:`axonflow.read_identity`.
+            pep_handshake: The PEP capability declaration this client presents
+                on every call to a plane that reads it: ``decide``, ``evaluate``
+                and ``evaluate_all``, the MCP check methods (and the fulfilment
+                helpers that call them), and the gateway pre-check. It is never
+                sent to any other route. ``None``, the default, presents none.
+                Override it for one call with the ``pep_handshake=`` keyword on
+                those methods. See :mod:`axonflow.pep_handshake`.
 
         Note:
             For community/self-hosted deployments, client_id and client_secret can be omitted.
@@ -617,6 +640,10 @@ class AxonFlow:
 
         if isinstance(mode, str):
             mode = Mode(mode)
+
+        # Not a default header: only the planes that read the declaration send
+        # it, through _with_pep_handshake.
+        self._pep_handshake = _checked_pep_handshake(pep_handshake)
 
         self._config = AxonFlowConfig(
             endpoint=resolved_endpoint.rstrip("/"),
@@ -972,6 +999,39 @@ class AxonFlow:
         except httpx.TimeoutException as e:
             msg = f"Request timed out: {e}"
             raise TimeoutError(msg) from e
+
+    def _with_pep_handshake(
+        self,
+        extra_headers: dict[str, str] | None,
+        pep_handshake: PEPHandshake | None,
+    ) -> dict[str, str] | None:
+        """The headers one call to a plane that reads the PEP handshake sends.
+
+        Only the four planes that read the declaration call this: decide, the
+        AuthZEN evaluation route, the MCP check routes and the gateway
+        pre-check. It is never a default header, so no other route receives it.
+        The most specific declaration wins: ``pep_handshake`` on the call, then
+        one the caller put in ``extra_headers`` by hand, then the client's. A
+        call carrying both of the first two is refused rather than sent: the
+        platform refuses a repeated header, and keeping one silently would
+        present a declaration the caller may not have meant.
+        """
+        per_call = _checked_pep_handshake(pep_handshake)
+        by_hand = extra_headers is not None and any(
+            name.lower() == PEP_HANDSHAKE_HEADER.lower() for name in extra_headers
+        )
+        if by_hand:
+            if per_call is not None:
+                msg = (
+                    f"pep_handshake and an {PEP_HANDSHAKE_HEADER} entry in extra_headers "
+                    "both declare this call; pass one"
+                )
+                raise ValueError(msg)
+            return extra_headers
+        declared = per_call if per_call is not None else self._pep_handshake
+        if declared is None:
+            return extra_headers
+        return {**(extra_headers or {}), PEP_HANDSHAKE_HEADER: declared.header_value}
 
     async def _request(
         self,
@@ -1660,6 +1720,7 @@ class AxonFlow:
         user_token: str | None = None,
         content_type: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it.
 
@@ -1683,6 +1744,8 @@ class AxonFlow:
             content_type: Selects the request-redaction detector (ADR-056 /
                 #2563). ``None`` defaults to "text/plain" server-side. Used by
                 a PEP fulfilling a ``redact_pii`` obligation.
+            pep_handshake: The PEP capability declaration for THIS call, sent
+                in place of the client's. See :mod:`axonflow.pep_handshake`.
 
         Returns:
             MCPCheckInputResponse with allowed status, block reason, and policy info.
@@ -1731,7 +1794,8 @@ class AxonFlow:
                 statement=statement[:50],
             )
 
-        response = await self._http_client.post(url, json=body, headers=extra_headers)
+        headers = self._with_pep_handshake(extra_headers, pep_handshake)
+        response = await self._http_client.post(url, json=body, headers=headers)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -1754,6 +1818,7 @@ class AxonFlow:
         user_role: str | None = None,
         user_token: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
         """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
         return await self.mcp_check_input(
@@ -1768,6 +1833,7 @@ class AxonFlow:
             user_role=user_role,
             user_token=user_token,
             extra_headers=extra_headers,
+            pep_handshake=pep_handshake,
         )
 
     async def mcp_check_output(
@@ -1784,6 +1850,7 @@ class AxonFlow:
         user_id: str | None = None,
         user_token: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckOutputResponse:
         """Validate MCP response data against configured policies.
 
@@ -1803,6 +1870,8 @@ class AxonFlow:
             tenant_id: Tenant identifier for multi-tenant scoping.
             user_id: End-user identifier for per-user policies.
             user_token: User auth token for downstream propagation.
+            pep_handshake: The PEP capability declaration for THIS call, sent
+                in place of the client's. See :mod:`axonflow.pep_handshake`.
 
         Returns:
             MCPCheckOutputResponse with allowed status, redacted data, and policy info.
@@ -1848,7 +1917,8 @@ class AxonFlow:
                 row_count=row_count,
             )
 
-        response = await self._http_client.post(url, json=body, headers=extra_headers)
+        headers = self._with_pep_handshake(extra_headers, pep_handshake)
+        response = await self._http_client.post(url, json=body, headers=headers)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -1871,6 +1941,7 @@ class AxonFlow:
         user_id: str | None = None,
         user_token: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckOutputResponse:
         """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return await self.mcp_check_output(
@@ -1885,6 +1956,7 @@ class AxonFlow:
             user_id=user_id,
             user_token=user_token,
             extra_headers=extra_headers,
+            pep_handshake=pep_handshake,
         )
 
     async def generate_plan(
@@ -2192,6 +2264,7 @@ class AxonFlow:
         context: dict[str, Any] | None = None,
         *,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> PolicyApprovalResult:
         """Perform policy pre-check before making LLM call.
 
@@ -2212,6 +2285,8 @@ class AxonFlow:
                 for one call cannot leak into the next one. This is the
                 ADR-065 PEP capability handshake's attach point on the
                 gateway pre-check plane (axonflow-enterprise#3763).
+            pep_handshake: The PEP capability declaration for THIS call, sent
+                in place of the client's. See :mod:`axonflow.pep_handshake`.
 
         Returns:
             PolicyApprovalResult with context ID and approved data
@@ -2252,7 +2327,7 @@ class AxonFlow:
             "POST",
             "/api/policy/pre-check",
             json_data=request_body,
-            extra_headers=extra_headers,
+            extra_headers=self._with_pep_handshake(extra_headers, pep_handshake),
         )
 
         if self._config.debug:
@@ -2295,6 +2370,7 @@ class AxonFlow:
         context: dict[str, Any] | None = None,
         *,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> PolicyApprovalResult:
         """Alias for get_policy_approved_context().
 
@@ -2309,6 +2385,8 @@ class AxonFlow:
             extra_headers: Headers merged into THIS request only; never added
                 to the client's defaults. See
                 :meth:`get_policy_approved_context`.
+            pep_handshake: The PEP capability declaration for THIS call, sent
+                in place of the client's. See :mod:`axonflow.pep_handshake`.
 
         Returns:
             PolicyApprovalResult with context ID and approved data
@@ -2328,6 +2406,7 @@ class AxonFlow:
             data_sources=data_sources,
             context=context,
             extra_headers=extra_headers,
+            pep_handshake=pep_handshake,
         )
 
     async def audit_llm_call(
@@ -3329,7 +3408,23 @@ class AxonFlow:
         response = await self._send_raw("POST", path, json_data=body, headers=headers)
         return response.status_code, response.content
 
-    async def evaluate(self, request: AuthZENRequest) -> AuthZENDecision:
+    def _authzen_transport(self, pep_handshake: PEPHandshake | None) -> AuthZENTransport:
+        """:meth:`_send_authzen`, also carrying this call's PEP handshake if one is declared."""
+        declared = self._with_pep_handshake(None, pep_handshake)
+        if declared is None:
+            return self._send_authzen
+        handshake_headers = declared
+
+        async def send(
+            path: str, body: dict[str, Any], headers: dict[str, str]
+        ) -> tuple[int, bytes]:
+            return await self._send_authzen(path, body, {**headers, **handshake_headers})
+
+        return send
+
+    async def evaluate(
+        self, request: AuthZENRequest, *, pep_handshake: PEPHandshake | None = None
+    ) -> AuthZENDecision:
         """Ask whether one subject may perform one action on one resource.
 
         The AuthZEN-native surface (``POST /api/v1/access/evaluation``). New
@@ -3337,6 +3432,9 @@ class AxonFlow:
         :meth:`decide`: at v11 the engine behind it becomes the ADR-065 Policy
         Decision Point with no wire change, so an integration written here
         migrates once instead of twice.
+
+        ``pep_handshake`` declares this call's capabilities in place of the
+        client's; see :mod:`axonflow.pep_handshake`.
 
         Example:
             >>> from axonflow import (
@@ -3362,9 +3460,12 @@ class AxonFlow:
             AuthenticationError: 401 — the gateway refused the credentials
                 before the route ran.
         """
-        return await evaluate_envelope(self._send_authzen, build_envelope(evaluation=request))
+        send = self._authzen_transport(pep_handshake)
+        return await evaluate_envelope(send, build_envelope(evaluation=request))
 
-    async def evaluate_all(self, bulk: AuthZENBulk) -> AuthZENDecision:
+    async def evaluate_all(
+        self, bulk: AuthZENBulk, *, pep_handshake: PEPHandshake | None = None
+    ) -> AuthZENDecision:
         """Ask whether ONE operation is permitted against several preconditions.
 
         It returns ONE decision, not one per entry. The entries of a bulk
@@ -3377,6 +3478,9 @@ class AxonFlow:
         Any member an entry omits is inherited from the envelope's shared base,
         so the common case is a shared subject and action with one resource per
         entry.
+
+        ``pep_handshake`` declares this call's capabilities in place of the
+        client's; see :mod:`axonflow.pep_handshake`.
 
         Example:
             >>> decision = await client.evaluate_all(
@@ -3395,13 +3499,16 @@ class AxonFlow:
             ...     )
             ... )
         """
-        return await evaluate_envelope(self._send_authzen, build_envelope(evaluations=bulk))
+        send = self._authzen_transport(pep_handshake)
+        return await evaluate_envelope(send, build_envelope(evaluations=bulk))
 
     # ------------------------------------------------------------------ #
     # Decision Mode PEP: decide -> fulfill -> forward (ADR-056, #2563)    #
     # ------------------------------------------------------------------ #
 
-    async def decide(self, request: DecideRequest) -> DecideResponse:
+    async def decide(
+        self, request: DecideRequest, *, pep_handshake: PEPHandshake | None = None
+    ) -> DecideResponse:
         """Ask the PDP for a verdict on a request (``POST /api/v1/decide``).
 
         This is the PDP step of a PEP. ``/decide`` is a pure decision point: it
@@ -3417,6 +3524,8 @@ class AxonFlow:
         Args:
             request: The :class:`DecideRequest` (``stage`` ∈ {"llm","tool",
                 "agent"} and ``query`` are required).
+            pep_handshake: The PEP capability declaration for THIS call, sent
+                in place of the client's. See :mod:`axonflow.pep_handshake`.
 
         Returns:
             The :class:`DecideResponse` verdict, with ``obligations`` always a
@@ -3426,11 +3535,12 @@ class AxonFlow:
             AuthenticationError: 401 (bad / demo credentials).
             AxonFlowError: Other non-200 responses.
         """
+        headers = self._with_pep_handshake(None, pep_handshake)
         self._pre_request_hook()
         url = f"{self._config.endpoint}{PEP_DECIDE_PATH}"
         body = request.model_dump(exclude_none=True)
         try:
-            response = await self._http_client.post(url, json=body)
+            response = await self._http_client.post(url, json=body, headers=headers)
         except httpx.ConnectError as e:
             msg = f"Failed to connect to AxonFlow Agent: {e}"
             raise ConnectionError(msg) from e
@@ -3454,6 +3564,8 @@ class AxonFlow:
         self,
         decision: DecideResponse,
         statement: str,
+        *,
+        pep_handshake: PEPHandshake | None = None,
     ) -> tuple[str, bool]:
         """Discharge every request-phase ``redact_pii`` obligation on ``decision``.
 
@@ -3463,6 +3575,9 @@ class AxonFlow:
 
         There is NO code path in which this method redacts locally — fulfillment
         is always the engine round-trip (ADR-056 / #2563).
+
+        ``pep_handshake`` declares the engine round-trip's capabilities in place
+        of the client's; see :mod:`axonflow.pep_handshake`.
 
         Returns:
             ``(content, did_redact)``. ``content`` is the engine-redacted
@@ -3499,12 +3614,14 @@ class AxonFlow:
                     "the request-redaction endpoint"
                 )
                 raise ObligationNotFulfillableError(msg)
-            redacted = await self._fulfill_via_check_input(redacted)
+            redacted = await self._fulfill_via_check_input(redacted, pep_handshake)
             if redacted != statement:
                 did_redact = True
         return redacted, did_redact
 
-    async def _fulfill_via_check_input(self, statement: str) -> str:
+    async def _fulfill_via_check_input(
+        self, statement: str, pep_handshake: PEPHandshake | None
+    ) -> str:
         """POST ``statement`` to the request-redaction engine endpoint.
 
         Returns the engine-masked statement. Fails closed (raises
@@ -3518,6 +3635,7 @@ class AxonFlow:
                 statement=statement,
                 operation="execute",
                 content_type=CONTENT_TYPE_TEXT,
+                pep_handshake=pep_handshake,
             )
         except AxonFlowError as e:
             msg = f"request-redaction engine call failed: {e}"
@@ -3543,6 +3661,8 @@ class AxonFlow:
     async def decide_and_fulfill(
         self,
         request: DecideRequest,
+        *,
+        pep_handshake: PEPHandshake | None = None,
     ) -> tuple[str, str, DecideResponse]:
         """One-call PEP path: decide, then fulfill any request-phase obligation.
 
@@ -3553,11 +3673,16 @@ class AxonFlow:
         :class:`ObligationNotFulfillableError` AFTER having computed an empty
         ``content`` internally, so a caller that catches the error cannot
         accidentally forward the unredacted query — fail-closed by construction.
+
+        ``pep_handshake`` is presented on the decide call and on the engine
+        round-trip alike: both come from one enforcement point.
         """
-        decision = await self.decide(request)
+        decision = await self.decide(request, pep_handshake=pep_handshake)
         if decision.verdict != VERDICT_ALLOW:
             return decision.verdict, request.query, decision
-        redacted, _ = await self.fulfill_request(decision, request.query)
+        redacted, _ = await self.fulfill_request(
+            decision, request.query, pep_handshake=pep_handshake
+        )
         return decision.verdict, redacted, decision
 
     async def get_audit_logs_by_tenant(
@@ -8159,6 +8284,7 @@ class SyncAxonFlow:
         user_token: str | None = None,
         content_type: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
         """Validate an MCP request against configured policies without executing it.
 
@@ -8179,37 +8305,46 @@ class SyncAxonFlow:
                 user_token=user_token,
                 content_type=content_type,
                 extra_headers=extra_headers,
+                pep_handshake=pep_handshake,
             )
         )
 
-    def evaluate(self, request: AuthZENRequest) -> AuthZENDecision:
+    def evaluate(
+        self, request: AuthZENRequest, *, pep_handshake: PEPHandshake | None = None
+    ) -> AuthZENDecision:
         """Ask whether one subject may perform one action on one resource.
 
         Synchronous wrapper for :meth:`AxonFlow.evaluate`. See that method for
         the AuthZEN-native contract (ADR-065) and the refusal semantics.
         """
-        return self._run_sync(self._async_client.evaluate(request))
+        return self._run_sync(self._async_client.evaluate(request, pep_handshake=pep_handshake))
 
-    def evaluate_all(self, bulk: AuthZENBulk) -> AuthZENDecision:
+    def evaluate_all(
+        self, bulk: AuthZENBulk, *, pep_handshake: PEPHandshake | None = None
+    ) -> AuthZENDecision:
         """Ask whether ONE operation is permitted against several preconditions.
 
         Synchronous wrapper for :meth:`AxonFlow.evaluate_all`. Returns one
         decision, not one per entry: a denied entry denies the operation.
         """
-        return self._run_sync(self._async_client.evaluate_all(bulk))
+        return self._run_sync(self._async_client.evaluate_all(bulk, pep_handshake=pep_handshake))
 
-    def decide(self, request: DecideRequest) -> DecideResponse:
+    def decide(
+        self, request: DecideRequest, *, pep_handshake: PEPHandshake | None = None
+    ) -> DecideResponse:
         """Ask the PDP for a verdict on a request (``POST /api/v1/decide``).
 
         Synchronous wrapper for :meth:`AxonFlow.decide`. See that method for the
         decide → fulfill → forward PEP contract (ADR-056, #2563).
         """
-        return self._run_sync(self._async_client.decide(request))
+        return self._run_sync(self._async_client.decide(request, pep_handshake=pep_handshake))
 
     def fulfill_request(
         self,
         decision: DecideResponse,
         statement: str,
+        *,
+        pep_handshake: PEPHandshake | None = None,
     ) -> tuple[str, bool]:
         """Discharge every request-phase ``redact_pii`` obligation via the engine.
 
@@ -8218,17 +8353,23 @@ class SyncAxonFlow:
         when an obligation cannot be discharged through the engine — never
         redacts locally.
         """
-        return self._run_sync(self._async_client.fulfill_request(decision, statement))
+        return self._run_sync(
+            self._async_client.fulfill_request(decision, statement, pep_handshake=pep_handshake)
+        )
 
     def decide_and_fulfill(
         self,
         request: DecideRequest,
+        *,
+        pep_handshake: PEPHandshake | None = None,
     ) -> tuple[str, str, DecideResponse]:
         """One-call PEP path: decide, then fulfill any request-phase obligation.
 
         Synchronous wrapper for :meth:`AxonFlow.decide_and_fulfill`.
         """
-        return self._run_sync(self._async_client.decide_and_fulfill(request))
+        return self._run_sync(
+            self._async_client.decide_and_fulfill(request, pep_handshake=pep_handshake)
+        )
 
     def mcp_check_output(
         self,
@@ -8244,6 +8385,7 @@ class SyncAxonFlow:
         user_id: str | None = None,
         user_token: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckOutputResponse:
         """Validate MCP response data against configured policies.
 
@@ -8263,6 +8405,7 @@ class SyncAxonFlow:
                 user_id=user_id,
                 user_token=user_token,
                 extra_headers=extra_headers,
+                pep_handshake=pep_handshake,
             )
         )
 
@@ -8280,6 +8423,7 @@ class SyncAxonFlow:
         user_role: str | None = None,
         user_token: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
         """Alias for :meth:`mcp_check_input`. Validates tool input against configured policies."""
         return self._run_sync(
@@ -8295,6 +8439,7 @@ class SyncAxonFlow:
                 user_role=user_role,
                 user_token=user_token,
                 extra_headers=extra_headers,
+                pep_handshake=pep_handshake,
             )
         )
 
@@ -8312,6 +8457,7 @@ class SyncAxonFlow:
         user_id: str | None = None,
         user_token: str | None = None,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckOutputResponse:
         """Alias for :meth:`mcp_check_output`. Validates tool output against configured policies."""
         return self._run_sync(
@@ -8327,6 +8473,7 @@ class SyncAxonFlow:
                 user_id=user_id,
                 user_token=user_token,
                 extra_headers=extra_headers,
+                pep_handshake=pep_handshake,
             )
         )
 
@@ -8392,6 +8539,7 @@ class SyncAxonFlow:
         context: dict[str, Any] | None = None,
         *,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> PolicyApprovalResult:
         """Perform policy pre-check before making LLM call.
 
@@ -8406,6 +8554,7 @@ class SyncAxonFlow:
                 data_sources,
                 context,
                 extra_headers=extra_headers,
+                pep_handshake=pep_handshake,
             )
         )
 
@@ -8417,6 +8566,7 @@ class SyncAxonFlow:
         context: dict[str, Any] | None = None,
         *,
         extra_headers: dict[str, str] | None = None,
+        pep_handshake: PEPHandshake | None = None,
     ) -> PolicyApprovalResult:
         """Alias for get_policy_approved_context().
 
@@ -8431,6 +8581,7 @@ class SyncAxonFlow:
                 data_sources,
                 context,
                 extra_headers=extra_headers,
+                pep_handshake=pep_handshake,
             )
         )
 
