@@ -92,13 +92,30 @@ def test_the_committed_snapshot_is_exactly_the_scripts_derived_form(script: Modu
     assert script.check_snapshot(FIXTURE_DIR) == []
 
 
-def test_a_hand_edited_snapshot_is_refused(tmp_path: Path, script: ModuleType) -> None:
+def _copy_fixture(tmp_path: Path) -> Path:
     copy = tmp_path / "openapi"
     copy.mkdir()
     for path in sorted(FIXTURE_DIR.glob("*.yaml")):
         (copy / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    return copy
+
+
+def test_a_snapshot_carrying_prose_is_refused(tmp_path: Path, script: ModuleType) -> None:
+    copy = _copy_fixture(tmp_path)
+    first = sorted(copy.glob("*.yaml"))[0]
+    edited = first.read_text(encoding="utf-8") + '    "Extra":\n      description: prose\n'
+    first.write_text(edited, encoding="utf-8")
+    assert script.check_snapshot(copy) == [f"{first.name}: not in the derived form"]
+
+
+def test_a_derived_form_addition_passes_the_check_so_the_pin_guard_must_catch_it(
+    tmp_path: Path, script: ModuleType
+) -> None:
+    """The check compares a file with its own re-derivation, so a declaration
+    added by hand in the derived form passes it. Pinned so no one relies on the
+    check for that: the wire-shape job's pin guard requires the spec-pin-bump
+    label for any change under tests/fixtures/openapi/."""
+    copy = _copy_fixture(tmp_path)
     first = sorted(copy.glob("*.yaml"))[0]
     first.write_text(first.read_text(encoding="utf-8") + '    "HandAdded": {}\n', encoding="utf-8")
-    assert script.check_snapshot(copy) == [
-        f"{first.name}: not in the derived form (edited by hand?)"
-    ]
+    assert script.check_snapshot(copy) == []

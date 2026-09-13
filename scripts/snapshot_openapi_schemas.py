@@ -130,8 +130,12 @@ def check_snapshot(snapshot_dir: Path) -> list[str]:
     """Problems with a committed snapshot, or an empty list.
 
     Every file must carry the generated header, and its body must be exactly
-    what this script derives from it again, so a hand edit, a file placed
-    there by hand, or a stray key is caught.
+    what this script derives from it again. That refuses anything beyond the
+    derived form: prose, types, a spec copied in verbatim, a re-formatted file.
+    It cannot see a declaration added by hand in the derived form itself; only
+    the source could. What makes every change to the snapshot visible is the
+    wire-shape job's pin guard, which requires the spec-pin-bump label for
+    any change under the snapshot directory.
     """
     files = sorted(snapshot_dir.glob("*.yaml"))
     if not files:
@@ -145,7 +149,7 @@ def check_snapshot(snapshot_dir: Path) -> list[str]:
             continue
         again = render(path.name, text.encode("utf-8"), "check")
         if _body(text) != _body(again):
-            problems.append(f"{path.name}: not in the derived form (edited by hand?)")
+            problems.append(f"{path.name}: not in the derived form")
     return problems
 
 
@@ -254,8 +258,10 @@ def self_test() -> int:
         derived = Path(tmp) / "a"
         check(check_snapshot(derived) == [], "a freshly derived snapshot checks clean")
         edited = derived / "planted-api.yaml"
-        edited.write_text(first + "    PLANTED-HAND-EDIT: {}\n", encoding="utf-8")
-        check(check_snapshot(derived) != [], "a hand-edited snapshot is refused")
+        edited.write_text(
+            first + '    "Extra":\n      description: PLANTED-PROSE\n', encoding="utf-8"
+        )
+        check(check_snapshot(derived) != [], "a snapshot carrying prose is refused")
     print(f"\nself-test: {'FAIL' if failures else 'PASS'} ({len(failures)} failure(s))")
     return 1 if failures else 0
 
