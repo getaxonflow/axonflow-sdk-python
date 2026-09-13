@@ -5,7 +5,7 @@ Custom exception hierarchy for clear error handling.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class AxonFlowError(Exception):
@@ -260,3 +260,49 @@ class IdempotencyKeyMismatchError(AxonFlowError):
         self.step_id = step_id
         self.expected_idempotency_key = expected_idempotency_key
         self.received_idempotency_key = received_idempotency_key
+
+
+class LegacyPolicyWriteFrozenError(AxonFlowError):
+    """A legacy policy write was refused: v11 authors policy through the typed route.
+
+    From v11.0.0 the platform freezes its static- and dynamic-policy write routes
+    and answers ``409 LEGACY_POLICY_WRITE_FROZEN``, naming the typed policy route
+    (``/api/v1/typed-policies``) in ``message``. Reads on those routes still work
+    and are deprecated (see :class:`PlatformRouteDeprecationWarning`).
+    """
+
+    CODE: ClassVar[str] = "LEGACY_POLICY_WRITE_FROZEN"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, details={"code": self.CODE})
+        self.code = self.CODE
+
+
+class PlatformRouteDeprecationWarning(DeprecationWarning):
+    """The platform marked the route a call used as deprecated.
+
+    ``successor`` is the route that replaces it, ``removed_in`` the release that
+    removes it, and ``deprecation`` the RFC 9745 ``Deprecation`` value when the
+    platform sends one. Python hides a ``DeprecationWarning`` outside
+    ``__main__`` and test runners by default; to see it, call
+    ``warnings.simplefilter("default", PlatformRouteDeprecationWarning)``.
+    """
+
+    def __init__(
+        self,
+        route: str,
+        *,
+        successor: str | None,
+        removed_in: str | None,
+        deprecation: str | None,
+    ) -> None:
+        self.route = route
+        self.successor = successor
+        self.removed_in = removed_in
+        self.deprecation = deprecation
+        parts = [f"{route} is deprecated by the AxonFlow platform"]
+        if successor is not None:
+            parts.append(f"use {successor} instead")
+        if removed_in is not None:
+            parts.append(f"it is removed in {removed_in}")
+        super().__init__("; ".join(parts) + ".")

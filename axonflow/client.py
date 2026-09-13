@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import re
+import warnings
 from collections.abc import AsyncIterator, Coroutine, Iterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -92,8 +93,10 @@ from axonflow.exceptions import (
     ConnectionError,
     ConnectorError,
     IdempotencyKeyMismatchError,
+    LegacyPolicyWriteFrozenError,
     ObligationNotFulfillableError,
     PlanExecutionError,
+    PlatformRouteDeprecationWarning,
     PolicyViolationError,
     RateLimitError,
     TimeoutError,
@@ -316,6 +319,55 @@ def _parse_idempotency_key_mismatch(
         step_id=str(details.get("step_id") or step_id),
         expected_idempotency_key=str(details.get("expected_idempotency_key", "")),
         received_idempotency_key=str(details.get("received_idempotency_key", "")),
+    )
+
+
+_SUCCESSOR_LINK = re.compile(r'<([^>]*)>\s*;\s*rel="?successor-version"?', re.IGNORECASE)
+
+
+def _legacy_policy_write_frozen(response: httpx.Response) -> LegacyPolicyWriteFrozenError | None:
+    """Return the typed error for a v11 legacy policy write refusal, else ``None``.
+
+    A v11 platform answers a write to its static- or dynamic-policy routes with
+    ``409 {"error": {"code": "LEGACY_POLICY_WRITE_FROZEN", "message": ...}}``, on
+    the agent and the orchestrator alike. Any other 409 keeps its own handling.
+    """
+    if response.status_code != 409:  # noqa: PLR2004
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    err = payload.get("error")
+    if not isinstance(err, dict) or err.get("code") != LegacyPolicyWriteFrozenError.CODE:
+        return None
+    return LegacyPolicyWriteFrozenError(str(err.get("message", "legacy policy write frozen")))
+
+
+def _warn_if_route_deprecated(response: httpx.Response, method: str, path: str) -> None:
+    """Warn when the platform stamps the route a call used as deprecated.
+
+    A v11 platform stamps its legacy policy routes with ``X-AxonFlow-Removed-In``
+    and ``Link: <successor>; rel="successor-version"``, and adds an RFC 9745
+    ``Deprecation`` header once the deprecating release is tagged. Either the
+    first or the last marks the route deprecated, so the warning fires before
+    the tag as well as after it.
+    """
+    deprecation = response.headers.get("Deprecation")
+    removed_in = response.headers.get("X-AxonFlow-Removed-In")
+    if deprecation is None and removed_in is None:
+        return
+    match = _SUCCESSOR_LINK.search(response.headers.get("Link", ""))
+    warnings.warn(
+        PlatformRouteDeprecationWarning(
+            f"{method} {path}",
+            successor=match.group(1) if match else None,
+            removed_in=removed_in,
+            deprecation=deprecation,
+        ),
+        stacklevel=4,
     )
 
 
@@ -938,6 +990,7 @@ class AxonFlow:
         ``extra_headers`` documentation).
         """
         response = await self._send_raw(method, path, json_data=json_data, headers=extra_headers)
+        _warn_if_route_deprecated(response, method, path)
 
         try:
             response.raise_for_status()
@@ -947,6 +1000,9 @@ class AxonFlow:
             return response.json()  # type: ignore[no-any-return]
 
         except httpx.HTTPStatusError as e:
+            frozen = _legacy_policy_write_frozen(e.response)
+            if frozen is not None:
+                raise frozen from e
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
@@ -1470,6 +1526,10 @@ class AxonFlow:
                 "block_reason": client_response.block_reason,
                 "policy_info": policy_info,
             },
+            engine=client_response.engine,
+            subject_type=client_response.subject_type,
+            policy_bundle=client_response.policy_bundle,
+            legacy_validators=client_response.legacy_validators,
         )
 
     async def mcp_query(
@@ -1567,6 +1627,10 @@ class AxonFlow:
             blocked=is_policy_block,
             block_reason=response_data.get("error") if is_policy_block else None,
             policy_info=policy_info,
+            engine=response_data.get("engine"),
+            subject_type=response_data.get("subject_type"),
+            policy_bundle=response_data.get("policy_bundle"),
+            legacy_validators=response_data.get("legacy_validators"),
         )
 
     async def mcp_execute(
@@ -2215,6 +2279,12 @@ class AxonFlow:
             rate_limit_info=rate_limit,
             expires_at=_parse_datetime(response["expires_at"]),
             block_reason=response.get("block_reason"),
+            decision_id=response.get("decision_id"),
+            verdict=response.get("verdict"),
+            engine=response.get("engine"),
+            subject_type=response.get("subject_type"),
+            policy_bundle=response.get("policy_bundle"),
+            legacy_validators=response.get("legacy_validators"),
         )
 
     async def pre_check(
@@ -4641,6 +4711,7 @@ class AxonFlow:
 
         try:
             response = await self._http_client.request(method, url, json=json_data)
+            _warn_if_route_deprecated(response, method, path)
             response.raise_for_status()
             if response.status_code == 204:  # noqa: PLR2004
                 return None
@@ -4666,6 +4737,9 @@ class AxonFlow:
             msg = f"Request timed out: {e}"
             raise TimeoutError(msg) from e
         except httpx.HTTPStatusError as e:
+            frozen = _legacy_policy_write_frozen(e.response)
+            if frozen is not None:
+                raise frozen from e
             # A scoped miss reports WHY it missed. Only 404 is interpreted: the
             # scope header is stamped before the handler writes its status, so
             # it also rides a 500 from further down the handler, and explaining

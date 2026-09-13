@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **v11 decision provenance on every governed response.** From a v11.0.0 platform, `DecideResponse`, the gateway pre-check result (`PolicyApprovalResult`), `ClientResponse` (`/api/request`), `MCPCheckOutputResponse` and `ConnectorResponse` carry `engine`, `subject_type`, `policy_bundle` and `legacy_validators` (a list of `LegacyValidatorAction`), through a shared `DecisionProvenance` base. `DecideResponse` also carries `policy_identities` (each matched policy named, as `PolicyIdentity`), `policy_packs` and `document_version`, and the pre-check result carries `decision_id` and `verdict`. Every new field is `None` on an older platform.
+- **`LegacyPolicyWriteFrozenError`.** A v11.0.0 platform refuses writes to the static- and dynamic-policy routes with `409 LEGACY_POLICY_WRITE_FROZEN`. The SDK raises this typed error, a subclass of `AxonFlowError`, carrying the platform's message, which names the typed policy route. Every other 409 is handled as before.
+- **`PlatformRouteDeprecationWarning`.** When the platform stamps the route a call used as deprecated (`X-AxonFlow-Removed-In`, or the RFC 9745 `Deprecation` header), the SDK issues this `DeprecationWarning`, naming the successor route from `Link: rel="successor-version"` and the removal release. A v11.0.0 platform stamps the legacy static-policy, dynamic-policy and policy-simulation routes.
+
 ## [9.3.1] - 2026-09-07
 
 ### Fixed

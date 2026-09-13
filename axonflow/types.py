@@ -248,7 +248,54 @@ class BudgetInfo(BaseModel):
     action: str | None = Field(default=None, description="Action on exceed: warn, block, downgrade")
 
 
-class ClientResponse(BaseModel):
+class LegacyValidatorAction(BaseModel):
+    """A checksum validator that acted before the policy engine decided.
+
+    The platform's Indonesian and Indian identifier validators run ahead of the
+    engine and can block or mask on their own. ``legacy_validators`` names each
+    one that did, so a verdict's provenance is complete.
+    """
+
+    validator: str = Field(..., description="Validator that acted, e.g. indonesia_pii")
+    action: str = Field(..., description="What it did: blocked or masked")
+
+
+class PolicyIdentity(BaseModel):
+    """One policy a decision matched, as ``policy_identities`` names it.
+
+    Entries follow ``evaluated_policies`` in the same order. ``name`` is the
+    policy's own display name and is absent when it declares none; the platform
+    never presents an identifier as a name. ``source`` says whose the policy is
+    (``shipped``, ``organization`` or ``pack``), and ``version`` is the published
+    version of an organization's or an installed pack's policy.
+    """
+
+    id: str
+    name: str | None = Field(default=None)
+    source: str | None = Field(default=None)
+    version: int | None = Field(default=None)
+
+
+class DecisionProvenance(BaseModel):
+    """What decided a governed request, as a v11.0.0 platform reports it.
+
+    Every field is absent on an older platform, so ``None`` means "not
+    reported", never "no engine decided".
+    """
+
+    engine: str | None = Field(default=None, description="The engine that decided, e.g. anchored")
+    subject_type: str | None = Field(
+        default=None, description="Type of principal the verdict was decided for"
+    )
+    policy_bundle: str | None = Field(
+        default=None, description="Digest of the policy set that decided"
+    )
+    legacy_validators: list[LegacyValidatorAction] | None = Field(
+        default=None, description="Validators that acted before the engine decided"
+    )
+
+
+class ClientResponse(DecisionProvenance):
     """Response from AxonFlow Agent."""
 
     success: bool = Field(..., description="Whether request succeeded")
@@ -423,7 +470,7 @@ class ConnectorPolicyInfo(BaseModel):
     )
 
 
-class ConnectorResponse(BaseModel):
+class ConnectorResponse(DecisionProvenance):
     """Response from MCP connector query."""
 
     success: bool
@@ -530,7 +577,7 @@ class MCPCheckOutputRequest(BaseModel):
     )
 
 
-class MCPCheckOutputResponse(BaseModel):
+class MCPCheckOutputResponse(DecisionProvenance):
     """Result of output policy evaluation."""
 
     allowed: bool
@@ -637,7 +684,7 @@ class DecideRequest(BaseModel):
     context: dict[str, Any] | None = Field(default=None)
 
 
-class DecideResponse(BaseModel):
+class DecideResponse(DecisionProvenance):
     """PDP verdict returned by POST /api/v1/decide. Mirrors platform DecideResponse.
 
     ``obligations`` is always a list so PEP code can iterate without a None-check.
@@ -654,6 +701,12 @@ class DecideResponse(BaseModel):
     stage: str | None = Field(default=None)
     expires_at: datetime | None = Field(default=None)
     error: str | None = Field(default=None)
+    # v11.0.0 decision provenance, beside the fields DecisionProvenance adds:
+    # each matched policy named, the add-on packs that composed, and the
+    # organization document's published version. Absent on older platforms.
+    policy_identities: list[PolicyIdentity] | None = Field(default=None)
+    policy_packs: list[str] | None = Field(default=None)
+    document_version: int | None = Field(default=None)
 
 
 class PlanStep(BaseModel):
@@ -881,7 +934,7 @@ class RateLimitInfo(BaseModel):
     reset_at: datetime
 
 
-class PolicyApprovalResult(BaseModel):
+class PolicyApprovalResult(DecisionProvenance):
     """Pre-check result from Gateway Mode."""
 
     context_id: str = Field(..., description="Context ID for audit linking")
@@ -895,6 +948,9 @@ class PolicyApprovalResult(BaseModel):
     rate_limit_info: RateLimitInfo | None = None
     expires_at: datetime
     block_reason: str | None = None
+    # v11.0.0: the decision's identifier and its canonical allow/deny answer.
+    decision_id: str | None = Field(default=None)
+    verdict: str | None = Field(default=None)
 
     @field_validator("policies", mode="before")
     @classmethod
