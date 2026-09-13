@@ -91,6 +91,9 @@ async def main() -> None:
     try:
         from axonflow.policies import ListStaticPoliciesOptions
 
+        # A v11.0.0 platform deprecates this route and removes it in v11.1. The
+        # client reports it once through PlatformRouteDeprecationWarning, naming
+        # its successor, /api/v1/typed-policies.
         policies = await client.list_static_policies(
             ListStaticPoliciesOptions(category=PolicyCategory.PII_INDONESIA),
         )
