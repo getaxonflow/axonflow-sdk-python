@@ -82,11 +82,23 @@ jobs:
       - name: Validate wcp_retry_idempotency.py syntax
         run: python -m py_compile examples/wcp_retry_idempotency.py
 
+      - name: Validate typed_policies.py syntax
+        run: python -m py_compile examples/typed_policies.py
+
+      - name: Validate pep_handshake.py syntax
+        run: python -m py_compile examples/pep_handshake.py
+
       - name: Import quickstart
         run: python -c "from examples.quickstart import main; print('quickstart.py imports successfully')"
 
       - name: Import gateway_mode
         run: python -c "from examples.gateway_mode import main, blocked_example; print('gateway_mode.py imports successfully')"
+
+      - name: Import typed_policies
+        run: python -c "from examples.typed_policies import main; print('typed_policies.py imports successfully')"
+
+      - name: Import pep_handshake
+        run: python -c "from examples.pep_handshake import main; print('pep_handshake.py imports successfully')"
 
   # Integration tests run against a live community stack spun up via docker-compose.
   # Runs on main merges, scheduled, and manual dispatch. Skipped on PRs to keep
