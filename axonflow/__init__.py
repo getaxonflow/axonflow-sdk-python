@@ -102,6 +102,7 @@ from axonflow.exceptions import (
     PolicyViolationError,
     RateLimitError,
     TimeoutError,
+    TypedPolicyRefusal,
     VersionConflictError,
 )
 from axonflow.execution import (
@@ -184,6 +185,20 @@ from axonflow.policies import (
     UpdateStaticPolicyRequest,
 )
 from axonflow.telemetry import register_adapter
+from axonflow.typed_policies import (
+    ActiveTypedPolicy,
+    AuthoringFinding,
+    EditionConstructReport,
+    SyncTypedPoliciesNamespace,
+    TypedAuthoringDocumentRequest,
+    TypedAuthoringEdition,
+    TypedPoliciesNamespace,
+    TypedPolicyActivation,
+    TypedPolicyPublication,
+    TypedPolicySystemControl,
+    TypedPolicySystemCorpus,
+    TypedPolicyValidation,
+)
 from axonflow.types import (
     CATEGORY_MEDIA_BIOMETRIC,
     CATEGORY_MEDIA_DOCUMENT,
@@ -403,6 +418,18 @@ __all__ = [
     "PEP_HANDSHAKE_HEADER",
     "PEPCapability",
     "PEPHandshake",
+    "TypedPoliciesNamespace",
+    "SyncTypedPoliciesNamespace",
+    "TypedAuthoringEdition",
+    "EditionConstructReport",
+    "AuthoringFinding",
+    "TypedAuthoringDocumentRequest",
+    "TypedPolicyValidation",
+    "TypedPolicyPublication",
+    "TypedPolicyActivation",
+    "ActiveTypedPolicy",
+    "TypedPolicySystemControl",
+    "TypedPolicySystemCorpus",
     "REQUEST_REDACTION_PATH",
     "RESPONSE_REDACTION_PATH",
     "has_request_redaction",
@@ -550,6 +577,7 @@ __all__ = [
     "LegacyPolicyWriteFrozenError",
     "PlatformRouteDeprecationWarning",
     "PEPHandshakeError",
+    "TypedPolicyRefusal",
     "ConfigurationError",
     "AuthenticationError",
     "PolicyViolationError",

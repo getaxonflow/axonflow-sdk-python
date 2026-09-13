@@ -155,6 +155,7 @@ from axonflow.read_identity import (
     stamp_read_identity,
     use_read_identity,
 )
+from axonflow.typed_policies import SyncTypedPoliciesNamespace, TypedPoliciesNamespace
 from axonflow.types import (
     AuditLogEntry,
     AuditQueryOptions,
@@ -531,7 +532,7 @@ def _build_audit_search_body(request: AuditSearchRequest) -> dict[str, Any]:
 # hands the derived client a namespace that still calls through the PARENT —
 # with the parent's identity. Add to this list when adding a lazy namespace; the
 # guard is a list precisely so that adding one is a conscious act.
-_LAZY_NAMESPACE_SLOTS = ("_masfeat",)
+_LAZY_NAMESPACE_SLOTS = ("_masfeat", "_typed_policies")
 
 
 def _checked_pep_handshake(value: object) -> PEPHandshake | None:
@@ -564,6 +565,7 @@ class AxonFlow:
         "_logger",
         "_session_cookie",
         "_masfeat",
+        "_typed_policies",
         "_pep_handshake",
     )
 
@@ -755,6 +757,7 @@ class AxonFlow:
 
         # Initialize MAS FEAT namespace (lazy)
         self._masfeat: MASFEATNamespace | None = None
+        self._typed_policies: TypedPoliciesNamespace | None = None
 
         if debug:
             self._logger.info(
@@ -819,6 +822,23 @@ class AxonFlow:
         if self._masfeat is None:
             self._masfeat = MASFEATNamespace(self)
         return self._masfeat
+
+    @property
+    def typed_policies(self) -> TypedPoliciesNamespace:
+        """Typed policy authoring: the v11 successor to the legacy policy routes.
+
+        Six operations under ``/api/v1/typed-policies``: ``edition()``,
+        ``validate()``, ``publish()``, ``activate()``, ``active()`` and
+        ``system()``. Rollback and withdraw are customer portal operations and
+        are not reachable through the agent. See :mod:`axonflow.typed_policies`.
+
+        Example:
+            >>> published = await client.typed_policies.publish(document, fixtures)
+            >>> await client.typed_policies.activate(published.digest)
+        """
+        if self._typed_policies is None:
+            self._typed_policies = TypedPoliciesNamespace(self._send_raw)
+        return self._typed_policies
 
     @property
     def config(self) -> AxonFlowConfig:
@@ -8081,13 +8101,14 @@ class SyncAxonFlow:
     Wraps all async methods for synchronous usage.
     """
 
-    __slots__ = ("_async_client", "_loop", "_owns_loop", "_masfeat")
+    __slots__ = ("_async_client", "_loop", "_owns_loop", "_masfeat", "_typed_policies")
 
     def __init__(self, async_client: AxonFlow) -> None:
         self._async_client = async_client
         self._loop: asyncio.AbstractEventLoop | None = None
         self._owns_loop: bool = False
         self._masfeat: SyncMASFEATNamespace | None = None
+        self._typed_policies: SyncTypedPoliciesNamespace | None = None
 
     @property
     def masfeat(self) -> SyncMASFEATNamespace:
@@ -8111,6 +8132,15 @@ class SyncAxonFlow:
         if self._masfeat is None:
             self._masfeat = SyncMASFEATNamespace(self)
         return self._masfeat
+
+    @property
+    def typed_policies(self) -> SyncTypedPoliciesNamespace:
+        """Typed policy authoring; see :attr:`AxonFlow.typed_policies`."""
+        if self._typed_policies is None:
+            self._typed_policies = SyncTypedPoliciesNamespace(
+                self._async_client.typed_policies, self._run_sync
+            )
+        return self._typed_policies
 
     def _get_loop(self) -> asyncio.AbstractEventLoop:
         """Get or create event loop for synchronous execution."""

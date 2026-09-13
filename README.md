@@ -365,6 +365,25 @@ One process can be two enforcement points: a request path and a response path th
 - **Refused before it is sent.** `PEPHandshake` applies the platform's own rules at construction and raises `PEPHandshakeError` naming the member at fault (`.pointer` is `/pep_id`, `/audience` or `/capabilities`), instead of the first governed call coming back `400`.
 - **A header set by hand** in `extra_headers` is sent as given, in place of the client's declaration for that call. Passing it together with `pep_handshake=` is refused.
 
+### Typed policy authoring
+
+A v11 platform authors policy as a typed document: validated, published as a signed artifact pinned by its digest, and promoted to active. `client.typed_policies` reaches the six routes the agent proxies under `/api/v1/typed-policies`:
+
+```python
+async with AxonFlow(endpoint="...", client_id="...", client_secret="...") as client:
+    edition = await client.typed_policies.edition()  # what this deployment may author
+    validation = await client.typed_policies.validate(document, fixtures)  # every finding
+    published = await client.typed_policies.publish(document, fixtures)  # signed, pinned by digest
+    await client.typed_policies.activate(published.digest)  # promote to active
+    active = await client.typed_policies.active()  # the signed source in force, or None
+    system = await client.typed_policies.system()  # the platform's own controls, read-only
+```
+
+- **Activation promotes.** A digest whose version does not advance past the active one is refused. Rolling back to an earlier document, and withdrawing the active one, are operations of the customer portal behind its session; the agent does not proxy them, so the SDK has no method for either.
+- **The organization and the author are the ones your credentials resolve to.** The agent stamps both, and the platform overwrites any author named inside the document.
+- **Refusals are typed.** Every refusal raises `TypedPolicyRefusal` with the HTTP `status`, the platform's `reason` (such as `publication_refused`, `activation_refused` or `tier_limit`), any `findings`, and `retry_after` when the refusal is retryable. On an edition with separation of duties, publishing refuses with the finding code `APPROVER_IS_AUTHOR`: the route names no approver, and such a deployment approves in the customer portal.
+- `validate()` answers identically on every edition; the edition's boundary is applied when you publish.
+
 ## Configuration
 
 ```python
