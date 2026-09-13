@@ -233,14 +233,10 @@
       ]
     },
     "ClientResponse": {
-      "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares `engine`, `subject_type`, `policy_bundle` and `legacy_validators` (which engine decided, for which principal type, under which policy set, and any pre-engine validator action) plus `approval_request_id` on ClientResponse; the SDK does not model them yet - additive optional fields, no break. The v11 wire-fields change burns down the first four; `approval_request_id` is tracked in axonflow-enterprise#1704.",
+      "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares `approval_request_id` on ClientResponse; the SDK does not model it yet - additive optional field, no break. Tracked in axonflow-enterprise#1704.",
       "sdk_only": [],
       "spec_only": [
-        "approval_request_id",
-        "engine",
-        "legacy_validators",
-        "policy_bundle",
-        "subject_type"
+        "approval_request_id"
       ]
     },
     "CreateStaticPolicyRequest": {
@@ -258,19 +254,11 @@
       ]
     },
     "DecideResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `error`; the agent's decide error envelope (sendDecideError) emits it alongside verdict=deny on malformed requests so PEP code parses a single envelope, but agent-api.yaml DecideResponse doesn't yet declare it. The v11.0.0-candidate spec also declares document_version/engine/legacy_validators/policy_bundle/policy_identities/policy_packs/subject_type, which the SDK does not model yet (spec_only); the v11 wire-fields change burns them down.",
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `error`; the agent's decide error envelope (sendDecideError) emits it alongside verdict=deny on malformed requests so PEP code parses a single envelope, but agent-api.yaml DecideResponse doesn't yet declare it.",
       "sdk_only": [
         "error"
       ],
-      "spec_only": [
-        "document_version",
-        "engine",
-        "legacy_validators",
-        "policy_bundle",
-        "policy_identities",
-        "policy_packs",
-        "subject_type"
-      ]
+      "spec_only": []
     },
     "DecisionExplanation": {
       "note": "acknowledged-spec-superset: the former sdk_only context/context_truncated entries resolved - the v9.13.0 spec declares them (platform #2509 / epic #2508). spec_only latest_policy_version/policy_version_at_decision (policy-version pinning surface) are declared by v9.13.0 but not yet modeled - additive, no break.",
@@ -329,17 +317,12 @@
       ]
     },
     "MCPCheckOutputResponse": {
-      "note": "acknowledged-sdk-superset: the former `redaction_evaluated` entry resolved - the v9.13.0 spec declares it (#2865/#2866). SDK still declares decision-context fields `policy_matches`/`redacted_message` (Plugin Batch 1, v7.1.0 cycle) ahead of the spec; tracked in #1745. The v11.0.0-candidate spec also declares engine/legacy_validators/policy_bundle/subject_type, which the SDK does not model yet (spec_only); the v11 wire-fields change burns them down.",
+      "note": "acknowledged-sdk-superset: the former `redaction_evaluated` entry resolved - the v9.13.0 spec declares it (#2865/#2866). SDK still declares decision-context fields `policy_matches`/`redacted_message` (Plugin Batch 1, v7.1.0 cycle) ahead of the spec; tracked in #1745.",
       "sdk_only": [
         "policy_matches",
         "redacted_message"
       ],
-      "spec_only": [
-        "engine",
-        "legacy_validators",
-        "policy_bundle",
-        "subject_type"
-      ]
+      "spec_only": []
     },
     "PolicyEvaluationResult": {
       "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares allowed_providers/applied_policies_detail/evaluation_error/override_applied/override_id/override_reason/preferred_provider/routing_reason/segments_resolved/severity/severity_policy_id on PolicyEvaluationResult; the SDK does not model them yet - additive server-side surface, no break. Newly visible with the v11.0.0-candidate pin; tracked in axonflow-enterprise#1704.",
@@ -492,6 +475,7 @@
     "PolicyConflictResponse",
     "PolicyEvaluationInfo",
     "PolicyEvaluationResult",
+    "PolicyIdentity",
     "PolicyMatch",
     "PolicyMatchInfo",
     "PolicyOverride",
