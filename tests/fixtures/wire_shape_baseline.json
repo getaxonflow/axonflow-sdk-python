@@ -173,7 +173,7 @@
       ]
     }
   },
-  "openapi_specs_sha": "df027c788b60c18d044278c45aa4bce3a1ac8717",
+  "openapi_specs_sha": "36e0e96b7e5c16626d394272b727b533f2b94a04",
   "per_model_drift": {
     "AISystemRegistry": {
       "note": "deprecated-pending-removal: getaxonflow/axonflow-enterprise#3254 pin-advance batch (dataclass binding, #3262). sdk_only lists the LEGACY spellings the parser reads first-for-compatibility before falling back to the real v9.13.0 wire names (now spec-declared), here business_owner/customer_impact/model_complexity/human_reliance (real wire: owner_email/risk_rating_impact/risk_rating_complexity/risk_rating_reliance), plus deprecated fiction technical_owner (never served on 9.x). spec_only fields (data_sources/model_type/version/deployment_date/last_assessment_date/next_assessment_due/updated_by) are informational coverage gaps (PR #224). Legacy spellings burn down in the next major.",
@@ -232,12 +232,45 @@
         "session_id"
       ]
     },
+    "ClientResponse": {
+      "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares `engine`, `subject_type`, `policy_bundle` and `legacy_validators` (which engine decided, for which principal type, under which policy set, and any pre-engine validator action) plus `approval_request_id` on ClientResponse; the SDK does not model them yet - additive optional fields, no break. The v11 wire-fields change burns down the first four; `approval_request_id` is tracked in axonflow-enterprise#1704.",
+      "sdk_only": [],
+      "spec_only": [
+        "approval_request_id",
+        "engine",
+        "legacy_validators",
+        "policy_bundle",
+        "subject_type"
+      ]
+    },
+    "CreateStaticPolicyRequest": {
+      "note": "acknowledged-sdk-superset: the SDK declares optional `organization_id` on CreateStaticPolicyRequest, which the v9.13.0 pin declared and the v11.0.0-candidate spec does not. An absent optional field parses as None, so nothing breaks; whether the SDK drops it is tracked in axonflow-enterprise#1704.",
+      "sdk_only": [
+        "organization_id"
+      ],
+      "spec_only": []
+    },
+    "DecideRequest": {
+      "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares optional `fulfillment_capabilities` on DecideRequest; the SDK does not send it yet - additive optional request field, no break. Tracked in axonflow-enterprise#1704.",
+      "sdk_only": [],
+      "spec_only": [
+        "fulfillment_capabilities"
+      ]
+    },
     "DecideResponse": {
-      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `error`; the agent's decide error envelope (sendDecideError) emits it alongside verdict=deny on malformed requests so PEP code parses a single envelope, but agent-api.yaml DecideResponse doesn't yet declare it.",
+      "note": "acknowledged-sdk-superset: tracked in #1745. SDK declares `error`; the agent's decide error envelope (sendDecideError) emits it alongside verdict=deny on malformed requests so PEP code parses a single envelope, but agent-api.yaml DecideResponse doesn't yet declare it. The v11.0.0-candidate spec also declares document_version/engine/legacy_validators/policy_bundle/policy_identities/policy_packs/subject_type, which the SDK does not model yet (spec_only); the v11 wire-fields change burns them down.",
       "sdk_only": [
         "error"
       ],
-      "spec_only": []
+      "spec_only": [
+        "document_version",
+        "engine",
+        "legacy_validators",
+        "policy_bundle",
+        "policy_identities",
+        "policy_packs",
+        "subject_type"
+      ]
     },
     "DecisionExplanation": {
       "note": "acknowledged-spec-superset: the former sdk_only context/context_truncated entries resolved - the v9.13.0 spec declares them (platform #2509 / epic #2508). spec_only latest_policy_version/policy_version_at_decision (policy-version pinning surface) are declared by v9.13.0 but not yet modeled - additive, no break.",
@@ -253,6 +286,13 @@
       "spec_only": [
         "server"
       ]
+    },
+    "DynamicPolicy": {
+      "note": "acknowledged-sdk-superset: the SDK declares optional `organization_id` on DynamicPolicy, which the v9.13.0 pin declared and the v11.0.0-candidate spec does not. An absent optional field parses as None, so nothing breaks; whether the SDK drops it is tracked in axonflow-enterprise#1704.",
+      "sdk_only": [
+        "organization_id"
+      ],
+      "spec_only": []
     },
     "DynamicPolicyMatch": {
       "note": "deprecated-pending-removal: `reason` is marked DEPRECATED + 'Removed in v7' on its Field() docstring; the canonical wire field is `message` (already present, matches spec).",
@@ -289,12 +329,34 @@
       ]
     },
     "MCPCheckOutputResponse": {
-      "note": "acknowledged-sdk-superset: the former `redaction_evaluated` entry resolved - the v9.13.0 spec declares it (#2865/#2866). SDK still declares decision-context fields `policy_matches`/`redacted_message` (Plugin Batch 1, v7.1.0 cycle) ahead of the spec; tracked in #1745.",
+      "note": "acknowledged-sdk-superset: the former `redaction_evaluated` entry resolved - the v9.13.0 spec declares it (#2865/#2866). SDK still declares decision-context fields `policy_matches`/`redacted_message` (Plugin Batch 1, v7.1.0 cycle) ahead of the spec; tracked in #1745. The v11.0.0-candidate spec also declares engine/legacy_validators/policy_bundle/subject_type, which the SDK does not model yet (spec_only); the v11 wire-fields change burns them down.",
       "sdk_only": [
         "policy_matches",
         "redacted_message"
       ],
-      "spec_only": []
+      "spec_only": [
+        "engine",
+        "legacy_validators",
+        "policy_bundle",
+        "subject_type"
+      ]
+    },
+    "PolicyEvaluationResult": {
+      "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares allowed_providers/applied_policies_detail/evaluation_error/override_applied/override_id/override_reason/preferred_provider/routing_reason/segments_resolved/severity/severity_policy_id on PolicyEvaluationResult; the SDK does not model them yet - additive server-side surface, no break. Newly visible with the v11.0.0-candidate pin; tracked in axonflow-enterprise#1704.",
+      "sdk_only": [],
+      "spec_only": [
+        "allowed_providers",
+        "applied_policies_detail",
+        "evaluation_error",
+        "override_applied",
+        "override_id",
+        "override_reason",
+        "preferred_provider",
+        "routing_reason",
+        "segments_resolved",
+        "severity",
+        "severity_policy_id"
+      ]
     },
     "PolicyOverride": {
       "note": "deprecated-pending-removal: `active` is marked DEPRECATED + 'Removed in v7' on its Field() docstring; the canonical wire field is `enabled_override` (already present, matches spec).",
@@ -302,7 +364,6 @@
         "active"
       ],
       "spec_only": [
-        "organization_id",
         "policy_type",
         "tenant_id",
         "updated_at",
@@ -329,6 +390,21 @@
       ],
       "spec_only": []
     },
+    "StaticPolicy": {
+      "note": "acknowledged-sdk-superset: the SDK declares optional `organization_id` on StaticPolicy, which the v9.13.0 pin declared and the v11.0.0-candidate spec does not. An absent optional field parses as None, so nothing breaks; whether the SDK drops it is tracked in axonflow-enterprise#1704.",
+      "sdk_only": [
+        "organization_id"
+      ],
+      "spec_only": []
+    },
+    "StepGateResponse": {
+      "note": "acknowledged-spec-superset: the v11.0.0-candidate spec declares approval_enqueue/approval_id on StepGateResponse; the SDK does not model them yet - additive server-side surface, no break. Tracked in axonflow-enterprise#1704.",
+      "sdk_only": [],
+      "spec_only": [
+        "approval_enqueue",
+        "approval_id"
+      ]
+    },
     "UnifiedStepStatus": {
       "note": "acknowledged-spec-superset: the v9.13.0 spec declares rejected_at/rejected_by/tokens_in/tokens_out on UnifiedStepStatus; the SDK does not yet model them - additive server-side surface, no break. Newly registered by the v9.13.0 pin.",
       "sdk_only": [],
@@ -347,6 +423,19 @@
     "AuditSearchResponse",
     "AuditToolCallRequest",
     "AuditToolCallResponse",
+    "AuthZENAction",
+    "AuthZENApprovalClause",
+    "AuthZENApprovalRequirement",
+    "AuthZENBulk",
+    "AuthZENEnvelope",
+    "AuthZENError",
+    "AuthZENIdentifier",
+    "AuthZENObligation",
+    "AuthZENRequest",
+    "AuthZENResource",
+    "AuthZENResponse",
+    "AuthZENResponseContext",
+    "AuthZENSubject",
     "Budget",
     "BudgetAlert",
     "BudgetCheckRequest",
