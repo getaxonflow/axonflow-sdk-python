@@ -337,6 +337,34 @@ The tri-state applies to attribute **data**, not to the structural members (`sub
 
 The wire types are **generated** from the platform's canonical contract artifact (`scripts/gen_authzen_types.py`); CI fails if the committed module is not what the artifact produces. Runnable example: [`examples/authzen_evaluation.py`](examples/authzen_evaluation.py). Migration notes: [`docs/AUTHZEN_MIGRATION_DRAFT.md`](docs/AUTHZEN_MIGRATION_DRAFT.md).
 
+### PEP capability handshake
+
+A v11 platform lets an enforcement point declare, on each call, the exact obligation types and schema versions it can discharge. Build the declaration once and give it to the client:
+
+```python
+from axonflow import AxonFlow, PEPCapability, PEPHandshake
+
+declared = PEPHandshake(
+    pep_id="checkout-gateway",  # names this enforcement point within your credential
+    audience="https://pep.example.com",  # what a decision proof is bound to
+    capabilities=[PEPCapability("field_redact", 1)],
+)
+
+async with AxonFlow(
+    endpoint="...", client_id="...", client_secret="...", pep_handshake=declared
+) as client:
+    decision = await client.decide(request)  # carries X-Axonflow-PEP-Handshake
+```
+
+The client sends it on every call to a plane that reads it: `decide`, `evaluate` and `evaluate_all`, `mcp_check_input` and `mcp_check_output` (and their `check_tool_*` aliases), the engine round-trip of `fulfill_request` and `decide_and_fulfill`, and the gateway pre-check (`get_policy_approved_context`, `pre_check`). It does **not** send it to `proxy_llm_call` (`/api/request`), the OpenAI-compatible route or any other route, because none of them reads it.
+
+One process can be two enforcement points: a request path and a response path that discharge different obligations. Pass `pep_handshake=` to one of those methods to declare it for that call only, in place of the client's.
+
+- **There is no default.** A client given no declaration sends no header, and the platform behaves as it did before the handshake existed. `capabilities=[]` declares that the enforcement point discharges nothing.
+- **What a declaration changes.** On an Enterprise deployment, an allow verdict carrying a mandatory obligation the declared set cannot discharge becomes a deny, so declare every obligation your enforcement point carries out, and only those. A Community deployment records the declaration without denying on it, and drops any capability in a family it does not issue.
+- **Refused before it is sent.** `PEPHandshake` applies the platform's own rules at construction and raises `PEPHandshakeError` naming the member at fault (`.pointer` is `/pep_id`, `/audience` or `/capabilities`), instead of the first governed call coming back `400`.
+- **A header set by hand** in `extra_headers` is sent as given, in place of the client's declaration for that call. Passing it together with `pep_handshake=` is refused.
+
 ## Configuration
 
 ```python

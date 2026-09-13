@@ -96,6 +96,7 @@ from axonflow.exceptions import (
     IdempotencyKeyMismatchError,
     LegacyPolicyWriteFrozenError,
     ObligationNotFulfillableError,
+    PEPHandshakeError,
     PlanExecutionError,
     PlatformRouteDeprecationWarning,
     PolicyViolationError,
@@ -153,6 +154,11 @@ from axonflow.pep import (
     VERDICT_DENY,
     VERDICT_NEEDS_APPROVAL,
     has_request_redaction,
+)
+from axonflow.pep_handshake import (
+    PEP_HANDSHAKE_HEADER,
+    PEPCapability,
+    PEPHandshake,
 )
 from axonflow.policies import (
     CreateDynamicPolicyRequest,
@@ -394,6 +400,9 @@ __all__ = [
     "VERDICT_DENY",
     "VERDICT_NEEDS_APPROVAL",
     "DECIDE_PATH",
+    "PEP_HANDSHAKE_HEADER",
+    "PEPCapability",
+    "PEPHandshake",
     "REQUEST_REDACTION_PATH",
     "RESPONSE_REDACTION_PATH",
     "has_request_redaction",
@@ -540,6 +549,7 @@ __all__ = [
     "AxonFlowError",
     "LegacyPolicyWriteFrozenError",
     "PlatformRouteDeprecationWarning",
+    "PEPHandshakeError",
     "ConfigurationError",
     "AuthenticationError",
     "PolicyViolationError",

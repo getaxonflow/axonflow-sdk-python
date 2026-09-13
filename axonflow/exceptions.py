@@ -278,6 +278,21 @@ class LegacyPolicyWriteFrozenError(AxonFlowError):
         self.code = self.CODE
 
 
+class PEPHandshakeError(AxonFlowError, ValueError):
+    """A PEP capability declaration the platform would refuse, caught before it is sent.
+
+    Raised when a :class:`~axonflow.pep_handshake.PEPHandshake` or
+    :class:`~axonflow.pep_handshake.PEPCapability` is constructed. ``pointer``
+    is the RFC 6901 JSON Pointer of the offending member of the handshake
+    document (``/pep_id``, ``/audience`` or ``/capabilities``), or ``""`` when
+    the document as a whole encodes past the header's size limit.
+    """
+
+    def __init__(self, message: str, *, pointer: str) -> None:
+        super().__init__(message, details={"pointer": pointer})
+        self.pointer = pointer
+
+
 class PlatformRouteDeprecationWarning(DeprecationWarning):
     """The platform marked the route a call used as deprecated.
 
