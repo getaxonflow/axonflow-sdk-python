@@ -22,6 +22,7 @@ class PolicyCategory(str, Enum):
     # Static policy categories - Security
     SECURITY_SQLI = "security-sqli"
     SECURITY_ADMIN = "security-admin"
+    SECURITY_DANGEROUS = "security-dangerous"
 
     # Static policy categories - PII Detection
     PII_GLOBAL = "pii-global"
@@ -38,6 +39,12 @@ class PolicyCategory(str, Enum):
 
     # Sensitive data category
     SENSITIVE_DATA = "sensitive-data"
+
+    # Organization template categories, as the platform's shipped posture names them
+    COMPLIANCE_EUAIACT = "compliance-euaiact"
+    DANGEROUS_QUERIES = "dangerous_queries"
+    PII_DETECTION = "pii_detection"
+    SQL_INJECTION = "sql_injection"
 
     # Dynamic policy categories
     DYNAMIC_RISK = "dynamic-risk"
@@ -151,7 +158,13 @@ class StaticPolicy(BaseModel):
     )
     name: str
     description: str | None = None
-    category: PolicyCategory
+    category: PolicyCategory | str = Field(
+        union_mode="left_to_right",
+        description=(
+            "A category the SDK knows parses to PolicyCategory; one it does not know yet "
+            "stays the platform's string, so a new platform category cannot fail the read."
+        ),
+    )
     tier: PolicyTier
     pattern: str
     severity: PolicySeverity = PolicySeverity.MEDIUM
