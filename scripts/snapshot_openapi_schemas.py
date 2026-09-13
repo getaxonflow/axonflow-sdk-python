@@ -4,6 +4,7 @@
 Usage:
     python scripts/snapshot_openapi_schemas.py <specs_dir> <out_dir> --source-commit <SHA>
     python scripts/snapshot_openapi_schemas.py --self-test
+    python scripts/snapshot_openapi_schemas.py --check-snapshot tests/fixtures/openapi
 
 The wire-shape contract reads, from each spec, the schema declarations under
 ``components.schemas`` and the names of each declaration's ``properties``.
@@ -121,6 +122,33 @@ def render(source_name: str, source_bytes: bytes, commit: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _body(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line and not line.startswith("#")]
+
+
+def check_snapshot(snapshot_dir: Path) -> list[str]:
+    """Problems with a committed snapshot, or an empty list.
+
+    Every file must carry the generated header, and its body must be exactly
+    what this script derives from it again, so a hand edit, a file placed
+    there by hand, or a stray key is caught.
+    """
+    files = sorted(snapshot_dir.glob("*.yaml"))
+    if not files:
+        return [f"{snapshot_dir} holds no *.yaml"]
+    problems: list[str] = []
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        if not lines or lines[0] != HEADER_FIRST_LINE:
+            problems.append(f"{path.name}: missing the generated header")
+            continue
+        again = render(path.name, text.encode("utf-8"), "check")
+        if _body(text) != _body(again):
+            problems.append(f"{path.name}: not in the derived form (edited by hand?)")
+    return problems
+
+
 def derive_dir(specs_dir: Path, out_dir: Path, commit: str) -> list[Path]:
     sources = sorted(specs_dir.glob("*.yaml"))
     if not sources:
@@ -223,6 +251,11 @@ def self_test() -> int:
             check(False, "a merge key under schemas is refused")
         except ValueError:
             check(True, "a merge key under schemas is refused")
+        derived = Path(tmp) / "a"
+        check(check_snapshot(derived) == [], "a freshly derived snapshot checks clean")
+        edited = derived / "planted-api.yaml"
+        edited.write_text(first + "    PLANTED-HAND-EDIT: {}\n", encoding="utf-8")
+        check(check_snapshot(derived) != [], "a hand-edited snapshot is refused")
     print(f"\nself-test: {'FAIL' if failures else 'PASS'} ({len(failures)} failure(s))")
     return 1 if failures else 0
 
@@ -239,12 +272,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--self-test", action="store_true", help="check the derivation on a planted spec"
     )
+    parser.add_argument(
+        "--check-snapshot",
+        type=Path,
+        metavar="DIR",
+        help="check that a committed snapshot is exactly this script's derived form",
+    )
     args = parser.parse_args(argv)
 
     if args.self_test:
         return self_test()
+    if args.check_snapshot is not None:
+        problems = check_snapshot(args.check_snapshot)
+        for problem in problems:
+            print(f"FAIL: {problem}")
+        print(f"check-snapshot: {'FAIL' if problems else 'PASS'} ({args.check_snapshot})")
+        return 1 if problems else 0
     if args.specs_dir is None or args.out_dir is None or not args.source_commit:
-        parser.error("specs_dir, out_dir and --source-commit are required unless --self-test")
+        parser.error(
+            "specs_dir, out_dir and --source-commit are required"
+            " unless --self-test or --check-snapshot"
+        )
     try:
         written = derive_dir(args.specs_dir, args.out_dir, args.source_commit)
     except (FileNotFoundError, ValueError) as e:

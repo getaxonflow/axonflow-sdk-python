@@ -50,5 +50,8 @@ python scripts/snapshot_openapi_schemas.py <path to docs/api> tests/fixtures/ope
 python scripts/refresh_wire_shape_baseline.py tests/fixtures/openapi --sha <commit>
 ```
 
+`python scripts/snapshot_openapi_schemas.py --check-snapshot tests/fixtures/openapi` checks that
+every file carries the generated header and is exactly the script's derived form.
+
 Then update the table above. Always pass `--sha`: without it, the refresh script records this
 repository's own HEAD.

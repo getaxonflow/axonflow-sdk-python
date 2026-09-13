@@ -88,20 +88,17 @@ def test_a_merge_key_under_schemas_is_refused(script: ModuleType) -> None:
         script.declarations("components:\n  schemas:\n    <<: {A: {}}\n")
 
 
-def test_every_committed_snapshot_file_carries_the_generated_header(script: ModuleType) -> None:
-    files = sorted(FIXTURE_DIR.glob("*.yaml"))
-    assert files, "tests/fixtures/openapi/ holds no *.yaml"
-    for path in files:
-        first = path.read_text(encoding="utf-8").splitlines()[0]
-        assert first == script.HEADER_FIRST_LINE, path.name
+def test_the_committed_snapshot_is_exactly_the_scripts_derived_form(script: ModuleType) -> None:
+    assert script.check_snapshot(FIXTURE_DIR) == []
 
 
-def test_every_committed_snapshot_file_is_in_derived_form(script: ModuleType) -> None:
-    """Deriving a committed file again reproduces its body line for line, so it
-    holds nothing beyond schema declarations and property names."""
+def test_a_hand_edited_snapshot_is_refused(tmp_path: Path, script: ModuleType) -> None:
+    copy = tmp_path / "openapi"
+    copy.mkdir()
     for path in sorted(FIXTURE_DIR.glob("*.yaml")):
-        text = path.read_text(encoding="utf-8")
-        again = script.render(path.name, text.encode("utf-8"), "c0ffee")
-        body = [line for line in text.splitlines() if line and not line.startswith("#")]
-        again_body = [line for line in again.splitlines() if line and not line.startswith("#")]
-        assert body == again_body, f"{path.name} is not in the script's derived form"
+        (copy / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    first = sorted(copy.glob("*.yaml"))[0]
+    first.write_text(first.read_text(encoding="utf-8") + '    "HandAdded": {}\n', encoding="utf-8")
+    assert script.check_snapshot(copy) == [
+        f"{first.name}: not in the derived form (edited by hand?)"
+    ]
