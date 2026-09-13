@@ -12,6 +12,11 @@ This example builds a declaration once for the client, overrides it for one
 call (one process can be two enforcement points), and shows that a declaration
 the platform would refuse fails here, before anything is sent.
 
+After a document with an organization-scope constraint is activated, a decide
+that does not supply the attribute the constraint conditions on is denied
+fail-closed with reasons ["unknown_constraint"]; supply the attribute or run
+this example on a fresh stack.
+
 Env vars:
 
 * ``AXONFLOW_AGENT_URL``      (default: http://localhost:8080)
