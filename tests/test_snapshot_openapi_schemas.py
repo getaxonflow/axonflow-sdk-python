@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType
 
@@ -57,7 +58,7 @@ def test_this_repositorys_loader_reads_the_same_schemas_from_source_and_snapshot
 ) -> None:
     src = _plant(tmp_path, script)
     out = tmp_path / "out"
-    assert script.main([str(src), str(out), "--source-commit", "c0ffee"]) == 0
+    assert script.main([str(src), str(out), "--source-commit", script.PLANTED_COMMIT]) == 0
     assert wire_shape._load_all_schemas(out) == wire_shape._load_all_schemas(src)
     # The planted positive: the loader did read something, so equality is not
     # two empty results agreeing.
@@ -69,18 +70,23 @@ def test_the_header_names_the_source_file_commit_and_digest(
 ) -> None:
     src = _plant(tmp_path, script)
     out = tmp_path / "out"
-    assert script.main([str(src), str(out), "--source-commit", "c0ffee"]) == 0
+    assert script.main([str(src), str(out), "--source-commit", script.PLANTED_COMMIT]) == 0
     digest = hashlib.sha256((src / "planted-api.yaml").read_bytes()).hexdigest()
     head = (out / "planted-api.yaml").read_text(encoding="utf-8").splitlines()[:3]
     assert head[0] == script.HEADER_FIRST_LINE
-    assert head[1] == "# Source: docs/api/planted-api.yaml at platform commit c0ffee"
+    assert head[1] == (
+        f"# Source: docs/api/planted-api.yaml at platform commit {script.PLANTED_COMMIT}"
+    )
     assert head[2] == f"# Source sha256: {digest}"
 
 
 def test_an_empty_source_directory_is_an_error(tmp_path: Path, script: ModuleType) -> None:
     empty = tmp_path / "empty"
     empty.mkdir()
-    assert script.main([str(empty), str(tmp_path / "out"), "--source-commit", "c0ffee"]) == 1
+    assert (
+        script.main([str(empty), str(tmp_path / "out"), "--source-commit", script.PLANTED_COMMIT])
+        == 1
+    )
 
 
 def test_a_merge_key_under_schemas_is_refused(script: ModuleType) -> None:
@@ -119,3 +125,61 @@ def test_a_derived_form_addition_passes_the_check_so_the_pin_guard_must_catch_it
     first = sorted(copy.glob("*.yaml"))[0]
     first.write_text(first.read_text(encoding="utf-8") + '    "HandAdded": {}\n', encoding="utf-8")
     assert script.check_snapshot(copy) == []
+
+
+def test_the_committed_snapshot_names_the_commit_the_baseline_is_pinned_to(
+    script: ModuleType,
+) -> None:
+    # A baseline pinned to any other commit, such as this repository's own
+    # HEAD, would name a spec the contract never read.
+    baseline = json.loads(
+        (REPO_ROOT / "tests" / "fixtures" / "wire_shape_baseline.json").read_text(encoding="utf-8")
+    )
+    assert script.snapshot_commit(FIXTURE_DIR) == baseline["openapi_specs_sha"]
+
+
+def test_a_snapshot_whose_files_name_different_commits_is_refused(
+    tmp_path: Path, script: ModuleType
+) -> None:
+    snapshot = _copy_fixture(tmp_path)
+    commit = script.snapshot_commit(snapshot)
+    first = sorted(snapshot.glob("*.yaml"))[0]
+    first.write_text(
+        first.read_text(encoding="utf-8").replace(
+            f"platform commit {commit}", "platform commit " + "0" * 40
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="2 platform commits"):
+        script.snapshot_commit(snapshot)
+    assert any("2 platform commits" in problem for problem in script.check_snapshot(snapshot))
+
+
+def test_a_header_naming_another_file_is_refused(tmp_path: Path, script: ModuleType) -> None:
+    snapshot = _copy_fixture(tmp_path)
+    first = sorted(snapshot.glob("*.yaml"))[0]
+    first.rename(snapshot / "renamed-api.yaml")
+    with pytest.raises(ValueError, match=r"renamed-api\.yaml: the header does not name"):
+        script.snapshot_commit(snapshot)
+    assert script.check_snapshot(snapshot) != []
+
+
+def test_a_plain_specs_directory_names_no_commit(tmp_path: Path, script: ModuleType) -> None:
+    assert script.snapshot_commit(_plant(tmp_path, script)) is None
+
+
+def test_an_abbreviated_commit_is_refused_when_deriving_and_when_reading(
+    tmp_path: Path, script: ModuleType
+) -> None:
+    src = _plant(tmp_path, script)
+    out = tmp_path / "out"
+    assert script.main([str(src), str(out), "--source-commit", script.PLANTED_COMMIT[:7]]) == 1
+    assert not out.exists()
+    snapshot = _copy_fixture(tmp_path)
+    commit = script.snapshot_commit(snapshot)
+    for path in snapshot.glob("*.yaml"):
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(commit, commit[:9]), encoding="utf-8"
+        )
+    with pytest.raises(ValueError, match="the header does not name"):
+        script.snapshot_commit(snapshot)

@@ -78,14 +78,11 @@ matches an OpenAPI schema in the platform specs, a CI job diffs the
 fields against the spec and fails the PR on drift. This is enforced by
 `tests/test_wire_shape.py` (opt-in via the `wire_shape` marker).
 
-Run locally:
+Run locally against the committed spec snapshot, `tests/fixtures/openapi`
+(its README says where it comes from):
 
 ```bash
-# Clone the community mirror — the specs live in docs/api/
-git clone https://github.com/getaxonflow/axonflow.git ../axonflow
-
-# Point the test at the specs dir and run just the wire-shape tests
-AXONFLOW_OPENAPI_SPECS_DIR=../axonflow/docs/api \
+AXONFLOW_OPENAPI_SPECS_DIR=tests/fixtures/openapi \
   pytest tests/test_wire_shape.py -m wire_shape -v
 ```
 
@@ -97,9 +94,8 @@ drift entry was burned down, or a new acknowledged divergence was
 added), regenerate it with:
 
 ```bash
-# Pinning the SHA picks up the current HEAD of the community mirror.
-# Alternately pass --sha <commit-sha> to pin explicitly.
-python scripts/refresh_wire_shape_baseline.py ../axonflow/docs/api
+# The platform commit is read from the snapshot's own headers.
+python scripts/refresh_wire_shape_baseline.py tests/fixtures/openapi
 ```
 
 Never regenerate to silence a failure without understanding what drifted;
@@ -117,9 +113,10 @@ surfaces the bump for explicit review.
 
 Recommended flow:
 
-1. Open a dedicated PR that updates only `openapi_specs_sha` (and the
-   parts of the baseline that change as a consequence: drift entries,
-   cross-spec shapes).
+1. Open a dedicated PR that re-derives `tests/fixtures/openapi` at the
+   new platform commit (see its README) and regenerates the baseline.
+   That moves `openapi_specs_sha` and the parts of the baseline that
+   change as a consequence: drift entries, cross-spec shapes.
 2. Apply the `spec-pin-bump` label.
 3. Merge.
 4. Follow up with the SDK-side changes that the new spec enables.

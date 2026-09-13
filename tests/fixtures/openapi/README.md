@@ -46,14 +46,16 @@ and it should not also change SDK models. Do not edit the files by hand.
 To refresh the snapshot from a platform commit:
 
 ```
-python scripts/snapshot_openapi_schemas.py <path to docs/api> tests/fixtures/openapi --source-commit <commit>
-python scripts/refresh_wire_shape_baseline.py tests/fixtures/openapi --sha <commit>
+python scripts/snapshot_openapi_schemas.py <path to docs/api> tests/fixtures/openapi --source-commit <full 40-character commit>
+python scripts/refresh_wire_shape_baseline.py tests/fixtures/openapi
 ```
 
 `python scripts/snapshot_openapi_schemas.py --check-snapshot tests/fixtures/openapi` checks that
-every file carries the generated header and is exactly the script's derived form, which refuses
+every file carries the generated header, that all of them name one full platform commit, and that each
+is exactly the script's derived form, which refuses
 prose, types or a spec copied in verbatim. It cannot see a declaration added by hand in the derived
 form itself; the `spec-pin-bump` label that any change here requires is what makes that visible.
 
-Then update the table above. Always pass `--sha`: without it, the refresh script records this
-repository's own HEAD.
+Then update the table above. The refresh script reads the platform commit from the files' headers
+and refuses a `--sha` that disagrees with them. A test pins that commit to the baseline's
+`openapi_specs_sha`.

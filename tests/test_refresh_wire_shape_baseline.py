@@ -24,6 +24,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / "scripts" / "refresh_wire_shape_baseline.py"
 BASELINE_PATH = REPO_ROOT / "tests" / "fixtures" / "wire_shape_baseline.json"
+SNAPSHOT_DIR = REPO_ROOT / "tests" / "fixtures" / "openapi"
 
 
 def _load_script_module():
@@ -211,3 +212,27 @@ def test_committed_baseline_spec_bug_pending_count_under_limit():
         f"bar is <5. Current: {spec_bug}. Either fix the SDK to absorb the "
         "drift, escalate the spec PR to close the entry, or re-classify."
     )
+
+
+def test_the_commit_is_read_from_the_snapshot_headers(script_module):
+    """The snapshot lives inside this repository, so the commit must come from
+    its headers: a git checkout's HEAD there is the SDK's own commit."""
+    pinned = json.loads(BASELINE_PATH.read_text())["openapi_specs_sha"]
+    assert script_module.resolve_specs_sha(SNAPSHOT_DIR, None) == pinned
+    assert script_module.resolve_specs_sha(SNAPSHOT_DIR, pinned) == pinned
+
+
+def test_a_sha_that_contradicts_the_snapshot_is_refused_before_writing(tmp_path, script_module):
+    fake_baseline = tmp_path / "baseline.json"
+    rc = _run_regenerator(script_module, SNAPSHOT_DIR, fake_baseline, sha="0" * 40)
+    assert rc == 2
+    assert not fake_baseline.exists()
+
+
+def test_a_directory_that_is_not_a_snapshot_must_name_its_commit(tmp_path, script_module):
+    specs_dir = tmp_path / "docs" / "api"
+    specs_dir.mkdir(parents=True)
+    _write_minimal_specs(specs_dir)
+    with pytest.raises(ValueError, match="pass --sha"):
+        script_module.resolve_specs_sha(specs_dir, None)
+    assert script_module.resolve_specs_sha(specs_dir, "cccc1111") == "cccc1111"
