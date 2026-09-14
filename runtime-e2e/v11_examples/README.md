@@ -1,6 +1,6 @@
 # v11_examples
 
-Real-stack proof that the two v11 examples run as the README says. `run.sh` installs the SDK from this tree into a virtual environment in a temporary directory, and runs `examples/pep_handshake.py` and `examples/typed_policies.py` with that interpreter against a live Community agent, in the README's order: the handshake example first. Every run starts from the temporary directory, outside the tree, with no body file: `typed_policies.py` finds its default document from its own location. Nothing is mocked.
+Real-stack proof that the two v11 examples run as the README says. `run.sh` copies the package sources to a temporary directory, installs the SDK from there into a virtual environment (so nothing is built inside the tree), checks that the examples' interpreter imports it from that environment, and runs `examples/pep_handshake.py` and `examples/typed_policies.py` with that interpreter against a live Community agent, in the README's order: the handshake example first. Every run starts from the temporary directory, outside the tree, with no body file and no `PYTHONPATH`: `typed_policies.py` finds its default document from its own location. Telemetry is off. Nothing is mocked.
 
 ## Precondition
 
@@ -25,7 +25,7 @@ Run 5 is refused because activation promotes. An artifact's digest covers its pu
 
 After a document with an organization-scope constraint is activated, a decide that does not supply the attribute the constraint conditions on is denied fail-closed with reasons ["unknown_constraint"]; supply the attribute or run this example on a fresh stack. From v11.0.0 the deny's first reason is that code, followed by one naming each constraint it could not evaluate and the attribute it needed (getaxonflow/axonflow-enterprise#4247). The example's default document is such a document, so the sixth run shows that deny. It is the platform's by-design answer, not the SDK's, so this leg prints it rather than pinning it. It is why the README runs the handshake example first.
 
-A stack built before #4247 shows only the bare `["unknown_constraint"]`.
+A stack built before getaxonflow/axonflow-enterprise#4247 shows only the bare `["unknown_constraint"]`.
 
 ## What it does not prove
 

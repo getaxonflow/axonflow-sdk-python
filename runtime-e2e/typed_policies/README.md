@@ -7,7 +7,7 @@
 | Call | Expected answer |
 |---|---|
 | `active()` before anything is activated | `None`, from the platform's `404` whose reason is `nothing_active` |
-| `edition()` | the deployment's root and construct boundary; its vocabulary named by `catalog_digest`, and `catalog_fixture` false |
+| `edition()` | the deployment's root and construct boundary; its vocabulary named by `catalog_digest` and a `registry_version`, and `catalog_fixture` false |
 | `system()` | the shipped system corpus: its digest and controls, with at least one control named and one mandatory, and every `mandatory` a `bool` |
 | `validate(document, fixtures)` | success, with no rejecting finding |
 | `publish(document, fixtures)` | a signed artifact's digest, and `template_omissions` naming every organization template control the document omits (`len(omitted) == of > 0`) |

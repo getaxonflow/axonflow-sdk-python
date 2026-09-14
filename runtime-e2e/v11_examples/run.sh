@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Runtime proof: examples/pep_handshake.py and examples/typed_policies.py,
 # against the SDK built from this tree, on a LIVE Community agent, in the order
-# the README gives: the handshake example first. NO mocks. The SDK is installed
-# from this tree into a virtual environment in a temporary directory, and every
-# example runs with that interpreter from the temporary directory, outside the
-# tree, with no body file: typed_policies finds its default document from its
-# own location.
+# the README gives: the handshake example first. NO mocks. The package sources
+# are copied to a temporary directory, so nothing is built inside the tree, and
+# installed from there into a virtual environment; every example runs with that
+# interpreter from the temporary directory, outside the tree, with no body file
+# and no PYTHONPATH: typed_policies finds its default document from its own
+# location.
 #
 # Precondition, checked with curl rather than the SDK: no typed document is
 # active (GET /api/v1/typed-policies/active answers 404 nothing_active).
@@ -55,7 +56,7 @@ PYTHON="${PYTHON:-python3}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ENDPOINT="${AXONFLOW_AGENT_URL:-http://localhost:8080}"
 unset AXONFLOW_CLIENT_ID AXONFLOW_CLIENT_SECRET
-export AXONFLOW_AGENT_URL="$ENDPOINT"
+export AXONFLOW_AGENT_URL="$ENDPOINT" AXONFLOW_TELEMETRY=off
 
 if ! timeout 60 bash -c "until curl -sf --max-time 5 ${ENDPOINT}/health > /dev/null; do sleep 2; done"; then
   echo "FAIL: agent at ${ENDPOINT} did not become healthy within 60s"
@@ -65,12 +66,24 @@ fi
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/v11-examples.XXXXXX")"
 trap 'rm -rf "$OUT"' EXIT
 # The SDK is built and installed first, outside the timeouts, so a cold install
-# does not count against a run.
-"$PYTHON" -m venv "$OUT/venv" && "$OUT/venv/bin/python" -m pip install --quiet --disable-pip-version-check "$ROOT" || {
-  echo "FAIL: the SDK did not install from this tree"
+# does not count against a run. It is built from a copy of the package sources,
+# so no build directory is left in the tree and nothing an earlier build left
+# there can ship in what this leg tests.
+mkdir "$OUT/src" && cp -R "$ROOT/pyproject.toml" "$ROOT/README.md" "$ROOT/LICENSE" "$ROOT/axonflow" "$OUT/src/" &&
+  "$PYTHON" -m venv "$OUT/venv" &&
+  "$OUT/venv/bin/python" -m pip install --quiet --disable-pip-version-check "$OUT/src" || {
+  echo "FAIL: the SDK did not install from this tree's sources"
   exit 1
 }
-echo "installed: $("$OUT/venv/bin/python" -c 'import axonflow, os; print(os.path.dirname(axonflow.__file__))')"
+# Where the examples' interpreter imports the SDK from, asked the way the
+# examples run: from $OUT, with no PYTHONPATH. It must be the virtual environment.
+# Compared as real paths: on macOS the default TMPDIR is behind a symlink.
+installed=$(cd "$OUT" && env -u PYTHONPATH "$OUT/venv/bin/python" -c 'import axonflow, os; print(os.path.realpath(os.path.dirname(axonflow.__file__)))')
+echo "installed: $installed"
+case "$installed" in
+  "$(cd "$OUT" && pwd -P)/venv/"*) ;;
+  *) echo "FAIL: the examples would import the SDK from $installed, not the virtual environment"; exit 1 ;;
+esac
 
 echo "=== precondition: no typed document is active"
 code=$(curl -s --max-time 10 -o "$OUT/active.json" -w '%{http_code}' "${ENDPOINT}/api/v1/typed-policies/active")
@@ -90,7 +103,7 @@ check() {
 run_example() {
   local example=$1 log=$2
   shift 2
-  (cd "$OUT" && env "$@" timeout 120 "$OUT/venv/bin/python" "$ROOT/examples/$example.py") > "$log" 2>&1
+  (cd "$OUT" && env -u PYTHONPATH "$@" timeout 120 "$OUT/venv/bin/python" "$ROOT/examples/$example.py") > "$log" 2>&1
   local rc=$?
   sed 's/^/  | /' "$log"
   return "$rc"

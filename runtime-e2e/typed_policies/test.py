@@ -90,6 +90,10 @@ async def run(client: AxonFlow) -> None:
     )
     check(bool(edition.catalog_digest), "edition() names its vocabulary by digest")
     check(
+        edition.registry_version is not None and edition.registry_version > 0,
+        "edition() names the version of its action registry",
+    )
+    check(
         edition.catalog_fixture is False,
         "the deployment's vocabulary is not a test-world fixture, so a document can activate",
     )

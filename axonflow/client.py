@@ -350,7 +350,11 @@ def _legacy_policy_write_frozen(response: httpx.Response) -> LegacyPolicyWriteFr
 
 
 def _route_with_id(template: str, path_id: str) -> str:
-    """Fill the ``{id}`` in a route template with ``path_id``, sent as given."""
+    """Fill the ``{id}`` in a route template with ``path_id``.
+
+    The id is sent as given, not percent-encoded, as it was before the path was
+    built from a template (getaxonflow/axonflow-sdk-python#263).
+    """
     return template.replace("{id}", path_id, 1)
 
 
