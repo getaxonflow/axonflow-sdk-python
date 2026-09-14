@@ -6,13 +6,13 @@
 
 | Call | Expected answer |
 |---|---|
-| `active()` before anything is activated | `None`, from the platform's `404 nothing_active` |
-| `edition()` | the deployment's root and construct boundary |
-| `system()` | the shipped system corpus: its digest and controls |
+| `active()` before anything is activated | `None`, from the platform's `404` whose reason is `nothing_active` |
+| `edition()` | the deployment's root and construct boundary; its vocabulary named by `catalog_digest`, and `catalog_fixture` false |
+| `system()` | the shipped system corpus: its digest and controls, with at least one control named and one mandatory, and every `mandatory` a `bool` |
 | `validate(document, fixtures)` | success, with no rejecting finding |
-| `publish(document, fixtures)` | a signed artifact's digest |
-| `activate(digest)` | success: the digest is promoted to active |
-| `active()` after the activation | the document just activated, as the exact signed source; its author is the caller the agent resolved, not the `someone-else` the document names |
+| `publish(document, fixtures)` | a signed artifact's digest, and `template_omissions` naming every organization template control the document omits (`len(omitted) == of > 0`) |
+| `activate(digest)` | success: the digest is promoted to active, with the same `template_omissions` as the publication |
+| `active()` after the activation | the document just activated, as the exact signed source; its author is the caller the agent resolved, not the `someone-else` the document names (on Community: `Client` / `axonflow-api-credential` / the client id) |
 | `activate(digest)` again | `TypedPolicyRefusal` with status 409 and reason `activation_refused`: activation promotes, and the version does not advance |
 | `publish(document, [])` | `TypedPolicyRefusal` with status 422 and reason `publication_refused`, whose message names the missing fixtures |
 | `validate()` on the document with one action changed to `tool.not_registered` | `success` false, with the platform's rejecting finding `ACTION_NOT_REGISTERED` on `grant.refund` |
@@ -23,6 +23,8 @@ The document is `tests/fixtures/typed_policy_publish_body.json`, the body the pl
 ## What it does not prove
 
 Rolling back to an earlier document and withdrawing the active one are customer portal operations that the agent does not proxy, so the SDK has no method for either and this driver does not exercise them. The separation-of-duties refusal (`APPROVER_IS_AUTHOR`) needs an edition with separation of duties; the unit tests in `tests/test_typed_policies.py` assert its shape, and the platform's suites own the rule.
+
+Two members are covered by unit tests only. `TypedPolicyRefusal.policy`, the policy a tier refusal names, needs a deployment at its tier ceiling. `template_omissions_unavailable`, the reason the platform could not produce the omission report, needs a document store that cannot be read. This driver sets up neither.
 
 ## Running it
 

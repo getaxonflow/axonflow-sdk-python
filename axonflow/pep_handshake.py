@@ -8,12 +8,19 @@ base64url encoding of a JSON document::
     {"profile_version": 1, "pep_id": "...", "audience": "...",
      "capabilities": [{"type": "field_redact", "version": 1}]}
 
-On an Enterprise deployment, an allow verdict carrying a mandatory obligation
-the declared set cannot discharge becomes a deny, so the enforcement point is
-never handed an instruction it would drop. A Community deployment records the
-declaration and does not deny on it. A capability in a family the deployment's
-edition does not issue is dropped from the declaration, counted and logged; the
-request proceeds.
+From platform v11.0.0, on every edition, the engine refuses with
+``unsupported_obligation`` a mandatory obligation the caller's declaration
+cannot discharge, and a caller that presents no declaration can discharge none:
+``decide`` under an organization's redact override refuses a caller that does
+not declare redaction (``field_redact`` at version 1). What only Enterprise
+adds happens at the handler, for an enforcement point that presented a
+declaration: an allow carrying a mandatory obligation outside the declared set
+becomes a deny, so the enforcement point is never handed an instruction it
+would drop; a refusal names the capability the declaration lacks; and on the
+MCP check-input round-trip, a redaction the declaration cannot discharge is
+refused rather than handed back masked. A capability in a family the
+deployment's edition does not issue is dropped from the declaration, counted
+and logged; the request proceeds.
 
 WHERE IT IS SENT. Four request planes read the header: ``decide``
 (``/api/v1/decide``), the AuthZEN evaluation route (``evaluate`` and

@@ -349,8 +349,17 @@ def _legacy_policy_write_frozen(response: httpx.Response) -> LegacyPolicyWriteFr
     return LegacyPolicyWriteFrozenError(str(err.get("message", "legacy policy write frozen")))
 
 
+def _route_with_id(template: str, path_id: str) -> str:
+    """Fill the ``{id}`` in a route template with ``path_id``, sent as given."""
+    return template.replace("{id}", path_id, 1)
+
+
 def _warn_if_route_deprecated(
-    response: httpx.Response, method: str, path: str, reported: set[str]
+    response: httpx.Response,
+    method: str,
+    path: str,
+    reported: set[str],
+    route_template: str | None = None,
 ) -> None:
     """Warn when the platform stamps the route a call used as deprecated.
 
@@ -361,14 +370,17 @@ def _warn_if_route_deprecated(
     the tag as well as after it.
 
     Each route is reported once per client. ``reported`` is the client's memory
-    of the routes it has reported, keyed by method and path without the query
-    string, as the TypeScript and Go SDKs key theirs.
+    of the routes it has reported, keyed by method and route: for a call whose
+    path carries an id, the route template it was built from
+    (``GET /api/v1/static-policies/{id}``), so a stamped route is reported once,
+    not once per id; otherwise the path without the query string.
     """
     deprecation = response.headers.get("Deprecation")
     removed_in = response.headers.get("X-AxonFlow-Removed-In")
     if deprecation is None and removed_in is None:
         return
-    route = f"{method} {path.split('?', 1)[0]}"
+    key = route_template if route_template is not None else path.split("?", 1)[0]
+    route = f"{method} {key}"
     if route in reported:
         return
     reported.add(route)
@@ -1075,8 +1087,12 @@ class AxonFlow:
         *,
         json_data: dict[str, Any] | None = None,
         extra_headers: dict[str, str] | None = None,
+        path_id: str | None = None,
     ) -> dict[str, Any]:
         """Make HTTP request to Agent.
+
+        When ``path_id`` is given, ``path`` is a route template and its ``{id}``
+        is filled with it, so the route-deprecation record keys on the template.
 
         ``extra_headers`` are merged into THIS request only. They never reach
         the client's default header set, so a header supplied for one call
@@ -1084,8 +1100,13 @@ class AxonFlow:
         per-call declaration safe to vary (see the governed methods' own
         ``extra_headers`` documentation).
         """
+        route_template = None
+        if path_id is not None:
+            route_template, path = path, _route_with_id(path, path_id)
         response = await self._send_raw(method, path, json_data=json_data, headers=extra_headers)
-        _warn_if_route_deprecated(response, method, path, self._reported_deprecated_routes)
+        _warn_if_route_deprecated(
+            response, method, path, self._reported_deprecated_routes, route_template
+        )
 
         try:
             response.raise_for_status()
@@ -2923,8 +2944,11 @@ class AxonFlow:
         v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
         ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
         every response, and this client reports the route once through
-        :class:`PlatformRouteDeprecationWarning`. Its successor is the typed simulate on
-        ``/api/v1/typed-policies``, which ships with the v11 series.
+        :class:`PlatformRouteDeprecationWarning`. It keeps answering until v11.1; on a
+        v11.0.0 platform its result comes from the legacy engine, which no longer
+        decides, so it does not predict what the platform enforces. Policy is
+        authored and tested through the typed policy methods (see
+        ``client.typed_policies.validate``).
 
         Runs the full policy evaluation pipeline without actually blocking
         or auditing the request. Useful for testing policy configurations
@@ -2985,8 +3009,11 @@ class AxonFlow:
         v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
         ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
         every response, and this client reports the route once through
-        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
-        the typed policy methods (see ``client.typed_policies.validate``).
+        :class:`PlatformRouteDeprecationWarning`. It keeps answering until v11.1; on a
+        v11.0.0 platform its result comes from the legacy engine, which no longer
+        decides, so it does not predict what the platform enforces. Policy is
+        authored and tested through the typed policy methods (see
+        ``client.typed_policies.validate``).
 
         Generates an impact report showing how a specific policy would
         affect a set of sample inputs. Useful for understanding the
@@ -3045,8 +3072,11 @@ class AxonFlow:
         v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
         ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
         every response, and this client reports the route once through
-        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
-        the typed policy methods (see ``client.typed_policies.validate``).
+        :class:`PlatformRouteDeprecationWarning`. It keeps answering until v11.1; on a
+        v11.0.0 platform its result comes from the legacy engine, which no longer
+        decides, so it does not predict what the platform enforces. Policy is
+        authored and tested through the typed policy methods (see
+        ``client.typed_policies.validate``).
 
         Analyzes active policies for conflicts such as overlapping
         conditions with contradictory actions. Optionally scoped to
@@ -3883,7 +3913,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting static policy", policy_id=policy_id)
 
-        response = await self._request("GET", f"/api/v1/static-policies/{policy_id}")
+        response = await self._request("GET", "/api/v1/static-policies/{id}", path_id=policy_id)
         return StaticPolicy.model_validate(response)
 
     async def create_static_policy(
@@ -3937,7 +3967,8 @@ class AxonFlow:
 
         response = await self._request(
             "PUT",
-            f"/api/v1/static-policies/{policy_id}",
+            "/api/v1/static-policies/{id}",
+            path_id=policy_id,
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         return StaticPolicy.model_validate(response)
@@ -3951,7 +3982,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Deleting static policy", policy_id=policy_id)
 
-        await self._request("DELETE", f"/api/v1/static-policies/{policy_id}")
+        await self._request("DELETE", "/api/v1/static-policies/{id}", path_id=policy_id)
 
     async def toggle_static_policy(
         self,
@@ -3972,7 +4003,8 @@ class AxonFlow:
 
         response = await self._request(
             "PATCH",
-            f"/api/v1/static-policies/{policy_id}",
+            "/api/v1/static-policies/{id}",
+            path_id=policy_id,
             json_data={"enabled": enabled},
         )
         return StaticPolicy.model_validate(response)
@@ -4061,7 +4093,8 @@ class AxonFlow:
 
         response = await self._request(
             "GET",
-            f"/api/v1/static-policies/{policy_id}/versions",
+            "/api/v1/static-policies/{id}/versions",
+            path_id=policy_id,
         )
         versions = response.get("versions", [])
         return [PolicyVersion.model_validate(v) for v in versions]
@@ -4106,7 +4139,8 @@ class AxonFlow:
 
         response = await self._request(
             "POST",
-            f"/api/v1/static-policies/{policy_id}/override",
+            "/api/v1/static-policies/{id}/override",
+            path_id=policy_id,
             json_data=request.model_dump(mode="json", exclude_none=True, by_alias=True),
         )
         return PolicyOverride.model_validate(response)
@@ -4124,7 +4158,7 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Deleting policy override", policy_id=policy_id)
 
-        await self._request("DELETE", f"/api/v1/static-policies/{policy_id}/override")
+        await self._request("DELETE", "/api/v1/static-policies/{id}/override", path_id=policy_id)
 
     async def list_policy_overrides(self) -> list[PolicyOverride]:
         """List all active policy overrides (Enterprise).
@@ -4209,7 +4243,9 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Getting dynamic policy", policy_id=policy_id)
 
-        response = await self._orchestrator_request("GET", f"/api/v1/dynamic-policies/{policy_id}")
+        response = await self._orchestrator_request(
+            "GET", "/api/v1/dynamic-policies/{id}", path_id=policy_id
+        )
         # Response may be wrapped in {"policy": {...}}
         policy_data = response.get("policy", response) if isinstance(response, dict) else response
         return DynamicPolicy.model_validate(policy_data)
@@ -4257,7 +4293,8 @@ class AxonFlow:
 
         response = await self._orchestrator_request(
             "PUT",
-            f"/api/v1/dynamic-policies/{policy_id}",
+            "/api/v1/dynamic-policies/{id}",
+            path_id=policy_id,
             json_data=request.model_dump(exclude_none=True, by_alias=True),
         )
         # Response may be wrapped in {"policy": {...}}
@@ -4273,7 +4310,9 @@ class AxonFlow:
         if self._config.debug:
             self._logger.debug("Deleting dynamic policy", policy_id=policy_id)
 
-        await self._orchestrator_request("DELETE", f"/api/v1/dynamic-policies/{policy_id}")
+        await self._orchestrator_request(
+            "DELETE", "/api/v1/dynamic-policies/{id}", path_id=policy_id
+        )
 
     async def toggle_dynamic_policy(
         self,
@@ -4294,7 +4333,8 @@ class AxonFlow:
 
         response = await self._orchestrator_request(
             "PUT",
-            f"/api/v1/dynamic-policies/{policy_id}",
+            "/api/v1/dynamic-policies/{id}",
+            path_id=policy_id,
             json_data={"enabled": enabled},
         )
         # Response may be wrapped in {"policy": {...}}
@@ -4878,8 +4918,12 @@ class AxonFlow:
         scoped_resource: str | None = None,
         scoped_identifier: str | None = None,
         scoped_page_key: str | None = None,
+        path_id: str | None = None,
     ) -> dict[str, Any] | list[Any] | None:
         """Make HTTP request to Orchestrator.
+
+        ``path_id`` fills the ``{id}`` in ``path``, a route template, as on
+        :meth:`_request`.
 
         ``scoped_resource``/``scoped_identifier`` opt a route into the
         read-scope diagnosis: a 404 on a role-scoped read is re-raised as
@@ -4895,12 +4939,17 @@ class AxonFlow:
         would end up holding on whichever branch the server happened to take.
         """
         self._pre_request_hook()
+        route_template = None
+        if path_id is not None:
+            route_template, path = path, _route_with_id(path, path_id)
         base_url = self._config.endpoint
         url = f"{base_url}{path}"
 
         try:
             response = await self._http_client.request(method, url, json=json_data)
-            _warn_if_route_deprecated(response, method, path, self._reported_deprecated_routes)
+            _warn_if_route_deprecated(
+                response, method, path, self._reported_deprecated_routes, route_template
+            )
             response.raise_for_status()
             if response.status_code == 204:  # noqa: PLR2004
                 return None
@@ -8770,8 +8819,11 @@ class SyncAxonFlow:
         v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
         ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
         every response, and this client reports the route once through
-        :class:`PlatformRouteDeprecationWarning`. Its successor is the typed simulate on
-        ``/api/v1/typed-policies``, which ships with the v11 series.
+        :class:`PlatformRouteDeprecationWarning`. It keeps answering until v11.1; on a
+        v11.0.0 platform its result comes from the legacy engine, which no longer
+        decides, so it does not predict what the platform enforces. Policy is
+        authored and tested through the typed policy methods (see
+        ``client.typed_policies.validate``).
         """
         return self._run_sync(
             self._async_client.simulate_policies(
@@ -8794,8 +8846,11 @@ class SyncAxonFlow:
         v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
         ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
         every response, and this client reports the route once through
-        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
-        the typed policy methods (see ``client.typed_policies.validate``).
+        :class:`PlatformRouteDeprecationWarning`. It keeps answering until v11.1; on a
+        v11.0.0 platform its result comes from the legacy engine, which no longer
+        decides, so it does not predict what the platform enforces. Policy is
+        authored and tested through the typed policy methods (see
+        ``client.typed_policies.validate``).
         """
         return self._run_sync(self._async_client.get_policy_impact_report(policy_id, inputs))
 
@@ -8809,8 +8864,11 @@ class SyncAxonFlow:
         v11.0.0 and removes it in v11.1. It stamps ``Deprecation``,
         ``X-AxonFlow-Removed-In: v11.1`` and a ``Link`` to ``/api/v1/typed-policies`` on
         every response, and this client reports the route once through
-        :class:`PlatformRouteDeprecationWarning`. Policy is authored and tested through
-        the typed policy methods (see ``client.typed_policies.validate``).
+        :class:`PlatformRouteDeprecationWarning`. It keeps answering until v11.1; on a
+        v11.0.0 platform its result comes from the legacy engine, which no longer
+        decides, so it does not predict what the platform enforces. Policy is
+        authored and tested through the typed policy methods (see
+        ``client.typed_policies.validate``).
         """
         return self._run_sync(self._async_client.detect_policy_conflicts(policy_id=policy_id))
 

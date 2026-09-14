@@ -3,14 +3,19 @@
 Drives ``client.typed_policies`` against a real agent and orchestrator and
 asserts, on a fresh stack:
 
-1. Nothing is active yet: ``active()`` answers ``None`` from the platform's 404.
-2. ``edition()`` reports the deployment's boundary, and ``system()`` the shipped
-   controls with their digest.
+1. Nothing is active yet: ``active()`` answers ``None`` from the platform's 404
+   whose reason is ``nothing_active``, the reason it keys on.
+2. ``edition()`` reports the deployment's boundary and names its vocabulary by
+   digest (not a test-world fixture), and ``system()`` the shipped controls with
+   their digest, names and mandatory flags.
 3. The document the platform's own route test proves publishable validates
-   clean, publishes to a digest, and activates.
+   clean, publishes to a digest, and activates. The publication reports every
+   organization template control the document omits, and the activation
+   reports the same.
 4. ``active()`` returns that document as the exact signed source, with the
    AUTHOR overwritten by the platform: the document deliberately names
-   ``someone-else``, and the platform signs the caller the agent resolved.
+   ``someone-else``, and on Community the platform signs the Client principal of
+   the presented credentials.
 5. Activating the same digest again is refused as a typed 409
    (``activation_refused``): activation promotes, and the version does not
    advance.
@@ -79,12 +84,30 @@ async def run(client: AxonFlow) -> None:
     )
     check(edition.success and edition.root == "organization", "edition() reports the root")
     check(edition.constructs is not None, "edition() reports the construct boundary")
+    print(
+        f"  vocabulary: catalog_digest={edition.catalog_digest} "
+        f"registry_version={edition.registry_version} catalog_fixture={edition.catalog_fixture}"
+    )
+    check(bool(edition.catalog_digest), "edition() names its vocabulary by digest")
+    check(
+        edition.catalog_fixture is False,
+        "the deployment's vocabulary is not a test-world fixture, so a document can activate",
+    )
     system = await typed.system()
     print(
         f"  system: root={system.root} version={system.version} digest={system.digest} "
         f"controls={len(system.controls)} assurance_counts={system.assurance_counts}"
     )
     check(bool(system.digest) and len(system.controls) > 0, "system() returns the shipped corpus")
+    named = sum(1 for c in system.controls if c.name)
+    mandatory = sum(1 for c in system.controls if c.mandatory)
+    print(f"  system controls: {named} named, {mandatory} mandatory, of {len(system.controls)}")
+    check(named > 0, "system() reads each control's name")
+    check(mandatory > 0, "system() reads which controls are mandatory")
+    check(
+        all(isinstance(c.mandatory, bool) for c in system.controls),
+        "every control's mandatory flag is a bool",
+    )
 
     print("== validate, publish, activate")
     validation = await typed.validate(document, fixtures)
@@ -95,9 +118,27 @@ async def run(client: AxonFlow) -> None:
     published = await typed.publish(document, fixtures)
     print(f"  publish: digest={published.digest} version={published.version}")
     check(bool(published.digest), "publish() returns the artifact digest")
+    report = published.template_omissions
+    if report is not None:
+        print(
+            f"  template omissions: {len(report.omitted)} of {report.of}: {', '.join(report.omitted)}"
+        )
+    else:
+        print(
+            f"  template omissions: none (unavailable={published.template_omissions_unavailable!r})"
+        )
+    # The document names none of the template's controls, so it omits every one.
+    check(
+        report is not None and (report.of or 0) > 0 and len(report.omitted) == report.of,
+        "the publication reports every organization template control the document omits",
+    )
     activation = await typed.activate(published.digest, reason="sdk-python runtime proof")
     print(f"  activate: success={activation.success} activation={activation.activation}")
     check(activation.success, "activate() promotes the digest")
+    check(
+        activation.template_omissions == published.template_omissions,
+        "the activation reports the same omissions as the publication",
+    )
 
     print("== the document in force")
     active = await typed.active()
@@ -111,8 +152,18 @@ async def run(client: AxonFlow) -> None:
             json.loads(active.source) == active.document,
             "active().source is the signed source the document parses from",
         )
+        # The author is the caller the agent stamped, never the name the request
+        # carried. On Community that caller is the API client: a Client principal
+        # in the api-credential realm, named by the client id this proof presents.
+        stamped = bool(author.get("type")) and bool(author.get("local"))
+        if edition.constructs is not None and edition.constructs.edition == "community":
+            stamped = (
+                author.get("type") == "Client"
+                and author.get("qualifier") == "axonflow-api-credential"
+                and author.get("local") == CLIENT_ID
+            )
         check(
-            author.get("local") != "someone-else",
+            stamped and author.get("local") != "someone-else",
             "the platform signed the caller as author, not the name in the request",
         )
 

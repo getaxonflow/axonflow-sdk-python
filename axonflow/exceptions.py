@@ -298,10 +298,11 @@ class TypedPolicyRefusal(AxonFlowError):
 
     ``status`` is the HTTP status and ``reason`` the platform's reason, for
     example ``publication_refused`` (422), ``activation_refused`` (409),
-    ``tier_limit`` (402, with ``code`` naming the limit) or ``artifact_cap``
-    (429). ``findings`` holds the declared findings a refused publication or
-    document carries, and ``retry_after`` the seconds from ``Retry-After`` when
-    the refusal is retryable. ``message`` is the platform's own explanation.
+    ``tier_limit`` (402, with ``code`` naming the limit and ``policy`` the
+    policy that crossed it) or ``artifact_cap`` (429). ``findings`` holds the
+    declared findings a refused publication or document carries, and
+    ``retry_after`` the seconds from ``Retry-After`` when the refusal is
+    retryable. ``message`` is the platform's own explanation.
     """
 
     def __init__(
@@ -311,13 +312,18 @@ class TypedPolicyRefusal(AxonFlowError):
         status: int,
         reason: str | None = None,
         code: str | None = None,
+        policy: str | None = None,
         findings: list[Any] | None = None,
         retry_after: int | None = None,
     ) -> None:
-        super().__init__(message, details={"status": status, "reason": reason, "code": code})
+        super().__init__(
+            message,
+            details={"status": status, "reason": reason, "code": code, "policy": policy},
+        )
         self.status = status
         self.reason = reason
         self.code = code
+        self.policy = policy
         self.findings = findings or []
         self.retry_after = retry_after
 

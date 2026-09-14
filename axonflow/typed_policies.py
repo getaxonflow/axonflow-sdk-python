@@ -14,7 +14,8 @@ client's credentials. Reach them as ``client.typed_policies``:
   fixtures, signs, and pins the artifact by its digest.
 - ``activate(digest)``: promotes a published digest to active.
 - ``active()``: the document in force, as the exact bytes that were signed, or
-  ``None`` when nothing is active.
+  ``None`` when the platform answers that nothing is active (a ``404`` whose
+  reason is ``nothing_active``).
 - ``system()``: the platform's own controls, read-only.
 
 The organization and the author are the ones this client's credentials resolve
@@ -24,6 +25,11 @@ Activation PROMOTES: a digest whose version does not advance past the active one
 is refused. Rolling back to an earlier document and withdrawing the active one
 are operations of the customer portal, behind its session; the agent does not
 proxy them, so this module has no method for either.
+
+Activation also REPLACES the organization template: activating a document that
+omits the template's controls removes those controls for the organization.
+``publish()`` and ``activate()`` report which ones a document omits as
+``template_omissions``.
 
 On an edition with separation of duties, ``publish`` refuses every publication
 with the finding code ``APPROVER_IS_AUTHOR``: publishing through this route names
@@ -50,6 +56,7 @@ __all__ = [
     "AuthoringFinding",
     "EditionConstructReport",
     "SyncTypedPoliciesNamespace",
+    "TemplateOmissionReport",
     "TypedAuthoringDocumentRequest",
     "TypedAuthoringEdition",
     "TypedPoliciesNamespace",
@@ -70,6 +77,7 @@ RawSend = Callable[..., Awaitable[httpx.Response]]
 # collection the platform declares without omitempty reads null as empty.
 _NULL_AS_EMPTY_LIST = BeforeValidator(lambda v: [] if v is None else v)
 _NULL_AS_EMPTY_DICT = BeforeValidator(lambda v: {} if v is None else v)
+_NULL_AS_FALSE = BeforeValidator(lambda v: False if v is None else v)
 
 
 class EditionConstructReport(BaseModel):
@@ -111,6 +119,16 @@ class TypedAuthoringEdition(BaseModel):
 
     success: bool = False
     catalog: str | None = Field(default=None, description="The configured authoring vocabulary.")
+    catalog_digest: str | None = Field(
+        default=None, description="The digest that names the authoring vocabulary."
+    )
+    registry_version: int | None = Field(
+        default=None, description="The version of the action registry in that vocabulary."
+    )
+    catalog_fixture: bool | None = Field(
+        default=None,
+        description="True when the vocabulary is a test-world fixture, not a deployment's.",
+    )
     root: str | None = Field(
         default=None, description="The one authority root this surface publishes under."
     )
@@ -130,20 +148,48 @@ class TypedPolicyValidation(BaseModel):
     findings: Annotated[list[AuthoringFinding], _NULL_AS_EMPTY_LIST] = Field(default_factory=list)
 
 
+class TemplateOmissionReport(BaseModel):
+    """The organization template's controls a document omits.
+
+    Activating a document that omits them removes them for the organization.
+    ``of`` is how many controls the template carries, and ``omitted`` names each
+    one the document leaves out.
+    """
+
+    omitted: Annotated[list[str], _NULL_AS_EMPTY_LIST] = Field(default_factory=list)
+    of: int | None = None
+    message: str | None = None
+
+
 class TypedPolicyPublication(BaseModel):
-    """A published artifact. Activation names ``digest``, never the version."""
+    """A published artifact. Activation names ``digest``, never the version.
+
+    ``template_omissions`` reports the organization template's controls the
+    document omits, and is ``None`` when it omits none;
+    ``template_omissions_unavailable`` says why that report could not be
+    produced, when it could not.
+    """
 
     success: bool = False
     digest: str
     version: int | None = None
     findings: Annotated[list[AuthoringFinding], _NULL_AS_EMPTY_LIST] = Field(default_factory=list)
+    template_omissions: TemplateOmissionReport | None = None
+    template_omissions_unavailable: str | None = None
 
 
 class TypedPolicyActivation(BaseModel):
-    """The audited activation record."""
+    """The audited activation record.
+
+    ``template_omissions`` and ``template_omissions_unavailable`` are the report
+    for the activated document, as on :class:`TypedPolicyPublication`, beside
+    the record rather than inside it.
+    """
 
     success: bool = False
     activation: dict[str, Any] = Field(default_factory=dict)
+    template_omissions: TemplateOmissionReport | None = None
+    template_omissions_unavailable: str | None = None
 
 
 class ActiveTypedPolicy(BaseModel):
@@ -161,9 +207,12 @@ class TypedPolicySystemControl(BaseModel):
     """One shipped control, with what happens when it cannot be evaluated."""
 
     id: str
+    name: str | None = None
     authority: str | None = None
     assurance: str | None = Field(default=None, description="enforcement, gating_risk or advisory")
-    mandatory: bool | None = None
+    mandatory: Annotated[bool, _NULL_AS_FALSE] = Field(
+        default=False, description="False when the platform omits it."
+    )
     description: str | None = None
     obligations: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -182,6 +231,16 @@ class TypedPolicySystemCorpus(BaseModel):
     )
     assurance_counts: Annotated[dict[str, int], _NULL_AS_EMPTY_DICT] = Field(default_factory=dict)
     document: Annotated[dict[str, Any], _NULL_AS_EMPTY_DICT] = Field(default_factory=dict)
+
+
+def _reason(response: httpx.Response) -> str | None:
+    """The platform's ``reason`` in a JSON answer, or ``None``."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    reason = body.get("reason") if isinstance(body, dict) else None
+    return reason if isinstance(reason, str) else None
 
 
 def _raise_for_refusal(response: httpx.Response, route: str) -> None:
@@ -206,6 +265,7 @@ def _raise_for_refusal(response: httpx.Response, route: str) -> None:
         status=status,
         reason=body.get("reason"),
         code=body.get("code"),
+        policy=body.get("policy"),
         findings=[
             AuthoringFinding.model_validate(f)
             for f in (findings if isinstance(findings, list) else [])
@@ -293,9 +353,18 @@ class TypedPoliciesNamespace:
         return TypedPolicyActivation.model_validate(await self._json("POST", "/activate", payload))
 
     async def active(self) -> ActiveTypedPolicy | None:
-        """The document in force, as the exact bytes that were signed, or ``None`` if nothing is."""
+        """The document in force, as the exact bytes that were signed.
+
+        ``None`` only when the platform answers that nothing is active: a ``404``
+        whose reason is ``nothing_active``. Any other ``404``, from a platform
+        before v11.0.0 or an endpoint that is not an agent, raises
+        :class:`~axonflow.exceptions.TypedPolicyRefusal` with status 404. An SDK
+        release from before this change read any 404 as nothing active. The
+        platform currently also answers ``nothing_active`` when its document
+        store cannot be read (getaxonflow/axonflow-enterprise#4255).
+        """
         response = await self._send("GET", f"{TYPED_POLICIES_PATH}/active")
-        if response.status_code == 404:  # noqa: PLR2004
+        if response.status_code == 404 and _reason(response) == "nothing_active":  # noqa: PLR2004
             return None
         _raise_for_refusal(response, "/active")
         return ActiveTypedPolicy(source=response.content.decode("utf-8"), document=response.json())
@@ -339,7 +408,7 @@ class SyncTypedPoliciesNamespace:
         return self._run(self._namespace.activate(digest, reason=reason))  # type: ignore[no-any-return]
 
     def active(self) -> ActiveTypedPolicy | None:
-        """The document in force, or ``None`` if nothing is."""
+        """The document in force, or ``None`` when the platform answers ``nothing_active``."""
         return self._run(self._namespace.active())  # type: ignore[no-any-return]
 
     def system(self) -> TypedPolicySystemCorpus:

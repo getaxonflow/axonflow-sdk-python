@@ -2,11 +2,12 @@
 
 An enforcement point (a PEP) declares, on each governed call, the exact
 obligation types and schema versions it can discharge. The platform reads the
-declaration from v10.4.0. On an Enterprise deployment an allow carrying a
-mandatory obligation the declared set cannot discharge becomes a deny, so the
-enforcement point is never handed an instruction it would drop; from v11.0.0,
-an organization's redact override on ``decide`` refuses a caller that does not
-declare redaction.
+declaration from v10.4.0. From v11.0.0, on every edition, the engine refuses a
+mandatory obligation the declaration cannot discharge: an organization's redact
+override on ``decide`` refuses a caller that does not declare redaction. On an
+Enterprise deployment, in addition, an allow carrying a mandatory obligation
+outside the declared set becomes a deny, so the enforcement point is never
+handed an instruction it would drop.
 
 This example builds a declaration once for the client, overrides it for one
 call (one process can be two enforcement points), and shows that a declaration
@@ -15,7 +16,9 @@ the platform would refuse fails here, before anything is sent.
 After a document with an organization-scope constraint is activated, a decide
 that does not supply the attribute the constraint conditions on is denied
 fail-closed with reasons ["unknown_constraint"]; supply the attribute or run
-this example on a fresh stack.
+this example on a fresh stack. From v11.0.0 the deny's first reason is that
+code, followed by one naming each constraint it could not evaluate and the
+attribute it needed (getaxonflow/axonflow-enterprise#4247).
 
 Env vars:
 
