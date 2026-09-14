@@ -8,6 +8,7 @@ the platform's own types: tests/fixtures/typed_policy_publish_body.json.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -153,6 +154,147 @@ class TestTheOperations:
         assert await _client().typed_policies.active() is None
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("answer", "reason"),
+        [
+            ({"content": b"404 page not found"}, None),
+            (
+                {"json": {"success": False, "reason": "no_such_endpoint", "error": "no route"}},
+                "no_such_endpoint",
+            ),
+        ],
+        ids=["plain-text", "another-reason"],
+    )
+    async def test_a_404_that_is_not_nothing_active_is_a_typed_refusal(
+        self, httpx_mock, answer, reason
+    ):
+        # A platform before v11.0.0, or an endpoint that is not an agent, is not
+        # "nothing active".
+        httpx_mock.add_response(url=f"{ROUTE}/active", status_code=404, **answer)
+        with pytest.raises(TypedPolicyRefusal) as caught:
+            await _client().typed_policies.active()
+        assert (caught.value.status, caught.value.reason) == (404, reason)
+
+    @pytest.mark.asyncio
+    async def test_the_edition_names_its_vocabulary(self, httpx_mock):
+        httpx_mock.add_response(
+            url=f"{ROUTE}/edition",
+            json={
+                "success": True,
+                "catalog": "deployment",
+                "catalog_digest": "sha256:vocabulary",
+                "registry_version": 2,
+                "catalog_fixture": True,
+            },
+        )
+        edition = await _client().typed_policies.edition()
+        assert (edition.catalog_digest, edition.registry_version, edition.catalog_fixture) == (
+            "sha256:vocabulary",
+            2,
+            True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_publication_carries_the_template_omission_report(self, httpx_mock):
+        httpx_mock.add_response(
+            url=f"{ROUTE}/publish",
+            json={
+                "success": True,
+                "digest": DIGEST,
+                "version": 1,
+                "findings": [],
+                "template_omissions": {
+                    "omitted": ["sys_a", "sys_b"],
+                    "of": 22,
+                    "message": "omits 2 of 22",
+                },
+            },
+        )
+        published = await _client().typed_policies.publish(DOCUMENT, FIXTURES)
+        report = published.template_omissions
+        assert report is not None
+        assert (report.omitted, report.of, report.message) == (
+            ["sys_a", "sys_b"],
+            22,
+            "omits 2 of 22",
+        )
+        assert published.template_omissions_unavailable is None
+
+    @pytest.mark.asyncio
+    async def test_a_publication_whose_omission_report_is_unavailable_says_why(self, httpx_mock):
+        httpx_mock.add_response(
+            url=f"{ROUTE}/publish",
+            json={
+                "success": True,
+                "digest": DIGEST,
+                "version": 1,
+                "template_omissions_unavailable": "the organization template could not be read",
+            },
+        )
+        published = await _client().typed_policies.publish(DOCUMENT, FIXTURES)
+        assert published.template_omissions is None
+        assert published.template_omissions_unavailable == (
+            "the organization template could not be read"
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_activation_carries_the_omission_report_beside_the_record(self, httpx_mock):
+        httpx_mock.add_response(
+            url=f"{ROUTE}/activate",
+            json={
+                "success": True,
+                "activation": {"digest": DIGEST},
+                "template_omissions": {"omitted": ["sys_a"], "of": 22, "message": "omits 1 of 22"},
+            },
+        )
+        activation = await _client().typed_policies.activate(DIGEST)
+        report = activation.template_omissions
+        assert report is not None
+        assert (report.omitted, report.of, report.message) == (["sys_a"], 22, "omits 1 of 22")
+        assert activation.template_omissions_unavailable is None
+        assert "template_omissions" not in activation.activation
+
+    @pytest.mark.asyncio
+    async def test_an_activation_whose_omission_report_is_unavailable_says_why(self, httpx_mock):
+        httpx_mock.add_response(
+            url=f"{ROUTE}/activate",
+            json={
+                "success": True,
+                "activation": {"digest": DIGEST},
+                "template_omissions_unavailable": "the organization template could not be read",
+            },
+        )
+        activation = await _client().typed_policies.activate(DIGEST)
+        assert activation.template_omissions is None
+        assert activation.template_omissions_unavailable == (
+            "the organization template could not be read"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_system_control_names_itself_and_is_not_mandatory_when_unsaid(self, httpx_mock):
+        httpx_mock.add_response(
+            url=f"{ROUTE}/system",
+            json={
+                "success": True,
+                "system": {
+                    "controls": [
+                        {"id": "sys.a", "name": "Block DROP TABLE", "mandatory": True},
+                        {"id": "sys.b"},
+                        {"id": "sys.c", "mandatory": None},
+                    ]
+                },
+            },
+        )
+        system = await _client().typed_policies.system()
+        # Compared by value against False, so a drift back to None fails here.
+        assert [(c.id, c.name, c.mandatory) for c in system.controls] == [
+            ("sys.a", "Block DROP TABLE", True),
+            ("sys.b", None, False),
+            ("sys.c", None, False),
+        ]
+        assert all(isinstance(c.mandatory, bool) for c in system.controls)
+
+    @pytest.mark.asyncio
     async def test_system(self, httpx_mock):
         httpx_mock.add_response(
             url=f"{ROUTE}/system",
@@ -212,7 +354,7 @@ REFUSALS = [
     pytest.param(
         "publish",
         402,
-        _refusal(402, "tier_limit", code="ERR_TIER_LIMIT_ORG_ROOT_POLICY"),
+        _refusal(402, "tier_limit", code="ERR_TIER_LIMIT_ORG_ROOT_POLICY", policy="grant.refund"),
         {},
         id="publish-402-tier-limit",
     ),
@@ -258,6 +400,9 @@ class TestTheRefusals:
             body["reason"],
             body.get("code"),
         )
+        # A tier refusal names the policy that crossed the ceiling; an outage
+        # refusal (with Retry-After) names none.
+        assert refusal.policy == body.get("policy")
         assert refusal.message == body["error"]
         assert [f.code for f in refusal.findings] == [f["code"] for f in body.get("findings", [])]
         assert refusal.retry_after == (int(headers["Retry-After"]) if headers else None)
@@ -335,6 +480,24 @@ NULL_COLLECTIONS = [
         ([], {}, {}),
         id="system-corpus",
     ),
+    pytest.param(
+        "publish",
+        {"success": True, "digest": DIGEST, "template_omissions": None},
+        lambda r: r.template_omissions,
+        None,
+        id="publish-template-omissions",
+    ),
+    pytest.param(
+        "publish",
+        {
+            "success": True,
+            "digest": DIGEST,
+            "template_omissions": {"omitted": None, "of": 22, "message": "m"},
+        },
+        lambda r: r.template_omissions.omitted,
+        [],
+        id="publish-template-omissions-omitted",
+    ),
 ]
 
 
@@ -370,3 +533,18 @@ class TestTheClients:
         derived = parent.as_user("user-token")
         assert derived.typed_policies is not parent_namespace
         assert derived.typed_policies._send.__self__ is derived
+
+
+class TestTheExample:
+    def test_the_example_finds_its_default_body_from_its_own_location(self):
+        # examples/typed_policies.py runs from any directory: its default body is
+        # found from the file's own location, and it is the vendored fixture.
+        path = Path(__file__).resolve().parents[1] / "examples" / "typed_policies.py"
+        spec = importlib.util.spec_from_file_location("typed_policies_example", path)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        fixture = Path(__file__).resolve().parent / "fixtures" / "typed_policy_publish_body.json"
+        assert fixture == module.DEFAULT_BODY
+        assert module.DEFAULT_BODY.is_file()
