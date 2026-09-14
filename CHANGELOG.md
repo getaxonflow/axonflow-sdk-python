@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  header matches the tag. -->
 
 ## [9.4.0] - 2026-09-14: decision provenance, the PEP capability handshake, typed policy authoring, and the simulation family deprecated
+
 The first Python SDK release carrying these entries sends the PEP capability handshake, which a platform reads from v10.4.0, and reaches `/api/v1/typed-policies`, which needs a v11.0.0 platform. Upgrade the SDK before the platform: from v11.0.0, `decide` refuses a client that does not declare redaction, including one that sends no handshake, wherever the organization has a redact override. Against an older platform this release works unchanged.
 
 ### Added
