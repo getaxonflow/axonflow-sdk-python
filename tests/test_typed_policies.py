@@ -370,6 +370,15 @@ REFUSALS = [
     pytest.param("activate", 409, _refusal(409, "activation_refused"), {}, id="activate-409"),
     pytest.param("validate", 503, _refusal(503, "catalog_not_configured"), {}, id="validate-503"),
     pytest.param("edition", 404, _refusal(404, "no_such_endpoint"), {}, id="edition-404"),
+    # A v11.0.0 platform answers a document store it cannot read with 503 storage_unavailable,
+    # not nothing_active (getaxonflow/axonflow-enterprise#4255).
+    pytest.param(
+        "active",
+        503,
+        _refusal(503, "storage_unavailable"),
+        {},
+        id="active-503-storage-unavailable",
+    ),
 ]
 
 

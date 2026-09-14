@@ -30,7 +30,7 @@ A stack built before getaxonflow/axonflow-enterprise#4247 shows only the bare `[
 ## What it does not prove
 
 - **That the handshake reaches the wire.** A fresh Community stack allows the first decide with or without a declaration, and the `/pep_id` refusal happens in the client. The wire proof is `runtime-e2e/pep_handshake_planes`.
-- **That the organization carries no other state.** The precondition proves no typed document is active. A recorded detection override, or a legacy per-policy override on a platform that still accepts them, would still apply. And while getaxonflow/axonflow-enterprise#4255 is open, an unreadable document store also answers `nothing_active`.
+- **That the organization carries no other state.** The precondition proves no typed document is active. A recorded detection override, or a legacy per-policy override on a platform that still accepts them, would still apply. And on a stack built before getaxonflow/axonflow-enterprise#4255, an unreadable document store also answers `nothing_active`.
 
 ## Run
 

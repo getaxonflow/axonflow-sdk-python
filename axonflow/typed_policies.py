@@ -358,9 +358,9 @@ class TypedPoliciesNamespace:
         ``None`` only when the platform answers that nothing is active: a ``404``
         whose reason is ``nothing_active``. Any other ``404``, from a platform
         before v11.0.0 or an endpoint that is not an agent, raises
-        :class:`~axonflow.exceptions.TypedPolicyRefusal` with status 404. The
-        platform currently also answers ``nothing_active`` when its document
-        store cannot be read (getaxonflow/axonflow-enterprise#4255).
+        :class:`~axonflow.exceptions.TypedPolicyRefusal` with status 404. A
+        v11.0.0 platform answers a document store it cannot read with 503
+        ``storage_unavailable``, raised the same way (getaxonflow/axonflow-enterprise#4255).
         """
         response = await self._send("GET", f"{TYPED_POLICIES_PATH}/active")
         if response.status_code == 404 and _reason(response) == "nothing_active":  # noqa: PLR2004
