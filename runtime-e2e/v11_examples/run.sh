@@ -44,8 +44,8 @@
 # python3; the SDK needs 3.10 or later).
 #
 # Exit codes: 0 all proofs passed; 1 a proof failed; 2 timeout or a suitable
-# Python is not installed, the agent is not reachable, or a typed document is
-# already active.
+# Python is not installed, a virtual environment cannot be built, the agent is
+# not reachable, or a typed document is already active.
 set -uo pipefail
 command -v timeout > /dev/null || { echo "FAIL: this leg needs timeout (GNU coreutils; on macOS: brew install coreutils)"; exit 2; }
 PYTHON="${PYTHON:-python3}"
@@ -55,7 +55,7 @@ PYTHON="${PYTHON:-python3}"
 }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ENDPOINT="${AXONFLOW_AGENT_URL:-http://localhost:8080}"
-unset AXONFLOW_CLIENT_ID AXONFLOW_CLIENT_SECRET
+unset AXONFLOW_CLIENT_ID AXONFLOW_CLIENT_SECRET PYTHONPATH
 export AXONFLOW_AGENT_URL="$ENDPOINT" AXONFLOW_TELEMETRY=off
 
 if ! timeout 60 bash -c "until curl -sf --max-time 5 ${ENDPOINT}/health > /dev/null; do sleep 2; done"; then
@@ -69,16 +69,26 @@ trap 'rm -rf "$OUT"' EXIT
 # does not count against a run. It is built from a copy of the package sources,
 # so no build directory is left in the tree and nothing an earlier build left
 # there can ship in what this leg tests.
-mkdir "$OUT/src" && cp -R "$ROOT/pyproject.toml" "$ROOT/README.md" "$ROOT/LICENSE" "$ROOT/axonflow" "$OUT/src/" &&
-  "$PYTHON" -m venv "$OUT/venv" &&
-  "$OUT/venv/bin/python" -m pip install --quiet --disable-pip-version-check "$OUT/src" || {
+mkdir "$OUT/src" && cp -R "$ROOT/pyproject.toml" "$ROOT/README.md" "$ROOT/LICENSE" "$ROOT/axonflow" "$OUT/src/" || {
+  echo "FAIL: could not copy this tree's package sources"
+  exit 1
+}
+"$PYTHON" -m venv "$OUT/venv" || {
+  echo "FAIL: $PYTHON could not build a virtual environment"
+  exit 2
+}
+"$OUT/venv/bin/python" -m pip install --quiet --disable-pip-version-check "$OUT/src" || {
   echo "FAIL: the SDK did not install from this tree's sources"
   exit 1
 }
 # Where the examples' interpreter imports the SDK from, asked the way the
-# examples run: from $OUT, with no PYTHONPATH. It must be the virtual environment.
-# Compared as real paths: on macOS the default TMPDIR is behind a symlink.
-installed=$(cd "$OUT" && env -u PYTHONPATH "$OUT/venv/bin/python" -c 'import axonflow, os; print(os.path.realpath(os.path.dirname(axonflow.__file__)))')
+# examples run: from $OUT, with $ROOT/examples first on sys.path (a script's own
+# directory) and no PYTHONPATH. It must be the virtual environment, compared as
+# real paths: on macOS the default TMPDIR is behind a symlink.
+installed=$(cd "$OUT" && "$OUT/venv/bin/python" -c 'import os, sys; sys.path[0] = sys.argv[1]; import axonflow; print(os.path.realpath(os.path.dirname(axonflow.__file__)))' "$ROOT/examples") || {
+  echo "FAIL: the installed SDK does not import"
+  exit 1
+}
 echo "installed: $installed"
 case "$installed" in
   "$(cd "$OUT" && pwd -P)/venv/"*) ;;
