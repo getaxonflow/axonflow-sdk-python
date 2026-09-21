@@ -6,7 +6,7 @@
 
 | Step | Expected |
 |---|---|
-| The platform's own stamps on `GET /api/v1/static-policies` and `GET /api/v1/static-policies/effective`, read raw and printed | `X-AxonFlow-Removed-In: v11.1`, and a `Link` naming `/api/v1/typed-policies` as the successor |
+| The platform's own stamps on `GET /api/v1/static-policies` and `GET /api/v1/static-policies/effective`, read raw and printed | `X-AxonFlow-Removed-In: v12.0`, and a `Link` naming `/api/v1/typed-policies` as the successor |
 | `list_static_policies()` twice on one client | one `PlatformRouteDeprecationWarning`, naming the route, the removal release and the successor |
 | The same call from a client derived with `as_user` | nothing new: a derived client shares its parent's memory |
 | `get_effective_static_policies()` twice | one report for that route, and nothing new on the second call |

@@ -10,7 +10,7 @@ orchestrator:
    deny, and the same provenance.
 3. MCP check-output carries the provenance.
 4. A legacy static-policy read issues ``PlatformRouteDeprecationWarning``
-   naming ``/api/v1/typed-policies`` as the successor and ``v11.1`` as the
+   naming ``/api/v1/typed-policies`` as the successor and ``v12.0`` as the
    removal release.
 5. A valid legacy static-policy write and a valid dynamic-policy write each
    raise ``LegacyPolicyWriteFrozenError``.
@@ -125,7 +125,7 @@ async def deprecated_read_leg(client: AxonFlow) -> None:
             stamped[0].successor == "/api/v1/typed-policies",
             "the warning names the typed route as the successor",
         )
-        check(stamped[0].removed_in == "v11.1", "the warning names v11.1 as the removal release")
+        check(stamped[0].removed_in == "v12.0", "the warning names v12.0 as the removal release")
 
 
 async def frozen_write_leg(client: AxonFlow) -> None:

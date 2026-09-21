@@ -43,7 +43,7 @@ from axonflow.policies import (
 BASE = "https://test.axonflow.com"
 STATIC = f"{BASE}/api/v1/static-policies"
 STAMP = {
-    "X-Axonflow-Removed-In": "v11.1",
+    "X-Axonflow-Removed-In": "v12.0",
     "Link": '</api/v1/typed-policies>; rel="successor-version"',
 }
 FROZEN = {
@@ -77,7 +77,7 @@ class TestOncePerRoute:
         with reports() as found:
             await client.list_static_policies()
         assert [(w.route, w.removed_in, w.successor) for w in found] == [
-            ("GET /api/v1/static-policies", "v11.1", "/api/v1/typed-policies")
+            ("GET /api/v1/static-policies", "v12.0", "/api/v1/typed-policies")
         ]
 
     @pytest.mark.asyncio
@@ -319,7 +319,7 @@ class TestTheDocumentedDeprecations:
         for owner in (type(client), type(sync_client)):
             doc = " ".join((getattr(owner, method).__doc__ or "").split())
             assert f"Deprecated: the platform deprecates ``{route}`` in v11.0.0" in doc, owner
-            assert "removes it in v11.1" in doc, owner
+            assert "removes it in v12.0" in doc, owner
             assert "``/api/v1/typed-policies``" in doc, owner
             assert "PlatformRouteDeprecationWarning" in doc, owner
 
@@ -402,7 +402,7 @@ class TestTheSimulationFamily:
         assert [(w.route, w.removed_in, w.successor, w.deprecation) for w in found] == [
             (
                 f"POST /api/v1/policies/{route}",
-                "v11.1",
+                "v12.0",
                 "/api/v1/typed-policies",
                 stamp.get("Deprecation"),
             )
