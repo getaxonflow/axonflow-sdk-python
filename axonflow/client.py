@@ -2946,8 +2946,9 @@ class AxonFlow:
 
         Deprecated: the platform deprecates ``POST /api/v1/policies/simulate`` in
         v11.0.0 and removes it in v12.0. It stamps ``Deprecation``,
-        ``X-AxonFlow-Removed-In: v12.0`` and a ``Link`` to ``/api/v1/typed-policies`` on
-        every response, and this client reports the route once through
+        ``X-AxonFlow-Removed-In`` (``v11.1`` on a v11.0.0 platform, ``v12.0`` from
+        v11.1.0) and a ``Link`` to ``/api/v1/typed-policies`` on every response, and
+        this client reports the route once through
         :class:`PlatformRouteDeprecationWarning`. It keeps answering until v12.0; on a
         v11.0.0 platform its result comes from the legacy engine, which no longer
         decides, so it does not predict what the platform enforces. Policy is
@@ -3011,8 +3012,9 @@ class AxonFlow:
 
         Deprecated: the platform deprecates ``POST /api/v1/policies/impact-report`` in
         v11.0.0 and removes it in v12.0. It stamps ``Deprecation``,
-        ``X-AxonFlow-Removed-In: v12.0`` and a ``Link`` to ``/api/v1/typed-policies`` on
-        every response, and this client reports the route once through
+        ``X-AxonFlow-Removed-In`` (``v11.1`` on a v11.0.0 platform, ``v12.0`` from
+        v11.1.0) and a ``Link`` to ``/api/v1/typed-policies`` on every response, and
+        this client reports the route once through
         :class:`PlatformRouteDeprecationWarning`. It keeps answering until v12.0; on a
         v11.0.0 platform its result comes from the legacy engine, which no longer
         decides, so it does not predict what the platform enforces. Policy is
@@ -3074,8 +3076,9 @@ class AxonFlow:
 
         Deprecated: the platform deprecates ``POST /api/v1/policies/conflicts`` in
         v11.0.0 and removes it in v12.0. It stamps ``Deprecation``,
-        ``X-AxonFlow-Removed-In: v12.0`` and a ``Link`` to ``/api/v1/typed-policies`` on
-        every response, and this client reports the route once through
+        ``X-AxonFlow-Removed-In`` (``v11.1`` on a v11.0.0 platform, ``v12.0`` from
+        v11.1.0) and a ``Link`` to ``/api/v1/typed-policies`` on every response, and
+        this client reports the route once through
         :class:`PlatformRouteDeprecationWarning`. It keeps answering until v12.0; on a
         v11.0.0 platform its result comes from the legacy engine, which no longer
         decides, so it does not predict what the platform enforces. Policy is
@@ -8821,8 +8824,9 @@ class SyncAxonFlow:
 
         Deprecated: the platform deprecates ``POST /api/v1/policies/simulate`` in
         v11.0.0 and removes it in v12.0. It stamps ``Deprecation``,
-        ``X-AxonFlow-Removed-In: v12.0`` and a ``Link`` to ``/api/v1/typed-policies`` on
-        every response, and this client reports the route once through
+        ``X-AxonFlow-Removed-In`` (``v11.1`` on a v11.0.0 platform, ``v12.0`` from
+        v11.1.0) and a ``Link`` to ``/api/v1/typed-policies`` on every response, and
+        this client reports the route once through
         :class:`PlatformRouteDeprecationWarning`. It keeps answering until v12.0; on a
         v11.0.0 platform its result comes from the legacy engine, which no longer
         decides, so it does not predict what the platform enforces. Policy is
@@ -8848,8 +8852,9 @@ class SyncAxonFlow:
 
         Deprecated: the platform deprecates ``POST /api/v1/policies/impact-report`` in
         v11.0.0 and removes it in v12.0. It stamps ``Deprecation``,
-        ``X-AxonFlow-Removed-In: v12.0`` and a ``Link`` to ``/api/v1/typed-policies`` on
-        every response, and this client reports the route once through
+        ``X-AxonFlow-Removed-In`` (``v11.1`` on a v11.0.0 platform, ``v12.0`` from
+        v11.1.0) and a ``Link`` to ``/api/v1/typed-policies`` on every response, and
+        this client reports the route once through
         :class:`PlatformRouteDeprecationWarning`. It keeps answering until v12.0; on a
         v11.0.0 platform its result comes from the legacy engine, which no longer
         decides, so it does not predict what the platform enforces. Policy is
@@ -8866,8 +8871,9 @@ class SyncAxonFlow:
 
         Deprecated: the platform deprecates ``POST /api/v1/policies/conflicts`` in
         v11.0.0 and removes it in v12.0. It stamps ``Deprecation``,
-        ``X-AxonFlow-Removed-In: v12.0`` and a ``Link`` to ``/api/v1/typed-policies`` on
-        every response, and this client reports the route once through
+        ``X-AxonFlow-Removed-In`` (``v11.1`` on a v11.0.0 platform, ``v12.0`` from
+        v11.1.0) and a ``Link`` to ``/api/v1/typed-policies`` on every response, and
+        this client reports the route once through
         :class:`PlatformRouteDeprecationWarning`. It keeps answering until v12.0; on a
         v11.0.0 platform its result comes from the legacy engine, which no longer
         decides, so it does not predict what the platform enforces. Policy is

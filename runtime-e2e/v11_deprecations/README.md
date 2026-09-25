@@ -2,6 +2,8 @@
 
 `test.py` drives the SDK against a real AxonFlow agent, and asserts how it reports the platform's deprecation of its legacy policy routes.
 
+Requires a v11.1.0 or later platform: a v11.0.0 platform stamps `X-AxonFlow-Removed-In: v11.1`, and this leg reds against it.
+
 ## What it proves
 
 | Step | Expected |
