@@ -5,11 +5,12 @@ client reports each stamped route ONCE per client through
 ``PlatformRouteDeprecationWarning``: keyed by method and route (for a path that
 carries an id, the route template it was built from; otherwise the path without
 the query string), and shared with clients derived through ``as_user``. The
-stamp below is exactly what the platform's ``policypath.StampDeprecation``
-writes at 857455033, with the header names as Go canonicalises them (as a live
-capture showed): ``X-Axonflow-Removed-In`` and
-the successor ``Link``, with ``Deprecation`` omitted until release prep sets the
-tag date.
+stamp below is what the platform's ``policypath.StampDeprecation`` writes from
+v11.1.0, with the header names as Go canonicalises them (as a live capture
+showed): ``X-Axonflow-Removed-In`` and the successor ``Link``, with
+``Deprecation`` omitted until release prep sets the tag date. At 857455033, a
+v11.0.0-era build, the removal release it wrote was ``v11.1``; it moved to
+v12.0 in v11.1.0.
 
 Every count is taken with ``simplefilter("always")``, so Python's own warning
 filter cannot hide a repeat: the counts are what the SDK emits.
@@ -43,7 +44,7 @@ from axonflow.policies import (
 BASE = "https://test.axonflow.com"
 STATIC = f"{BASE}/api/v1/static-policies"
 STAMP = {
-    "X-Axonflow-Removed-In": "v11.1",
+    "X-Axonflow-Removed-In": "v12.0",
     "Link": '</api/v1/typed-policies>; rel="successor-version"',
 }
 FROZEN = {
@@ -77,7 +78,7 @@ class TestOncePerRoute:
         with reports() as found:
             await client.list_static_policies()
         assert [(w.route, w.removed_in, w.successor) for w in found] == [
-            ("GET /api/v1/static-policies", "v11.1", "/api/v1/typed-policies")
+            ("GET /api/v1/static-policies", "v12.0", "/api/v1/typed-policies")
         ]
 
     @pytest.mark.asyncio
@@ -319,7 +320,7 @@ class TestTheDocumentedDeprecations:
         for owner in (type(client), type(sync_client)):
             doc = " ".join((getattr(owner, method).__doc__ or "").split())
             assert f"Deprecated: the platform deprecates ``{route}`` in v11.0.0" in doc, owner
-            assert "removes it in v11.1" in doc, owner
+            assert "removes it in v12.0" in doc, owner
             assert "``/api/v1/typed-policies``" in doc, owner
             assert "PlatformRouteDeprecationWarning" in doc, owner
 
@@ -362,8 +363,10 @@ class TestTheOverrideFreeze:
 
 
 SIMULATION = f"{BASE}/api/v1/policies"
-# policypath.StampDeprecation at 857455033, and from the v11.0.0 tag, when release
-# prep sets DeprecatedSince and Deprecation carries its RFC 9745 date.
+# policypath.StampDeprecation as the platform writes it from v11.1.0 (at 857455033,
+# a v11.0.0-era build, the removal release was ``v11.1``; it moved to v12.0 in
+# v11.1.0), and from the v11.0.0 tag, when release prep sets DeprecatedSince and
+# Deprecation carries its RFC 9745 date.
 STAMPED_TODAY = STAMP
 STAMPED_AT_THE_TAG = {**STAMP, "Deprecation": "@1788220800"}
 
@@ -402,7 +405,7 @@ class TestTheSimulationFamily:
         assert [(w.route, w.removed_in, w.successor, w.deprecation) for w in found] == [
             (
                 f"POST /api/v1/policies/{route}",
-                "v11.1",
+                "v12.0",
                 "/api/v1/typed-policies",
                 stamp.get("Deprecation"),
             )

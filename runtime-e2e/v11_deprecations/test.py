@@ -86,8 +86,8 @@ async def run(client: AxonFlow) -> None:
     stamps = await measure()
     for route in ROUTES:
         check(
-            stamps[route]["X-AxonFlow-Removed-In"] == "v11.1",
-            f"the platform stamps {route} with X-AxonFlow-Removed-In: v11.1",
+            stamps[route]["X-AxonFlow-Removed-In"] == "v12.0",
+            f"the platform stamps {route} with X-AxonFlow-Removed-In: v12.0",
         )
         check(
             SUCCESSOR in (stamps[route]["Link"] or ""),
@@ -105,7 +105,7 @@ async def run(client: AxonFlow) -> None:
     check(len(first) == 1, "two calls to one stamped route report it once")
     if first:
         check(first[0].route == "GET /api/v1/static-policies", "the report names the route")
-        check(first[0].removed_in == "v11.1", "the report carries the platform's removal release")
+        check(first[0].removed_in == "v12.0", "the report carries the platform's removal release")
         check(first[0].successor == SUCCESSOR, "the report carries the platform's successor")
 
     print("== 2. a derived client, the same route")

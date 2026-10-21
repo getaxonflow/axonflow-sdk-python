@@ -43,7 +43,7 @@ FROZEN_BODY = {
 }
 
 STAMP_BEFORE_TAG = {
-    "X-AxonFlow-Removed-In": "v11.1",
+    "X-AxonFlow-Removed-In": "v12.0",
     "Link": '</api/v1/typed-policies>; rel="successor-version"',
 }
 
@@ -250,7 +250,7 @@ async def test_the_pre_tag_stamp_warns_naming_the_successor_and_the_removal(
     assert isinstance(warning, PlatformRouteDeprecationWarning)
     assert warning.route == "GET /api/v1/static-policies"
     assert warning.successor == "/api/v1/typed-policies"
-    assert warning.removed_in == "v11.1"
+    assert warning.removed_in == "v12.0"
     assert warning.deprecation is None
 
 
