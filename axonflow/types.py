@@ -665,6 +665,7 @@ class DecisionTarget(BaseModel):
     type: str | None = Field(default=None, description='"llm" | "tool" | "agent".')
     model: str | None = Field(default=None, description="When type=llm.")
     provider: str | None = Field(default=None, description="When type=llm.")
+    server: str | None = Field(default=None, description="When type=tool.")
     tool: str | None = Field(default=None, description="When type=tool.")
 
 
@@ -682,6 +683,27 @@ class DecideRequest(BaseModel):
     target: DecisionTarget = Field(default_factory=DecisionTarget)
     user_token: str | None = Field(default=None)
     context: dict[str, Any] | None = Field(default=None)
+    approval_id: str | None = Field(
+        default=None, description="Approved hold spent by an exact retry"
+    )
+
+
+class DecisionApprovalRetry(BaseModel):
+    """The header or body field that names a held call on retry."""
+
+    header: str
+    argument: str | None = None
+    body_field: str | None = None
+
+
+class DecisionPendingApproval(BaseModel):
+    """A call held for a person's review; this is never an allow verdict."""
+
+    approval_id: str
+    status: str
+    plane: str
+    expires_at: datetime | None = None
+    retry: DecisionApprovalRetry
 
 
 class DecideResponse(DecisionProvenance):
@@ -707,6 +729,8 @@ class DecideResponse(DecisionProvenance):
     policy_identities: list[PolicyIdentity] | None = Field(default=None)
     policy_packs: list[str] | None = Field(default=None)
     document_version: int | None = Field(default=None)
+    pending_approval: DecisionPendingApproval | None = Field(default=None)
+    approval_id: str | None = Field(default=None)
 
 
 class PlanStep(BaseModel):

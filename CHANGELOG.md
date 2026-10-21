@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [9.5.0] - 2026-10-21: Decision API approval retry fields
+
+### Added
+
+- Decision API payment approval wire fields: exact `target.server`, request `approval_id`, and response `pending_approval` and consumed `approval_id`. A hold is never an allow verdict; retry only after human approval and forward the payment only on an allow verdict for the spent approval.
+
 ## [9.4.0] - 2026-09-14: decision provenance, the PEP capability handshake, typed policy authoring, and the simulation family deprecated
 
 The first Python SDK release carrying these entries sends the PEP capability handshake, which a platform reads from v10.4.0, and reaches `/api/v1/typed-policies`, which needs a v11.0.0 platform. Upgrade the SDK before the platform: from v11.0.0, `decide` refuses a client that does not declare redaction, including one that sends no handshake, wherever the organization has a redact override. Against an older platform this release works unchanged.
