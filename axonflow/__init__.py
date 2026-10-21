@@ -246,7 +246,9 @@ from axonflow.types import (
     CreateBudgetRequest,
     DecideRequest,
     DecideResponse,
+    DecisionApprovalRetry,
     DecisionCallerIdentity,
+    DecisionPendingApproval,
     DecisionProvenance,
     DecisionTarget,
     DynamicPolicyInfo,
@@ -400,6 +402,8 @@ __all__ = [
     # Decision Mode PEP contract (ADR-056, #2563)
     "DecideRequest",
     "DecideResponse",
+    "DecisionApprovalRetry",
+    "DecisionPendingApproval",
     "DecisionProvenance",
     "LegacyValidatorAction",
     "PolicyIdentity",

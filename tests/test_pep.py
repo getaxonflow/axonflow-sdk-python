@@ -153,6 +153,43 @@ class TestDecide:
         assert "user_token" not in body  # None excluded
         assert "context" not in body
 
+    @pytest.mark.asyncio
+    async def test_payment_hold_and_approved_retry_wire(
+        self, client: AxonFlow, httpx_mock: HTTPXMock
+    ) -> None:
+        httpx_mock.add_response(url=DECIDE_URL, json={
+            "verdict": "needs_approval", "pending_approval": {
+                "approval_id": "hold-1", "status": "pending", "plane": "decide",
+                "retry": {"header": "X-Axonflow-Approval-Id", "body_field": "approval_id"},
+            },
+        })
+        httpx_mock.add_response(url=DECIDE_URL, json={
+            "verdict": "allow", "approval_id": "hold-1",
+        })
+        request = DecideRequest(
+            stage="tool", query="Retry failed disbursement",
+            target={
+                "type": "tool",
+                "server": "payment-ops",
+                "tool": "payment-ops.retry_disbursement",
+            },
+        )
+        held = await client.decide(request)
+        assert held.verdict == "needs_approval"
+        assert held.pending_approval is not None
+        assert held.pending_approval.approval_id == "hold-1"
+        assert held.pending_approval.retry.body_field == "approval_id"
+        request.approval_id = held.pending_approval.approval_id
+        allowed = await client.decide(request)
+        assert allowed.verdict == "allow"
+        assert allowed.approval_id == "hold-1"
+        import json as _json
+
+        sent = [_json.loads(item.content) for item in httpx_mock.get_requests()]
+        assert sent[0]["target"]["server"] == "payment-ops"
+        assert "approval_id" not in sent[0]
+        assert sent[1]["approval_id"] == "hold-1"
+
 
 # ---------------------------------------------------------------------------
 # fulfill_request() — the fail-closed core
