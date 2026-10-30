@@ -125,9 +125,10 @@ class RateLimitError(AxonFlowError):
 
 
 class BudgetExceededError(AxonFlowError):
-    """Budget limit exceeded (HTTP 402).
+    """Budget limit exceeded or Hosted payment required (HTTP 402).
 
-    Raised when a request is blocked due to budget constraints.
+    Hosted payment details, including the checkout action, are retained in
+    ``details`` when present. Existing budget fields remain available.
     """
 
     def __init__(
@@ -138,16 +139,21 @@ class BudgetExceededError(AxonFlowError):
         used_usd: float = 0.0,
         limit_usd: float = 0.0,
         action: str | None = None,
+        *,
+        response_details: dict[str, Any] | None = None,
     ) -> None:
+        details = {
+            "budget_id": budget_id,
+            "budget_name": budget_name,
+            "used_usd": used_usd,
+            "limit_usd": limit_usd,
+            "action": action,
+        }
+        if response_details:
+            details.update(response_details)
         super().__init__(
             message,
-            details={
-                "budget_id": budget_id,
-                "budget_name": budget_name,
-                "used_usd": used_usd,
-                "limit_usd": limit_usd,
-                "action": action,
-            },
+            details=details,
         )
         self.budget_id = budget_id
         self.budget_name = budget_name

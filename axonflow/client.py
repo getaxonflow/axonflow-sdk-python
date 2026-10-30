@@ -349,6 +349,29 @@ def _legacy_policy_write_frozen(response: httpx.Response) -> LegacyPolicyWriteFr
     return LegacyPolicyWriteFrozenError(str(err.get("message", "legacy policy write frozen")))
 
 
+def _hosted_paid_refusal(response: httpx.Response) -> AxonFlowError | None:
+    """Preserve the Hosted checkout or monthly-limit action on answered refusals."""
+    if response.status_code not in (402, 429):  # noqa: PLR2004
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if response.status_code == 402 and payload.get("error") == "hosted_payment_required":  # noqa: PLR2004
+        return BudgetExceededError(
+            str(payload.get("message") or "Hosted payment required"),
+            response_details=payload,
+        )
+    if response.status_code == 429 and payload.get("error") == "hosted_monthly_limit_reached":  # noqa: PLR2004
+        return AxonFlowError(
+            str(payload.get("message") or "Hosted monthly allowance reached"),
+            details=payload,
+        )
+    return None
+
+
 def _route_with_id(template: str, path_id: str) -> str:
     """Fill the ``{id}`` in a route template with ``path_id``.
 
@@ -1123,6 +1146,9 @@ class AxonFlow:
             frozen = _legacy_policy_write_frozen(e.response)
             if frozen is not None:
                 raise frozen from e
+            hosted_refusal = _hosted_paid_refusal(e.response)
+            if hosted_refusal is not None:
+                raise hosted_refusal from e
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
@@ -1225,6 +1251,9 @@ class AxonFlow:
             msg = f"MAP request timed out after {self._config.map_timeout}s: {e}"
             raise TimeoutError(msg) from e
         except httpx.HTTPStatusError as e:
+            hosted_refusal = _hosted_paid_refusal(e.response)
+            if hosted_refusal is not None:
+                raise hosted_refusal from e
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
