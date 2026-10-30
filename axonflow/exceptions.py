@@ -92,7 +92,8 @@ class RateLimitError(AxonFlowError):
     Holds the parsed V1 429 envelope when available. ``limit_type`` and
     ``tier`` and ``upgrade`` are populated for tier-cap 429s (e.g.
     ``list_decisions`` page-size cap, daily-quota cap); legacy 429s
-    leave them ``None`` for backwards compatibility.
+    leave them ``None`` for backwards compatibility. Hosted monthly-limit
+    response fields are retained in ``details`` when present.
     """
 
     def __init__(
@@ -105,16 +106,20 @@ class RateLimitError(AxonFlowError):
         limit_type: str | None = None,
         tier: str | None = None,
         upgrade: UpgradeInfo | None = None,
+        response_details: dict[str, Any] | None = None,
     ) -> None:
+        details = {
+            "limit": limit,
+            "remaining": remaining,
+            "reset_at": reset_at,
+            "limit_type": limit_type,
+            "tier": tier,
+        }
+        if response_details:
+            details.update(response_details)
         super().__init__(
             message,
-            details={
-                "limit": limit,
-                "remaining": remaining,
-                "reset_at": reset_at,
-                "limit_type": limit_type,
-                "tier": tier,
-            },
+            details=details,
         )
         self.limit = limit
         self.remaining = remaining

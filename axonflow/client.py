@@ -365,9 +365,12 @@ def _hosted_paid_refusal(response: httpx.Response) -> AxonFlowError | None:
             response_details=payload,
         )
     if response.status_code == 429 and payload.get("error") == "hosted_monthly_limit_reached":  # noqa: PLR2004
-        return AxonFlowError(
+        return RateLimitError(
             str(payload.get("message") or "Hosted monthly allowance reached"),
-            details=payload,
+            limit=0,
+            remaining=0,
+            limit_type=payload.get("limit_type"),
+            response_details=payload,
         )
     return None
 

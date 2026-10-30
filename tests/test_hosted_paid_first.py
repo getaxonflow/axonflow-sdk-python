@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from axonflow import AxonFlow
-from axonflow.exceptions import AxonFlowError, BudgetExceededError
+from axonflow.exceptions import AxonFlowError, BudgetExceededError, RateLimitError
 
 
 @pytest.mark.parametrize("route", ["proxy", "gateway", "map"])
@@ -81,7 +81,10 @@ def test_linked_credential_preserves_hosted_refusal_without_fallback(
     if status == 402:
         assert isinstance(error, BudgetExceededError)
     else:
-        assert not isinstance(error, BudgetExceededError)
+        assert isinstance(error, RateLimitError)
+        assert error.limit_type == "monthly_governed_events"
+        assert error.limit == 0
+        assert error.remaining == 0
 
 
 def test_existing_budget_402_keeps_budget_fields(monkeypatch: pytest.MonkeyPatch) -> None:
