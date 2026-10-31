@@ -496,6 +496,9 @@ class MCPCheckInputRequest(BaseModel):
     """Request to validate input against MCP policies."""
 
     connector_type: str
+    # An approved hold can be spent by an exact retry. The Agent accepts this
+    # UUID in the body when the caller cannot set X-Axonflow-Approval-Id.
+    approval_id: str | None = Field(default=None)
     # Two-field (server, tool) identity contract (epic #2905 / #2904). `tool`
     # carries the MCP tool name so a PEP no longer has to concatenate it into
     # `connector_type` (e.g. "server.tool") to preserve tool identity.
