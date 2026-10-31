@@ -1779,6 +1779,7 @@ class AxonFlow:
         user_role: str | None = None,
         user_token: str | None = None,
         content_type: str | None = None,
+        approval_id: str | None = None,
         extra_headers: dict[str, str] | None = None,
         pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
@@ -1804,6 +1805,10 @@ class AxonFlow:
             content_type: Selects the request-redaction detector (ADR-056 /
                 #2563). ``None`` defaults to "text/plain" server-side. Used by
                 a PEP fulfilling a ``redact_pii`` obligation.
+            approval_id: Approved hold UUID supplied by the approval workflow
+                for an exact retry. Sent only in this request body; omit it on
+                the initial call. If an approval header is also supplied, it
+                must name the same hold.
             pep_handshake: The PEP capability declaration for THIS call, sent
                 in place of the client's. See :mod:`axonflow.pep_handshake`.
 
@@ -1846,6 +1851,8 @@ class AxonFlow:
             body["user_token"] = user_token
         if content_type is not None:
             body["content_type"] = content_type
+        if approval_id is not None:
+            body["approval_id"] = approval_id
 
         if self._config.debug:
             self._logger.debug(
@@ -1877,6 +1884,7 @@ class AxonFlow:
         user_id: str | None = None,
         user_role: str | None = None,
         user_token: str | None = None,
+        approval_id: str | None = None,
         extra_headers: dict[str, str] | None = None,
         pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
@@ -1892,6 +1900,7 @@ class AxonFlow:
             user_id=user_id,
             user_role=user_role,
             user_token=user_token,
+            approval_id=approval_id,
             extra_headers=extra_headers,
             pep_handshake=pep_handshake,
         )
@@ -8410,6 +8419,7 @@ class SyncAxonFlow:
         user_role: str | None = None,
         user_token: str | None = None,
         content_type: str | None = None,
+        approval_id: str | None = None,
         extra_headers: dict[str, str] | None = None,
         pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
@@ -8431,6 +8441,7 @@ class SyncAxonFlow:
                 user_role=user_role,
                 user_token=user_token,
                 content_type=content_type,
+                approval_id=approval_id,
                 extra_headers=extra_headers,
                 pep_handshake=pep_handshake,
             )
@@ -8549,6 +8560,7 @@ class SyncAxonFlow:
         user_id: str | None = None,
         user_role: str | None = None,
         user_token: str | None = None,
+        approval_id: str | None = None,
         extra_headers: dict[str, str] | None = None,
         pep_handshake: PEPHandshake | None = None,
     ) -> MCPCheckInputResponse:
@@ -8565,6 +8577,7 @@ class SyncAxonFlow:
                 user_id=user_id,
                 user_role=user_role,
                 user_token=user_token,
+                approval_id=approval_id,
                 extra_headers=extra_headers,
                 pep_handshake=pep_handshake,
             )
