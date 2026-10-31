@@ -331,13 +331,11 @@
       ]
     },
     "MCPCheckInputResponse": {
-      "note": "acknowledged-spec-superset: the agent API snapshot declares approval_id, pending_approval, redacted_parameters, and engine/bundle/validator metadata on the MCP input response. The SDK model omits these optional response fields; matching the typed response is separate follow-up work.",
+      "note": "acknowledged-spec-superset: the agent API snapshot declares redacted_parameters and engine/bundle/validator metadata on the MCP input response. The SDK model still omits these optional fields; approval_id and pending_approval are now typed.",
       "sdk_only": [],
       "spec_only": [
-        "approval_id",
         "engine",
         "legacy_validators",
-        "pending_approval",
         "policy_bundle",
         "policy_packs",
         "redacted_parameters",
