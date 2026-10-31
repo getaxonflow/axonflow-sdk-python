@@ -330,13 +330,6 @@
         "trigger_conditions"
       ]
     },
-    "MCPCheckInputRequest": {
-      "note": "acknowledged-spec-superset: the agent API snapshot declares approval_id on the MCP input request, while the SDK model does not. This optional retry field requires a separate typed SDK addition before callers can use it through MCPCheckInputRequest.",
-      "sdk_only": [],
-      "spec_only": [
-        "approval_id"
-      ]
-    },
     "MCPCheckInputResponse": {
       "note": "acknowledged-spec-superset: the agent API snapshot declares approval_id, pending_approval, redacted_parameters, and engine/bundle/validator metadata on the MCP input response. The SDK model omits these optional response fields; matching the typed response is separate follow-up work.",
       "sdk_only": [],
