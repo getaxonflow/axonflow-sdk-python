@@ -331,12 +331,14 @@
       ]
     },
     "MCPCheckInputRequest": {
+      "note": "acknowledged-spec-superset: the agent API snapshot declares approval_id on the MCP input request, while the SDK model does not. This optional retry field requires a separate typed SDK addition before callers can use it through MCPCheckInputRequest.",
       "sdk_only": [],
       "spec_only": [
         "approval_id"
       ]
     },
     "MCPCheckInputResponse": {
+      "note": "acknowledged-spec-superset: the agent API snapshot declares approval_id, pending_approval, redacted_parameters, and engine/bundle/validator metadata on the MCP input response. The SDK model omits these optional response fields; matching the typed response is separate follow-up work.",
       "sdk_only": [],
       "spec_only": [
         "approval_id",
@@ -360,6 +362,7 @@
       ]
     },
     "PlanResponse": {
+      "note": "acknowledged-spec-superset: the orchestrator API snapshot declares engine, policy_bundle, subject_type, and verdict on PlanResponse; the SDK model does not expose these optional governance fields.",
       "sdk_only": [],
       "spec_only": [
         "engine",
@@ -369,6 +372,7 @@
       ]
     },
     "PolicyEvaluationInfo": {
+      "note": "acknowledged-spec-superset: the agent API snapshot declares matched_policies on PolicyEvaluationInfo; the SDK model exposes policies_evaluated and static_checks but not this optional detail.",
       "sdk_only": [],
       "spec_only": [
         "matched_policies"
@@ -421,6 +425,7 @@
       "spec_only": []
     },
     "ResumePlanResponse": {
+      "note": "acknowledged-spec-superset: the orchestrator API snapshot declares ignored_foreign_gate_rows on ResumePlanResponse; the SDK model does not expose this optional diagnostic field.",
       "sdk_only": [],
       "spec_only": [
         "ignored_foreign_gate_rows"
@@ -445,6 +450,7 @@
       ]
     },
     "TemplateOmissionReport": {
+      "note": "acknowledged-spec-superset: the orchestrator API snapshot declares modified on TemplateOmissionReport; the SDK model exposes omitted, of, and message but not this optional report field.",
       "sdk_only": [],
       "spec_only": [
         "modified"
