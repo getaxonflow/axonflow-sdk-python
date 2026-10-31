@@ -234,24 +234,30 @@ if result.policy_info.dynamic_policy_info.orchestrator_reachable:
 # Enable: MCP_DYNAMIC_POLICIES_ENABLED=true
 ```
 
-**MCP approval retry** - If your approval workflow supplies an approved hold UUID,
-pass it to `mcp_check_input` (or `check_tool_input`) on the exact same request:
+**MCP approval retry** - A held `mcp_check_input` (or `check_tool_input`)
+response has `allowed=False` and a typed `pending_approval`. Nothing ran. Once
+your approval workflow confirms that a person approved that hold, pass its ID
+on the exact same request:
 
 ```python
-retry = await client.mcp_check_input(
-    "postgres", "SELECT 1", operation="query", approval_id=approved_hold_id
-)
-if not retry.allowed:
-    raise RuntimeError(retry.block_reason or "MCP input was refused")
+held = await client.mcp_check_input("postgres", "SELECT 1", operation="query")
+if held.pending_approval is not None:
+    # Wait for the person to approve this hold through the approval workflow.
+    approved_hold_id = held.pending_approval.approval_id
+    # After approval, retry the same input with approved_hold_id.
+    retry = await client.mcp_check_input(
+        "postgres", "SELECT 1", operation="query", approval_id=approved_hold_id
+    )
+    if not retry.allowed:
+        raise RuntimeError(retry.block_reason or "MCP input was refused")
 ```
 
 `approval_id` is keyword-only and is sent only in the check-input JSON body.
 Omit it on the first call. Keep the connector, tool, statement, parameters,
 operation, and caller identity unchanged for the retry. If you also set
 `X-Axonflow-Approval-Id` through `extra_headers`, the header and body IDs must
-match. The current response model does not expose the held ID; obtain it from
-the approval workflow before retrying. The synchronous methods accept the same
-keyword.
+match. On a successful spent retry, the response's `approval_id` names the
+approval that admitted it. The synchronous methods accept the same keyword.
 
 ### Multi-Agent Planning
 

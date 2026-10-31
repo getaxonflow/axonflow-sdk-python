@@ -529,6 +529,11 @@ class MCPCheckInputResponse(BaseModel):
 
     allowed: bool
     block_reason: str | None = Field(default=None)
+    # A held request is a refusal (allowed=False), not permission to run the
+    # tool. The approval workflow must approve this ID before an exact retry.
+    pending_approval: DecisionPendingApproval | None = Field(default=None)
+    # Present on an allow when an approved hold was spent by the retry.
+    approval_id: str | None = Field(default=None)
     policies_evaluated: int = Field(default=0, ge=0)
     policy_info: ConnectorPolicyInfo | None = Field(default=None)
     # Plugin Batch 1 / ADR-042 / ADR-043 — richer governance context surfaced
