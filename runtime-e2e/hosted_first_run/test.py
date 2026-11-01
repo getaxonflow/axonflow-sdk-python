@@ -55,9 +55,9 @@ async def main() -> None:
 
     async with AxonFlow(endpoint=AGENT, client_id=client_id, client_secret=client_secret) as sdk:
         decision = await sdk.mcp_check_input(
-            connector_type="python_sdk.hosted_first_run",
-            statement="echo axonflow-hosted-first-run-probe",
-            operation="execute",
+            connector_type="postgres",
+            statement="SELECT 1",
+            operation="query",
         )
         if decision.allowed is not True:
             msg = "Linked staging Agent did not allow the harmless governed probe"
