@@ -14,8 +14,12 @@ from axonflow import community
         community.TRY_ENDPOINT,
         "https://try.getaxonflow.com/",
         "https://try.getaxonflow.com./",
+        "https://try.getaxonflow\u3002com",
+        "https://try.getaxonflow\uff0ecom",
+        "https://try.getaxonflow\uff61com",
         "https://try-staging.getaxonflow.com",
         "https://try-staging.getaxonflow.com./",
+        "https://try-staging.getaxonflow\u3002com",
     ],
 )
 def test_hosted_registration_directs_to_verified_portal_before_network(monkeypatch, endpoint):

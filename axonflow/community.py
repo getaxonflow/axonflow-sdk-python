@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlsplit
 
 import httpx
 
@@ -26,7 +25,7 @@ def register_try(label: str = "", endpoint: str = TRY_ENDPOINT) -> dict[str, Any
         endpoint: Custom self-hosted Community endpoint. The legacy Hosted
             default raises with Portal setup guidance before any network call.
     """
-    hostname = urlsplit(endpoint).hostname
+    hostname = httpx.URL(endpoint).host
     if hostname and hostname.rstrip(".") in {"try.getaxonflow.com", "try-staging.getaxonflow.com"}:
         msg = (
             f"New Hosted accounts start at the verified Portal {HOSTED_START_URL}: "
