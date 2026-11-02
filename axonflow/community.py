@@ -26,7 +26,8 @@ def register_try(label: str = "", endpoint: str = TRY_ENDPOINT) -> dict[str, Any
         endpoint: Custom self-hosted Community endpoint. The legacy Hosted
             default raises with Portal setup guidance before any network call.
     """
-    if urlsplit(endpoint).hostname in {"try.getaxonflow.com", "try-staging.getaxonflow.com"}:
+    hostname = urlsplit(endpoint).hostname
+    if hostname and hostname.rstrip(".") in {"try.getaxonflow.com", "try-staging.getaxonflow.com"}:
         msg = (
             f"New Hosted accounts start at the verified Portal {HOSTED_START_URL}: "
             "verify your email, "

@@ -986,11 +986,10 @@ class AxonFlow:
         Start the stack with ``docker compose up`` from
         https://github.com/getaxonflow/axonflow before calling this.
 
-        For Hosted at https://try.getaxonflow.com, start at the AxonFlow
-        website and complete verified signup, account and plan setup, and API
-        client linking at https://portal.try.getaxonflow.com/hosted/start.
-        Supply the linked client ID and secret to ``AxonFlow(...)`` directly,
-        or set ``AXONFLOW_TRY=1`` for automatic Hosted endpoint resolution.
+        For Hosted, start at the AxonFlow website, verify email, and set up your
+        account and plan at https://portal.try.getaxonflow.com/hosted/start.
+        Link an API client and supply its ID and secret to ``AxonFlow(...)``.
+        ``AXONFLOW_TRY=1`` selects Hosted; unset it for this local sandbox method.
 
         Args:
             client_id: Optional client ID (defaults to demo-client)
