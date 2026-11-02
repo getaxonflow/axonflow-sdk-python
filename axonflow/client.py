@@ -375,6 +375,16 @@ def _hosted_paid_refusal(response: httpx.Response) -> AxonFlowError | None:
     return None
 
 
+def _raise_hosted_paid_refusal(response: httpx.Response) -> None:
+    """Surface an MCP Hosted refusal with its HTTP cause and recovery details."""
+    refusal = _hosted_paid_refusal(response)
+    if refusal is not None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise refusal from error
+
+
 def _route_with_id(template: str, path_id: str) -> str:
     """Fill the ``{id}`` in a route template with ``path_id``.
 
@@ -1888,6 +1898,7 @@ class AxonFlow:
 
         headers = self._with_pep_handshake(extra_headers, pep_handshake)
         response = await self._http_client.post(url, json=body, headers=headers)
+        _raise_hosted_paid_refusal(response)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -2011,6 +2022,7 @@ class AxonFlow:
 
         headers = self._with_pep_handshake(extra_headers, pep_handshake)
         response = await self._http_client.post(url, json=body, headers=headers)
+        _raise_hosted_paid_refusal(response)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004

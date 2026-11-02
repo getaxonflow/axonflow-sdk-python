@@ -12,7 +12,7 @@ from axonflow import AxonFlow
 from axonflow.exceptions import AxonFlowError, BudgetExceededError, RateLimitError
 
 
-@pytest.mark.parametrize("route", ["proxy", "gateway", "map"])
+@pytest.mark.parametrize("route", ["proxy", "gateway", "map", "mcp-input", "mcp-output"])
 @pytest.mark.parametrize("status", [402, 429])
 def test_linked_credential_preserves_hosted_refusal_without_fallback(
     monkeypatch: pytest.MonkeyPatch, route: str, status: int
@@ -64,6 +64,10 @@ def test_linked_credential_preserves_hosted_refusal_without_fallback(
                     await client.proxy_llm_call("synthetic", "governed", "chat")
                 elif route == "gateway":
                     await client.get_policy_approved_context("synthetic", "governed")
+                elif route == "mcp-input":
+                    await client.mcp_check_input("postgres", "SELECT 1")
+                elif route == "mcp-output":
+                    await client.mcp_check_output("postgres", response_data=[{"value": 1}])
                 else:
                     await client._map_request("POST", "/api/v1/plan/synthetic/run")
         return caught.value
@@ -73,6 +77,8 @@ def test_linked_credential_preserves_hosted_refusal_without_fallback(
         "proxy": "/api/request",
         "gateway": "/api/policy/pre-check",
         "map": "/api/v1/plan/synthetic/run",
+        "mcp-input": "/api/v1/mcp/check-input",
+        "mcp-output": "/api/v1/mcp/check-output",
     }[route]
     assert requests == [expected_path]
     assert isinstance(error.__cause__, httpx.HTTPStatusError)
