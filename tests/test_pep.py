@@ -157,17 +157,28 @@ class TestDecide:
     async def test_payment_hold_and_approved_retry_wire(
         self, client: AxonFlow, httpx_mock: HTTPXMock
     ) -> None:
-        httpx_mock.add_response(url=DECIDE_URL, json={
-            "verdict": "needs_approval", "pending_approval": {
-                "approval_id": "hold-1", "status": "pending", "plane": "decide",
-                "retry": {"header": "X-Axonflow-Approval-Id", "body_field": "approval_id"},
+        httpx_mock.add_response(
+            url=DECIDE_URL,
+            json={
+                "verdict": "needs_approval",
+                "pending_approval": {
+                    "approval_id": "hold-1",
+                    "status": "pending",
+                    "plane": "decide",
+                    "retry": {"header": "X-Axonflow-Approval-Id", "body_field": "approval_id"},
+                },
             },
-        })
-        httpx_mock.add_response(url=DECIDE_URL, json={
-            "verdict": "allow", "approval_id": "hold-1",
-        })
+        )
+        httpx_mock.add_response(
+            url=DECIDE_URL,
+            json={
+                "verdict": "allow",
+                "approval_id": "hold-1",
+            },
+        )
         request = DecideRequest(
-            stage="tool", query="Retry failed disbursement",
+            stage="tool",
+            query="Retry failed disbursement",
             target={
                 "type": "tool",
                 "server": "payment-ops",
