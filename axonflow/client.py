@@ -349,6 +349,44 @@ def _legacy_policy_write_frozen(response: httpx.Response) -> LegacyPolicyWriteFr
     return LegacyPolicyWriteFrozenError(str(err.get("message", "legacy policy write frozen")))
 
 
+def _hosted_paid_refusal(response: httpx.Response) -> AxonFlowError | None:
+    """Preserve the Hosted checkout or monthly-limit action on answered refusals."""
+    if response.status_code not in (402, 429):  # noqa: PLR2004
+        return None
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if response.status_code == 402 and payload.get("error") == "hosted_payment_required":  # noqa: PLR2004
+        message = payload.get("message")
+        return BudgetExceededError(
+            message if isinstance(message, str) and message else "Hosted payment required",
+            response_details=payload,
+        )
+    if response.status_code == 429 and payload.get("error") == "hosted_monthly_limit_reached":  # noqa: PLR2004
+        message = payload.get("message")
+        return RateLimitError(
+            message if isinstance(message, str) and message else "Hosted monthly allowance reached",
+            limit=0,
+            remaining=0,
+            limit_type=payload.get("limit_type"),
+            response_details=payload,
+        )
+    return None
+
+
+def _raise_hosted_paid_refusal(response: httpx.Response) -> None:
+    """Surface a Hosted refusal with its HTTP cause and recovery details."""
+    refusal = _hosted_paid_refusal(response)
+    if refusal is not None:
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            raise refusal from error
+
+
 def _route_with_id(template: str, path_id: str) -> str:
     """Fill the ``{id}`` in a route template with ``path_id``.
 
@@ -1123,6 +1161,9 @@ class AxonFlow:
             frozen = _legacy_policy_write_frozen(e.response)
             if frozen is not None:
                 raise frozen from e
+            hosted_refusal = _hosted_paid_refusal(e.response)
+            if hosted_refusal is not None:
+                raise hosted_refusal from e
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
@@ -1225,6 +1266,9 @@ class AxonFlow:
             msg = f"MAP request timed out after {self._config.map_timeout}s: {e}"
             raise TimeoutError(msg) from e
         except httpx.HTTPStatusError as e:
+            hosted_refusal = _hosted_paid_refusal(e.response)
+            if hosted_refusal is not None:
+                raise hosted_refusal from e
             if e.response.status_code == 401:  # noqa: PLR2004
                 msg = "Invalid credentials"
                 raise AuthenticationError(msg) from e
@@ -1710,6 +1754,7 @@ class AxonFlow:
             self._logger.debug("MCP Query", connector=connector, statement=statement[:50])
 
         response = await self._http_client.post(url, json=body)
+        _raise_hosted_paid_refusal(response)
         response_data = response.json()
 
         # All 403 responses from mcp_query are policy blocks.
@@ -1856,6 +1901,7 @@ class AxonFlow:
 
         headers = self._with_pep_handshake(extra_headers, pep_handshake)
         response = await self._http_client.post(url, json=body, headers=headers)
+        _raise_hosted_paid_refusal(response)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -1979,6 +2025,7 @@ class AxonFlow:
 
         headers = self._with_pep_handshake(extra_headers, pep_handshake)
         response = await self._http_client.post(url, json=body, headers=headers)
+        _raise_hosted_paid_refusal(response)
         data = response.json()
 
         if not response.is_success and response.status_code != 403:  # noqa: PLR2004
@@ -3422,6 +3469,7 @@ class AxonFlow:
             msg = f"Request timed out: {e}"
             raise TimeoutError(msg) from e
 
+        _raise_hosted_paid_refusal(response)
         if response.status_code == 429:  # noqa: PLR2004
             # Try to parse the V1 envelope. Malformed body falls back to
             # a plain RateLimitError without upgrade context — never
@@ -3496,6 +3544,7 @@ class AxonFlow:
         refusal document rather than an error string.
         """
         response = await self._send_raw("POST", path, json_data=body, headers=headers)
+        _raise_hosted_paid_refusal(response)
         return response.status_code, response.content
 
     def _authzen_transport(self, pep_handshake: PEPHandshake | None) -> AuthZENTransport:
@@ -3638,6 +3687,7 @@ class AxonFlow:
             msg = f"Request timed out: {e}"
             raise TimeoutError(msg) from e
 
+        _raise_hosted_paid_refusal(response)
         if response.status_code == 401:  # noqa: PLR2004
             msg = "Invalid credentials"
             raise AuthenticationError(msg)
@@ -4982,6 +5032,7 @@ class AxonFlow:
             frozen = _legacy_policy_write_frozen(e.response)
             if frozen is not None:
                 raise frozen from e
+            _raise_hosted_paid_refusal(e.response)
             # A scoped miss reports WHY it missed. Only 404 is interpreted: the
             # scope header is stamped before the handler writes its status, so
             # it also rides a 500 from further down the handler, and explaining
@@ -5706,6 +5757,9 @@ class AxonFlow:
             msg = f"Request timed out: {e}"
             raise TimeoutError(msg) from e
         except httpx.HTTPStatusError as e:
+            hosted_refusal = _hosted_paid_refusal(e.response)
+            if hosted_refusal is not None:
+                raise hosted_refusal from e
             if e.response.status_code == 409:  # noqa: PLR2004
                 idem = _parse_idempotency_key_mismatch(
                     e.response, workflow_id=workflow_id, step_id=step_id
@@ -7413,6 +7467,7 @@ class AxonFlow:
             ):
                 if response.status_code != 200:  # noqa: PLR2004
                     await response.aread()
+                    _raise_hosted_paid_refusal(response)
                     msg = (
                         f"SSE stream connection failed: "
                         f"HTTP {response.status_code} for execution {execution_id}"

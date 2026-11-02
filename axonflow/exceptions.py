@@ -92,7 +92,8 @@ class RateLimitError(AxonFlowError):
     Holds the parsed V1 429 envelope when available. ``limit_type`` and
     ``tier`` and ``upgrade`` are populated for tier-cap 429s (e.g.
     ``list_decisions`` page-size cap, daily-quota cap); legacy 429s
-    leave them ``None`` for backwards compatibility.
+    leave them ``None`` for backwards compatibility. Hosted monthly-limit
+    response fields are retained in ``details`` when present.
     """
 
     def __init__(
@@ -105,16 +106,20 @@ class RateLimitError(AxonFlowError):
         limit_type: str | None = None,
         tier: str | None = None,
         upgrade: UpgradeInfo | None = None,
+        response_details: dict[str, Any] | None = None,
     ) -> None:
+        details = {
+            "limit": limit,
+            "remaining": remaining,
+            "reset_at": reset_at,
+            "limit_type": limit_type,
+            "tier": tier,
+        }
+        if response_details:
+            details.update(response_details)
         super().__init__(
             message,
-            details={
-                "limit": limit,
-                "remaining": remaining,
-                "reset_at": reset_at,
-                "limit_type": limit_type,
-                "tier": tier,
-            },
+            details=details,
         )
         self.limit = limit
         self.remaining = remaining
@@ -125,9 +130,10 @@ class RateLimitError(AxonFlowError):
 
 
 class BudgetExceededError(AxonFlowError):
-    """Budget limit exceeded (HTTP 402).
+    """Budget limit exceeded or Hosted payment required (HTTP 402).
 
-    Raised when a request is blocked due to budget constraints.
+    Hosted payment details, including the checkout action, are retained in
+    ``details`` when present. Existing budget fields remain available.
     """
 
     def __init__(
@@ -138,16 +144,21 @@ class BudgetExceededError(AxonFlowError):
         used_usd: float = 0.0,
         limit_usd: float = 0.0,
         action: str | None = None,
+        *,
+        response_details: dict[str, Any] | None = None,
     ) -> None:
+        details = {
+            "budget_id": budget_id,
+            "budget_name": budget_name,
+            "used_usd": used_usd,
+            "limit_usd": limit_usd,
+            "action": action,
+        }
+        if response_details:
+            details.update(response_details)
         super().__init__(
             message,
-            details={
-                "budget_id": budget_id,
-                "budget_name": budget_name,
-                "used_usd": used_usd,
-                "limit_usd": limit_usd,
-                "action": action,
-            },
+            details=details,
         )
         self.budget_id = budget_id
         self.budget_name = budget_name
