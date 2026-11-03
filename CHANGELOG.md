@@ -9,11 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
-## [Unreleased]
+## [9.5.1] - 2026-11-03: verified Hosted first run
 
 ### Fixed
 
-- The legacy `register_try()` default no longer attempts anonymous Hosted tenant creation; it directs new buyers to verified Portal signup before any network call. Custom self-hosted Community registration remains available, and the README and `sandbox()` guidance now describe linked API credentials.
+- `community.register_try()` now directs callers at the canonical Hosted production or staging origins to verified Portal signup before any registration request. Host normalization also closes trailing-dot and IDNA-dot variants; explicitly configured self-hosted Community registration remains available.
+- The README and `sandbox()` guidance now distinguish verified owner signup, plan activation, linked API credentials, and terminal Hosted payment refusals from the legacy anonymous registration flow.
 
 ## [9.5.0] - 2026-10-21: Decision API approval retry fields
 
