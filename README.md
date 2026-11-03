@@ -68,22 +68,27 @@ Concurrent executions applies to MAP and WCP executions per tenant. Pending exec
 
 [Get a free Evaluation license](https://getaxonflow.com/evaluation-license?utm_source=readme_sdk_python_eval) · [Run a paid production program](https://getaxonflow.com/design-partner?utm_source=readme_sdk_python_eval) · [Full feature matrix](https://docs.getaxonflow.com/docs/features/community-vs-enterprise?utm_source=readme_sdk_python_eval)
 
-## Try Without Installing
+## Hosted without installing the platform
 
-Skip local setup entirely — try AxonFlow instantly at [**try.getaxonflow.com**](https://docs.getaxonflow.com/docs/deployment/community-saas):
+Start at the [AxonFlow website](https://getaxonflow.com/) and follow Hosted signup to the [verified Portal](https://portal.try.getaxonflow.com/hosted/start). Verify your email, complete account and plan setup, then link an API client in the Portal. Store its client ID and secret securely. A newly registered unpaid Basic account cannot obtain a linked credential through the Portal.
 
 ```bash
-# 1. Register (30 seconds)
-curl -X POST https://try.getaxonflow.com/api/v1/register \
-  -H "Content-Type: application/json" -d '{"label":"my-trial"}'
-
-# 2. Set credentials and auto-connect
 export AXONFLOW_TRY=1
-export AXONFLOW_CLIENT_ID=cs_your-tenant-id
-export AXONFLOW_CLIENT_SECRET=your-secret
+export AXONFLOW_CLIENT_ID='<linked-client-id>'
+export AXONFLOW_CLIENT_SECRET='<linked-client-secret>'
 ```
 
-No Docker, no license, no installation. Rate-limited to 20 req/min. [Learn more](https://docs.getaxonflow.com/docs/deployment/community-saas).
+```python
+import os
+from axonflow import AxonFlow
+
+client = AxonFlow(
+    client_id=os.environ["AXONFLOW_CLIENT_ID"],
+    client_secret=os.environ["AXONFLOW_CLIENT_SECRET"],
+)
+```
+
+`AXONFLOW_TRY=1` selects the Hosted endpoint; pass the linked credentials to the constructor as shown. Alternatively, set `endpoint="https://try.getaxonflow.com"` explicitly with the variable unset. The legacy `axonflow.community.register_try()` default now directs new Hosted buyers to the Portal before making a request; its custom endpoint form remains available for a self-hosted Community server. For a self-hosted client, unset `AXONFLOW_TRY` so the explicit endpoint is used. [Learn more](https://docs.getaxonflow.com/docs/deployment/community-saas).
 
 ## Quick Start
 

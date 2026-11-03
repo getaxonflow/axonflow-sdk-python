@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
+## [Unreleased]
+
+### Fixed
+
+- The legacy `register_try()` default no longer attempts anonymous Hosted tenant creation; it directs new buyers to verified Portal signup before any network call. Custom self-hosted Community registration remains available, and the README and `sandbox()` guidance now describe linked API credentials.
+
 ## [9.5.0] - 2026-10-21: Decision API approval retry fields
 
 ### Added

@@ -1,4 +1,4 @@
-"""Community SaaS registration helper for try.getaxonflow.com."""
+"""Legacy registration helper for custom self-hosted Community servers."""
 
 from __future__ import annotations
 
@@ -7,20 +7,36 @@ from typing import Any
 import httpx
 
 TRY_ENDPOINT = "https://try.getaxonflow.com"
+HOSTED_START_URL = "https://portal.try.getaxonflow.com/hosted/start"
 
 
 def register_try(label: str = "", endpoint: str = TRY_ENDPOINT) -> dict[str, Any]:
-    """Register for a free evaluation tenant on try.getaxonflow.com.
+    """Register on a custom self-hosted Community server.
 
     Returns dict with keys: tenant_id, secret, secret_prefix, expires_at, endpoint, note.
     Store the secret securely — it is shown only once.
 
+    New Hosted buyers must verify their email, set up their account and plan,
+    then link an API client through the Portal. Existing linked client IDs and
+    secrets can be supplied explicitly to the SDK.
+
     Args:
         label: Optional human-readable name for the registration.
-        endpoint: Override the default endpoint (for local testing).
+        endpoint: Custom self-hosted Community endpoint. The legacy Hosted
+            default raises with Portal setup guidance before any network call.
     """
+    hostname = httpx.URL(endpoint).host
+    if hostname and hostname.rstrip(".") in {"try.getaxonflow.com", "try-staging.getaxonflow.com"}:
+        msg = (
+            f"New Hosted accounts start at the verified Portal {HOSTED_START_URL}: "
+            "verify your email, "
+            "complete account and plan setup, then link an API client in the Portal. "
+            "Configure that linked client ID and secret explicitly in the SDK."
+        )
+        raise ValueError(msg)
+
     response = httpx.post(
-        f"{endpoint}/api/v1/register",
+        f"{endpoint.rstrip('/')}/api/v1/register",
         json={"label": label} if label else {},
         timeout=10.0,
     )

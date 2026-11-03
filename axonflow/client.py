@@ -986,10 +986,10 @@ class AxonFlow:
         Start the stack with ``docker compose up`` from
         https://github.com/getaxonflow/axonflow before calling this.
 
-        For the hosted community sandbox at https://try.getaxonflow.com, use
-        the registration flow instead: call ``POST /api/v1/register`` to mint
-        tenant credentials, then construct an ``AxonFlow(...)`` client directly
-        or set ``AXONFLOW_TRY=1``.
+        For Hosted, start at the AxonFlow website, verify email, and set up your
+        account and plan at https://portal.try.getaxonflow.com/hosted/start.
+        Link an API client and supply its ID and secret to ``AxonFlow(...)``.
+        ``AXONFLOW_TRY=1`` selects Hosted; unset it for this local sandbox method.
 
         Args:
             client_id: Optional client ID (defaults to demo-client)
