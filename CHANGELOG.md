@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  and tag v{X.Y.Z}. The release workflow's preflight checks the section
  header matches the tag. -->
 
-## [9.5.1] - 2026-11-03: verified Hosted first run
+## [9.5.1] - 2026-11-04: verified Hosted first run
 
 ### Fixed
 
